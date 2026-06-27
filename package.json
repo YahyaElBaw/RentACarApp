@@ -1,0 +1,22 @@
+{
+  "name": "rentacar",
+  "version": "1.0.0",
+  "main": "main.js",
+  "scripts": {
+    "backend:dev": "cd backend && npm run start:dev",
+    "frontend:dev": "cd frontend && npm run dev",
+    "mobile:dev": "cd mobile && npm run start",
+    "electron:dev": "wait-on http://localhost:5173 && electron .",
+    "start": "concurrently \"npm run backend:dev\" \"npm run frontend:dev\"",
+    "dev": "concurrently \"npm run backend:dev\" \"npm run frontend:dev\" \"npm run electron:dev\"",
+    "build:frontend": "cd frontend && npm run build",
+    "build:backend": "cd backend && npm run build",
+    "dist": "npm run build:frontend && npm run build:backend && electron-builder"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "electron": "^30.0.1",
+    "electron-builder": "^24.13.3",
+    "wait-on": "^7.2.0"
+  }
+}
