@@ -3,10 +3,13 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "electron:dev": "npm run build && electron .",
+    "electron:build": "npm run build && electron-builder --win --config"
   },
   "dependencies": {
     "@capacitor/android": "^8.3.0",
@@ -36,12 +39,30 @@
     "vue-i18n": "^11.3.0",
     "vue-router": "^5.0.4"
   },
+  "build": {
+    "appId": "com.rentacar.app",
+    "productName": "RentACar",
+    "files": [
+      "dist/**/*",
+      "electron/**/*"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "public/icon.png"
+    },
+    "electronDist": "node_modules/electron/dist"
+  },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.2.2",
     "@types/node": "^24.12.2",
     "@vitejs/plugin-vue": "^6.0.5",
     "@vue/tsconfig": "^0.9.0",
     "autoprefixer": "^10.4.27",
+    "electron": "^42.5.0",
+    "electron-builder": "^26.15.3",
     "postcss": "^8.5.8",
     "tailwindcss": "^4.2.2",
     "typescript": "~5.9.3",
