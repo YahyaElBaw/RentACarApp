@@ -51,7 +51,10 @@
     },
     "win": {
       "target": "nsis",
-      "icon": "public/icon.png"
+      "icon": "public/favicon.svg"
+    },
+    "nsis": {
+      "oneClick": true
     },
     "electronDist": "node_modules/electron/dist"
   },

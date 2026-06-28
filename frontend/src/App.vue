@@ -6,7 +6,7 @@ import { useAuthStore } from '@/stores/auth'
 import { 
   LayoutDashboard, Car, FileText, Users, Calendar, Wallet, 
   LogOut, ShieldCheck, X, Calculator, Bell, AlertCircle, CheckCircle2,
-  Rocket, RefreshCcw, ChevronRight, Search, Settings, WifiOff
+  RefreshCcw, Search, Settings, WifiOff
 } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -58,32 +58,6 @@ const menuItems = computed(() => {
 const handleLogout = () => {
   authStore.logout()
   router.push('/login')
-}
-
-// App Versioning Logic
-const APP_VERSION = '1.0.0'
-const showUpdateDialog = ref(false)
-const remoteVersion = ref('')
-
-const checkVersion = async () => {
-  try {
-    const res = await dashboardApi.getAppVersion()
-    const lastDismissed = localStorage.getItem('app_update_dismissed')
-    
-    if (res && res.version && res.version !== APP_VERSION && res.version !== lastDismissed) {
-      remoteVersion.value = res.version
-      showUpdateDialog.value = true
-    }
-  } catch (err) {
-    console.warn('Silent: Version check failed')
-  }
-}
-
-const reloadApp = () => {
-  if (remoteVersion.value) {
-    localStorage.setItem('app_update_dismissed', remoteVersion.value)
-  }
-  window.location.reload()
 }
 
 // Global Alerts Logic
@@ -163,7 +137,6 @@ onMounted(() => {
   window.addEventListener('online', handleOnline)
   window.addEventListener('offline', handleOffline)
   window.addEventListener('api-network-error', handleApiError)
-  checkVersion()
   if (isAuthenticated.value) {
     fetchSettings()
     fetchAlerts()
@@ -423,38 +396,6 @@ watch(() => vidangeForm.mileageAtChange, (newVal) => {
         </nav>
 
         <div class="px-6 py-2 space-y-3">
-          <!-- Update Alert (Sidebar Version) -->
-          <transition 
-            enter-active-class="transition duration-500 ease-out" 
-            enter-from-class="opacity-0 -translate-y-4" 
-            enter-to-class="opacity-100 translate-y-0" 
-            leave-active-class="transition duration-300 ease-in" 
-            leave-from-class="opacity-100 translate-y-0" 
-            leave-to-class="opacity-0 -translate-y-4"
-          >
-            <div v-if="showUpdateDialog" class="bg-primary/5 border border-primary/20 rounded-2xl p-4 relative overflow-hidden group">
-              <div class="absolute -right-2 -top-2 opacity-5 scale-150 rotate-12 transition-transform group-hover:scale-[1.7]">
-                <Rocket class="w-12 h-12 text-primary" />
-              </div>
-              
-              <div class="relative flex items-start gap-3">
-                <div class="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                  <RefreshCcw class="w-4 h-4 text-primary animate-spin-slow" />
-                </div>
-                <div class="flex-1 min-w-0">
-                  <p class="text-[10px] font-black uppercase tracking-widest text-primary mb-1">Mise à jour {{ remoteVersion }}</p>
-                  <p class="text-[9px] font-medium text-slate-500 leading-tight mb-2">Une nouvelle version est disponible.</p>
-                  <button 
-                    @click="reloadApp" 
-                    class="text-[9px] font-black uppercase tracking-tighter text-primary hover:text-primary/70 transition-colors flex items-center gap-1.5"
-                  >
-                    Actualiser maintenant <ChevronRight class="w-3 h-3" />
-                  </button>
-                </div>
-              </div>
-            </div>
-          </transition>
-
           <div class="rounded-2xl p-4 flex items-center gap-3 border bg-muted/30 border-border">
              <Avatar class="w-10 h-10 border border-border">
                 <AvatarFallback class="bg-primary/20 text-primary font-bold">
