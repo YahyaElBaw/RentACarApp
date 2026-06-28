@@ -14,7 +14,7 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
     },
-    icon: path.join(__dirname, '..', 'public', 'favicon.svg'),
+    icon: path.join(__dirname, '..', 'public', 'icon.png'),
   });
 
   mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
