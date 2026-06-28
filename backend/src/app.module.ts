@@ -22,7 +22,7 @@ import { SettingModule } from './setting/setting.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
-    MongooseModule.forRoot(process.env.MONGODB_URI || 'mongodb://localhost:27017/rentacar'),
+    MongooseModule.forRoot(process.env.MONGODB_URI, { serverSelectionTimeoutMS: 15000, connectionTimeoutMS: 15000 }),
     SharedModule,
     CarModule,
     ClientModule,
