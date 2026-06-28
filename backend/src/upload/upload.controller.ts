@@ -1,7 +1,8 @@
 import { Controller, Post, Req, BadRequestException, Inject } from '@nestjs/common';
 import { Request } from 'express';
 import { CLOUDINARY } from '../cloudinary/cloudinary.provider';
-import * as Busboy from 'busboy';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const Busboy = require('busboy');
 
 @Controller('upload')
 export class UploadController {
