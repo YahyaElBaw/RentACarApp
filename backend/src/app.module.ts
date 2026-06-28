@@ -11,8 +11,7 @@ import { VisiteModule } from './visite/visite.module';
 import { VidangeModule } from './vidange/vidange.module';
 import { DepenseModule } from './depense/depense.module';
 import { DashboardModule } from './dashboard/dashboard.module';
-import { ServeStaticModule } from '@nestjs/serve-static';
-import { join } from 'path';
+
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { UploadModule } from './upload/upload.module';
@@ -24,10 +23,6 @@ import { SettingModule } from './setting/setting.module';
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     MongooseModule.forRoot(process.env.MONGODB_URI || 'mongodb://localhost:27017/rentacar'),
-    ServeStaticModule.forRoot({
-      rootPath: join(process.cwd(), 'public'),
-      serveRoot: '/',
-    }),
     SharedModule,
     CarModule,
     ClientModule,

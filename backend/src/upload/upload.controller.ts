@@ -1,40 +1,62 @@
-import { Controller, Post, UseInterceptors, UploadedFile, BadRequestException, Inject } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
-import { memoryStorage } from 'multer';
+import { Controller, Post, Req, BadRequestException, Inject } from '@nestjs/common';
+import { Request } from 'express';
 import { CLOUDINARY } from '../cloudinary/cloudinary.provider';
+import * as Busboy from 'busboy';
 
 @Controller('upload')
 export class UploadController {
   constructor(@Inject(CLOUDINARY) private readonly cloudinary: any) {}
 
   @Post()
-  @UseInterceptors(
-    FileInterceptor('file', {
-      storage: memoryStorage(),
-    }),
-  )
-  async uploadFile(@UploadedFile() file: Express.Multer.File) {
-    if (!file) {
-      throw new BadRequestException('File is required');
-    }
+  async uploadFile(@Req() req: Request) {
+    return new Promise<any>((resolve, reject) => {
+      let fileBuffer: Buffer | null = null;
+      let originalName = '';
 
-    const result = await new Promise<any>((resolve, reject) => {
-      const uploadStream = this.cloudinary.uploader.upload_stream(
-        {
-          resource_type: 'auto',
-          folder: 'RentACarData',
-          public_id: file.originalname.replace(/\.[^/.]+$/, '') + '-' + Date.now(),
-        },
-        (error: any, result: any) => {
-          if (error) reject(error);
-          else resolve(result);
-        },
-      );
-      uploadStream.end(file.buffer);
+      const busboy = Busboy({ headers: req.headers });
+
+      busboy.on('file', (fieldname: string, file: NodeJS.ReadableStream, info: { filename: string; encoding: string; mimeType: string }) => {
+        originalName = info.filename;
+        const chunks: Buffer[] = [];
+        file.on('data', (chunk: Buffer) => chunks.push(chunk));
+        file.on('end', () => {
+          fileBuffer = Buffer.concat(chunks);
+        });
+      });
+
+      busboy.on('finish', async () => {
+        if (!fileBuffer) {
+          reject(new BadRequestException('File is required'));
+          return;
+        }
+
+        try {
+          const result = await new Promise<any>((resolveUpload, rejectUpload) => {
+            const uploadStream = this.cloudinary.uploader.upload_stream(
+              {
+                resource_type: 'auto',
+                folder: 'RentACarData',
+                public_id: originalName.replace(/\.[^/.]+$/, '') + '-' + Date.now(),
+              },
+              (error: any, result: any) => {
+                if (error) rejectUpload(error);
+                else resolveUpload(result);
+              },
+            );
+            uploadStream.end(fileBuffer!);
+          });
+
+          resolve({ url: result.secure_url });
+        } catch (err) {
+          reject(err);
+        }
+      });
+
+      busboy.on('error', (err: Error) => {
+        reject(new BadRequestException('Upload failed'));
+      });
+
+      req.pipe(busboy);
     });
-
-    return {
-      url: result.secure_url,
-    };
   }
 }

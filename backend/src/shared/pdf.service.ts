@@ -2,7 +2,6 @@ import { Injectable } from '@nestjs/common';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const pdfMake = require('pdfmake');
 import * as path from 'path';
-import * as fs from 'fs';
 import * as https from 'https';
 
 @Injectable()
@@ -45,20 +44,13 @@ export class PdfService {
   private async getImageData(imagePath: string): Promise<string | null> {
     if (!imagePath) return null;
     try {
-      if (imagePath.startsWith('http')) {
-        return await this.fetchImageAsBase64(imagePath);
-      }
-      const fullPath = path.join(process.cwd(), 'public', imagePath);
-      if (!fs.existsSync(fullPath)) {
-        console.warn(`Image not found at path: ${fullPath}`);
+      if (!imagePath.startsWith('http')) {
+        console.warn(`Image path is not a URL: ${imagePath}`);
         return null;
       }
-      const data = fs.readFileSync(fullPath);
-      const base64 = data.toString('base64');
-      const ext = path.extname(fullPath).toLowerCase().replace('.', '');
-      return `data:image/${ext === 'jpg' ? 'jpeg' : ext};base64,${base64}`;
+      return await this.fetchImageAsBase64(imagePath);
     } catch (e) {
-      console.error('Failed to read image', e);
+      console.error('Failed to fetch image', e);
       return null;
     }
   }
