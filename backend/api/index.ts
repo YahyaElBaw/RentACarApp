@@ -1,11 +1,13 @@
 import { NestFactory } from '@nestjs/core';
 import { ExpressAdapter } from '@nestjs/platform-express';
-import * as express from 'express';
+import type { Express, Request, Response } from 'express';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const express = require('express') as unknown as (...args: any[]) => Express;
 import { AppModule } from '../src/app.module';
 
-let cachedApp: express.Express;
+let cachedApp: Express;
 
-async function bootstrap(): Promise<express.Express> {
+async function bootstrap(): Promise<Express> {
   const expressApp = express();
 
   expressApp.use(express.json({ limit: '10mb' }));
@@ -25,7 +27,7 @@ async function bootstrap(): Promise<express.Express> {
   return expressApp;
 }
 
-export default async function handler(req: any, res: any) {
+export default async function handler(req: Request, res: Response) {
   if (!cachedApp) {
     try {
       console.log('[Vercel] Bootstrapping NestJS...');
