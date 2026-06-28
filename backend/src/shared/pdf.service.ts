@@ -3,6 +3,7 @@ import { Injectable } from '@nestjs/common';
 const pdfMake = require('pdfmake');
 import * as path from 'path';
 import * as fs from 'fs';
+import * as https from 'https';
 
 @Injectable()
 export class PdfService {
@@ -44,7 +45,9 @@ export class PdfService {
   private async getImageData(imagePath: string): Promise<string | null> {
     if (!imagePath) return null;
     try {
-      // In NestJS, images are usually in public/uploads if served by ServeStatic
+      if (imagePath.startsWith('http')) {
+        return await this.fetchImageAsBase64(imagePath);
+      }
       const fullPath = path.join(process.cwd(), 'public', imagePath);
       if (!fs.existsSync(fullPath)) {
         console.warn(`Image not found at path: ${fullPath}`);
@@ -58,6 +61,24 @@ export class PdfService {
       console.error('Failed to read image', e);
       return null;
     }
+  }
+
+  private fetchImageAsBase64(url: string): Promise<string | null> {
+    return new Promise((resolve, reject) => {
+      https.get(url, (response) => {
+        const chunks: Buffer[] = [];
+        response.on('data', (chunk: Buffer) => chunks.push(chunk));
+        response.on('end', () => {
+          const data = Buffer.concat(chunks);
+          const base64 = data.toString('base64');
+          const contentType = response.headers['content-type'] || 'image/jpeg';
+          resolve(`data:${contentType};base64,${base64}`);
+        });
+      }).on('error', (err) => {
+        console.error('Failed to fetch image from Cloudinary', err);
+        resolve(null);
+      });
+    });
   }
 
   async generateContractPDF(contrat: any): Promise<Buffer> {

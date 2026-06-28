@@ -1054,6 +1054,7 @@ const saveCroppedImage = async () => {
   } catch (err) {
     console.error('Failed to crop/upload image', err)
     toast.add({ severity: 'error', summary: 'Erreur', detail: 'Échec de l\'upload de l\'image.', life: 5000 })
+  } finally {
     saving.value = false
   }
 }
