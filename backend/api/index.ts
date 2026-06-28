@@ -2,7 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { ExpressAdapter } from '@nestjs/platform-express';
 import type { Express, Request, Response } from 'express';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const express = require('express') as unknown as (...args: any[]) => Express;
+const express: typeof import('express') = require('express');
 import { AppModule } from '../src/app.module';
 
 let cachedApp: Express;
