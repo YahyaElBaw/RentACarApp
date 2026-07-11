@@ -2,7 +2,7 @@
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { Car, IdCard, Loader2, ArrowRight, ShieldCheck, Lock } from 'lucide-vue-next'
+import { Car, IdCard, Loader2, ArrowRight, ShieldCheck, Lock, Eye, EyeOff } from 'lucide-vue-next'
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -17,6 +17,7 @@ const credentials = reactive({
 
 const loading = ref(false)
 const error = ref('')
+const showPassword = ref(false)
 
 const handleLogin = async () => {
   loading.value = true
@@ -81,17 +82,21 @@ const handleLogin = async () => {
 
               <div class="space-y-3">
                 <Label for="phone" class="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-2">Mot de Passe Sécurisé</Label>
-                <div class="relative group">
-                  <Lock class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-indigo-600/50 group-focus-within:text-indigo-600 transition-colors" />
-                  <input 
-                    id="phone" 
-                    type="password"
-                    v-model="credentials.phone" 
-                    placeholder="••••••••" 
-                    class="w-full h-14 pl-12 pr-4 bg-white/50 border border-slate-200 rounded-2xl font-black text-slate-900 placeholder:text-slate-400 outline-none focus:ring-4 focus:ring-indigo-600/5 transition-all tracking-[0.5em]"
-                    required 
-                  />
-                </div>
+                  <div class="relative group">
+                    <Lock class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-indigo-600/50 group-focus-within:text-indigo-600 transition-colors" />
+                    <input 
+                      id="phone" 
+                      :type="showPassword ? 'text' : 'password'"
+                      v-model="credentials.phone" 
+                      placeholder="••••••••" 
+                      class="w-full h-14 pl-12 pr-12 bg-white/50 border border-slate-200 rounded-2xl font-black text-slate-900 placeholder:text-slate-400 outline-none focus:ring-4 focus:ring-indigo-600/5 transition-all tracking-[0.5em]"
+                      required 
+                    />
+                    <button type="button" @click="showPassword = !showPassword" class="absolute right-4 top-1/2 -translate-y-1/2 text-indigo-600/50 hover:text-indigo-600 transition-colors outline-none">
+                      <Eye v-if="!showPassword" class="w-5 h-5" />
+                      <EyeOff v-else class="w-5 h-5" />
+                    </button>
+                  </div>
               </div>
 
               <Button 

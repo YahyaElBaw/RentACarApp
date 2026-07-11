@@ -1,8 +1,8 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.rentacar.app',
-  appName: 'RentACar',
+  appId: 'com.djerba.rentacar.app',
+  appName: 'DJERBA RENT A CAR',
   webDir: 'dist'
 };
 

@@ -1018,19 +1018,4 @@ watch(() => route.query.id, (newId) => {
 });
 </script>
 
-<style scoped>
-.reservation-list-container {
-  font-family: 'Inter', sans-serif;
-}
 
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.animate-in {
-  animation: fadeIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-
-</style>

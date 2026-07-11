@@ -350,7 +350,13 @@
             </div>
           <div class="space-y-2 col-span-2">
             <Label class="text-[10px] font-black text-rose-500 uppercase tracking-widest ml-1">Mot De Passe Admin</Label>
-            <Input type="password" v-model="adminPassword" placeholder="Requis..." class="h-14 bg-rose-50 border-rose-100 placeholder:text-rose-300 text-rose-700 rounded-2xl font-black font-mono tracking-widest transition-all" />
+            <div class="relative">
+              <Input :type="showPassword ? 'text' : 'password'" v-model="adminPassword" placeholder="Requis..." class="h-14 bg-rose-50 border-rose-100 placeholder:text-rose-300 text-rose-700 rounded-2xl font-black font-mono tracking-widest transition-all pr-12" />
+              <button type="button" @click="showPassword = !showPassword" class="absolute right-4 top-1/2 -translate-y-1/2 text-rose-400 hover:text-rose-600 transition-colors outline-none">
+                <Eye v-if="!showPassword" class="w-5 h-5" />
+                <EyeOff v-else class="w-5 h-5" />
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -371,7 +377,13 @@
       </DialogHeader>
       
       <div class="space-y-4">
-         <Input type="password" v-model="adminPassword" placeholder="Mot de passe admin..." class="h-14 bg-slate-50 border-slate-100 rounded-2xl font-black font-mono tracking-widest text-center" @keyup.enter="executeDelete" />
+         <div class="relative">
+           <Input :type="showPassword ? 'text' : 'password'" v-model="adminPassword" placeholder="Mot de passe admin..." class="h-14 bg-slate-50 border-slate-100 rounded-2xl font-black font-mono tracking-widest text-center pr-12" @keyup.enter="executeDelete" />
+           <button type="button" @click="showPassword = !showPassword" class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors outline-none">
+             <Eye v-if="!showPassword" class="w-5 h-5" />
+             <EyeOff v-else class="w-5 h-5" />
+           </button>
+         </div>
       </div>
       
       <DialogFooter class="mt-6 border-t border-slate-100 pt-6">
@@ -395,7 +407,13 @@
       </DialogHeader>
       
       <div class="space-y-4">
-         <Input type="password" v-model="adminPassword" placeholder="Mot de passe admin..." class="h-14 bg-slate-50 border-slate-100 rounded-2xl font-black font-mono tracking-widest text-center" @keyup.enter="executeInlineSave" />
+         <div class="relative">
+           <Input :type="showPassword ? 'text' : 'password'" v-model="adminPassword" placeholder="Mot de passe admin..." class="h-14 bg-slate-50 border-slate-100 rounded-2xl font-black font-mono tracking-widest text-center pr-12" @keyup.enter="executeInlineSave" />
+           <button type="button" @click="showPassword = !showPassword" class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors outline-none">
+             <Eye v-if="!showPassword" class="w-5 h-5" />
+             <EyeOff v-else class="w-5 h-5" />
+           </button>
+         </div>
       </div>
       
       <DialogFooter class="mt-8 flex gap-4">
@@ -481,7 +499,7 @@ import {
 } from '@/api';
 import { formatDate } from '@/lib/utils';
 import { 
-  ChevronLeft, ArrowRight, Wallet, Pencil, Check, X, ShieldAlert, Trash2
+  ChevronLeft, ArrowRight, Wallet, Pencil, Check, X, ShieldAlert, Trash2, Eye, EyeOff
 } from 'lucide-vue-next';
 import Card from '@/components/ui/card/Card.vue';
 import CardContent from '@/components/ui/card/CardContent.vue';
@@ -503,6 +521,7 @@ const car = ref<any>(null);
 const showEditForm = ref(false);
 const showSecurityModal = ref(false);
 const adminPassword = ref('');
+const showPassword = ref(false);
 const submittingAction = ref(false);
 
 const editingField = ref<string | null>(null);
@@ -915,12 +934,5 @@ const executeDelete = async () => {
   background: transparent !important;
 }
 
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
 
-.animate-in {
-  animation: fadeIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
 </style>

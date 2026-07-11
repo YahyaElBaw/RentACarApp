@@ -636,7 +636,13 @@
           <div class="space-y-4">
             <div class="space-y-2">
               <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Mot de passe Administrateur</label>
-              <Input type="password" v-model="adminPassword" placeholder="••••••••" class="h-14 rounded-2xl border-slate-200 focus:ring-rose-500/20" @keyup.enter="confirmSave" />
+              <div class="relative">
+                <Input :type="showPassword ? 'text' : 'password'" v-model="adminPassword" placeholder="••••••••" class="h-14 rounded-2xl border-slate-200 focus:ring-rose-500/20 pr-12" @keyup.enter="confirmSave" />
+                <button type="button" @click="showPassword = !showPassword" class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors outline-none">
+                  <Eye v-if="!showPassword" class="w-5 h-5" />
+                  <EyeOff v-else class="w-5 h-5" />
+                </button>
+              </div>
             </div>
           </div>
 
@@ -674,10 +680,10 @@ import { useAuthStore } from '@/stores/auth'
 import { formatDate } from '@/lib/utils'
 import { useToast } from 'primevue/usetoast'
 import { 
-  ChevronLeft, Phone, Mail, MapPin, 
-  CreditCard, ShieldCheck, Calendar, 
-  FileWarning, ExternalLink, Download, Pencil, RotateCw, Upload, Trash2,
-  Car as CarIcon, History as HistoryIcon, X, AlertCircle, Check, Loader2
+ChevronLeft, Phone, Mail, MapPin, 
+CreditCard, ShieldCheck, Calendar, 
+FileWarning, ExternalLink, Download, Pencil, RotateCw, Upload, Trash2,
+Car as CarIcon, History as HistoryIcon, X, AlertCircle, Check, Loader2, Eye, EyeOff
 } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -739,6 +745,7 @@ const editingField = ref<string | null>(null)
 const tempValue = ref<any>(null)
 const showPasswordDialog = ref(false)
 const adminPassword = ref('')
+const showPassword = ref(false)
 const pendingSaveField = ref<string | null>(null)
 
 const pendingDelete = ref(false)
@@ -1152,15 +1159,6 @@ const getInitials = (firstName: string, lastName: string) => {
 <style scoped>
 .client-detail-container {
   font-family: 'Inter', sans-serif;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(15px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.animate-in {
-  animation: fadeIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .delay-200 {

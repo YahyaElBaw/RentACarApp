@@ -35,13 +35,18 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function fetchProfile() {
-    if (!token.value) return;
+    if (!token.value) return false;
     try {
-      const profile = await authApi.getProfile();
-      user.value = profile;
-      localStorage.setItem('user', JSON.stringify(profile));
-    } catch (error) {
-      logout();
+      await authApi.getProfile();
+      return true;
+    } catch (error: any) {
+      if (error?.response?.status === 401) {
+        token.value = '';
+        user.value = null;
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+      }
+      return false;
     }
   }
 

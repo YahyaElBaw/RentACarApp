@@ -1,4 +1,5 @@
 import axios from 'axios';
+import router from '../router';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3000',
@@ -18,9 +19,7 @@ api.interceptors.response.use(
     if (error.response?.status === 401 && !error.config.url.includes('/auth/login')) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login';
-      }
+      router.push('/login');
     }
     if (!error.response || error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
       window.dispatchEvent(new CustomEvent('api-network-error'));

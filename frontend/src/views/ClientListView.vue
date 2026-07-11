@@ -8,7 +8,7 @@ import {
   Phone, Mail, MapPin, User,
   CreditCard, Shield, Upload,
   ArrowRight, ArrowLeft, Check, X,
-  Trash2
+  Trash2, Eye, EyeOff
 } from 'lucide-vue-next'
 import { 
   Table, TableHeader, TableBody, TableHead, TableRow, TableCell 
@@ -39,6 +39,7 @@ const currentStep = ref(1)
 const isUploading = ref<Record<string, boolean>>({})
 const showSecurityModal = ref(false)
 const adminPassword = ref('')
+const showPassword = ref(false)
 const clientToDelete = ref<string | null>(null)
 const submitting = ref(false)
 
@@ -653,13 +654,19 @@ const isStepValid = computed(() => {
           
           <div class="space-y-3">
             <Label class="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Mot de Passe Admin</Label>
-            <Input 
-              type="password" 
-              v-model="adminPassword" 
-              placeholder="••••••••" 
-              class="h-14 bg-slate-50 border-slate-100 focus:ring-4 focus:ring-rose-500/5 rounded-2xl font-black text-center text-xl tracking-widest"
-              @keyup.enter="executeDelete"
-            />
+            <div class="relative">
+              <Input 
+                :type="showPassword ? 'text' : 'password'" 
+                v-model="adminPassword" 
+                placeholder="••••••••" 
+                class="h-14 bg-slate-50 border-slate-100 focus:ring-4 focus:ring-rose-500/5 rounded-2xl font-black text-center text-xl tracking-widest pr-12"
+                @keyup.enter="executeDelete"
+              />
+              <button type="button" @click="showPassword = !showPassword" class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors outline-none">
+                <Eye v-if="!showPassword" class="w-5 h-5" />
+                <EyeOff v-else class="w-5 h-5" />
+              </button>
+            </div>
           </div>
         </div>
 
@@ -703,12 +710,4 @@ const isStepValid = computed(() => {
   background: rgba(255,255,255,0.1);
 }
 
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.animate-in {
-  animation: fadeIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
 </style>

@@ -6,7 +6,7 @@ import { formatDate } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth'
 import { 
   Plus, Search, Pencil, Trash, 
-  Car as CarIcon
+  Car as CarIcon, Eye, EyeOff
 } from 'lucide-vue-next'
 import { 
   Table, TableHeader, TableBody, TableHead, TableRow, TableCell 
@@ -28,6 +28,7 @@ const loading = ref(true)
 const showForm = ref(false)
 const editingCar = ref<any>(null)
 const adminPassword = ref('')
+const showPassword = ref(false)
 const showSecurityModal = ref(false)
 const carToDelete = ref<any>(null)
 const submitting = ref(false)
@@ -349,7 +350,13 @@ const getStatusBadge = (car: any) => {
 
             <div v-if="editingCar" class="space-y-2 col-span-2 mt-4">
               <Label class="text-[10px] font-black text-rose-500 uppercase tracking-widest ml-1">Mot De Passe Admin (Requis pour modifier)</Label>
-              <Input type="password" v-model="adminPassword" placeholder="Configuration requise..." class="h-14 bg-rose-50 border-rose-100 placeholder:text-rose-300 text-rose-700 rounded-2xl font-black font-mono tracking-widest transition-all" @click.stop />
+              <div class="relative">
+                <Input :type="showPassword ? 'text' : 'password'" v-model="adminPassword" placeholder="Configuration requise..." class="h-14 bg-rose-50 border-rose-100 placeholder:text-rose-300 text-rose-700 rounded-2xl font-black font-mono tracking-widest transition-all pr-12" @click.stop />
+                <button type="button" @click="showPassword = !showPassword" class="absolute right-4 top-1/2 -translate-y-1/2 text-rose-400 hover:text-rose-600 transition-colors outline-none">
+                  <Eye v-if="!showPassword" class="w-5 h-5" />
+                  <EyeOff v-else class="w-5 h-5" />
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -372,7 +379,13 @@ const getStatusBadge = (car: any) => {
         </DialogHeader>
         
         <div class="space-y-4">
-           <Input type="password" v-model="adminPassword" placeholder="Mot de passe admin..." class="h-14 bg-slate-50 border-slate-100 rounded-2xl font-black font-mono tracking-widest text-center" @keyup.enter="executeDelete" />
+           <div class="relative">
+             <Input :type="showPassword ? 'text' : 'password'" v-model="adminPassword" placeholder="Mot de passe admin..." class="h-14 bg-slate-50 border-slate-100 rounded-2xl font-black font-mono tracking-widest text-center pr-12" @keyup.enter="executeDelete" />
+             <button type="button" @click="showPassword = !showPassword" class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors outline-none">
+               <Eye v-if="!showPassword" class="w-5 h-5" />
+               <EyeOff v-else class="w-5 h-5" />
+             </button>
+           </div>
         </div>
         
         <DialogFooter class="mt-6 border-t border-slate-100 pt-6">
@@ -386,17 +399,4 @@ const getStatusBadge = (car: any) => {
   </div>
 </template>
 
-<style scoped>
-.car-list-container {
-  font-family: 'Inter', sans-serif;
-}
 
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.animate-in {
-  animation: fadeIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-</style>

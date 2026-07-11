@@ -40,8 +40,8 @@
     "vue-router": "^5.0.4"
   },
   "build": {
-    "appId": "com.rentacar.app",
-    "productName": "RentACar",
+    "appId": "com.djerba.rentacar.app",
+    "productName": "DJERBA RENT A CAR",
     "files": [
       "dist/**/*",
       "electron/**/*"
@@ -51,7 +51,7 @@
     },
     "win": {
       "target": "nsis",
-      "icon": "public/favicon.svg"
+      "icon": "public/icon.png"
     },
     "nsis": {
       "oneClick": true

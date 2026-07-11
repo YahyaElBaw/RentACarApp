@@ -9,7 +9,7 @@ import {
   Clock, CheckCircle2, 
   XCircle, AlertCircle,
   ChevronRight, ClipboardList,
-  ShieldAlert, Lock
+  ShieldAlert, Lock, Eye, EyeOff
 } from 'lucide-vue-next';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -31,6 +31,7 @@ const deleting = ref(false);
 // Deletion State
 const showDeleteDialog = ref(false);
 const deletePassword = ref('');
+const showDeletePassword = ref(false);
 const deleteError = ref('');
 
 const openDeleteDialog = () => {
@@ -86,6 +87,8 @@ const editForm = ref({
   status: '',
   password: '',
 });
+
+const showEditPassword = ref(false);
 
 const openEditDialog = async () => {
   editError.value = '';
@@ -644,7 +647,13 @@ const submitCloture = async () => {
                <DialogDescription class="text-[10px] font-black uppercase opacity-40 mt-1">Saisissez votre mot de passe</DialogDescription>
             </DialogHeader>
             <div class="space-y-6">
-               <input v-model="deletePassword" type="password" class="w-full h-14 px-6 rounded-2xl bg-muted border-2 border-border focus:border-destructive outline-none font-black text-center" placeholder="••••••••" @keyup.enter="submitDelete" />
+               <div class="relative">
+                 <input v-model="deletePassword" :type="showDeletePassword ? 'text' : 'password'" class="w-full h-14 px-6 rounded-2xl bg-muted border-2 border-border focus:border-destructive outline-none font-black text-center pr-14" placeholder="••••••••" @keyup.enter="submitDelete" />
+                 <button type="button" @click="showDeletePassword = !showDeletePassword" class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors outline-none">
+                   <Eye v-if="!showDeletePassword" class="w-5 h-5" />
+                   <EyeOff v-else class="w-5 h-5" />
+                 </button>
+               </div>
                <p v-if="deleteError" class="text-[10px] font-black text-destructive uppercase italic">⚠ {{ deleteError }}</p>
                <div class="flex gap-4">
                   <Button @click="showDeleteDialog = false" variant="ghost" class="flex-1 h-14 rounded-2xl font-black uppercase text-[10px]">Annuler</Button>
@@ -788,7 +797,13 @@ const submitCloture = async () => {
                         <div class="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center shrink-0 border border-white/10"><Lock class="w-6 h-6 text-indigo-400" /></div>
                         <div class="flex-1 w-full space-y-1">
                            <p class="text-[9px] font-black uppercase opacity-60">Validation Requise</p>
-                           <input v-model="editForm.password" type="password" class="w-full h-12 px-4 rounded-xl bg-white/10 border-2 border-white/20 focus:border-indigo-400 outline-none font-black text-center text-white" placeholder="Saisir le mot de passe admin" @keyup.enter="submitEdit()" />
+                           <div class="relative">
+                             <input v-model="editForm.password" :type="showEditPassword ? 'text' : 'password'" class="w-full h-12 px-4 rounded-xl bg-white/10 border-2 border-white/20 focus:border-indigo-400 outline-none font-black text-center text-white pr-12" placeholder="Saisir le mot de passe admin" @keyup.enter="submitEdit()" />
+                             <button type="button" @click="showEditPassword = !showEditPassword" class="absolute right-3 top-1/2 -translate-y-1/2 text-indigo-300 hover:text-white transition-colors outline-none">
+                               <Eye v-if="!showEditPassword" class="w-5 h-5" />
+                               <EyeOff v-else class="w-5 h-5" />
+                             </button>
+                           </div>
                         </div>
                      </div>
                   </div>
@@ -1004,8 +1019,4 @@ const submitCloture = async () => {
   </div>
 </template>
 
-<style scoped>
-.contrat-detail-view { font-family: 'Inter', sans-serif; }
-.animate-in { animation: fadeIn 0.8s forwards; }
-@keyframes fadeIn { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
-</style>
+

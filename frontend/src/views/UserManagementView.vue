@@ -294,15 +294,6 @@ const removePhoto = (index: number) => {
   font-family: 'Outfit', sans-serif;
 }
 
-@keyframes fade-in {
-  from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.animate-in {
-  animation: fade-in 1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
 :deep(.dialog-blur) {
   backdrop-filter: blur(20px);
 }

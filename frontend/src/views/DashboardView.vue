@@ -1,5 +1,5 @@
 <template>
-  <div class="dashboard-container space-y-12 animate-in fade-in slide-in-from-bottom-2 duration-1000 p-8 max-w-7xl mx-auto">
+  <div class="dashboard-container space-y-12 p-8 max-w-7xl mx-auto">
     <!-- Header Section -->
     <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
       <div class="space-y-2">
@@ -458,28 +458,4 @@ onMounted(async () => {
 })
 </script>
 
-<style scoped>
-.dashboard-container {
-  font-family: 'Inter', sans-serif;
-}
 
-@keyframes draw {
-  from { stroke-dashoffset: 400; }
-  to { stroke-dashoffset: 0; }
-}
-
-.animate-draw {
-  stroke-dasharray: 400;
-  stroke-dashoffset: 400;
-  animation: draw 2.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(15px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.animate-in {
-  animation: fadeIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-</style>
