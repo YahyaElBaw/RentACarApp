@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { contratApi, carApi, clientApi, getImageUrl } from '@/api';
+import { contratApi, carApi, clientApi, settingApi, getImageUrl, agenceApi } from '@/api';
 import { formatDate } from '@/lib/utils';
 import { 
   ArrowLeft, Download, 
@@ -9,7 +9,7 @@ import {
   Clock, CheckCircle2, 
   XCircle, AlertCircle,
   ChevronRight, ClipboardList,
-  ShieldAlert, Lock, Eye, EyeOff
+  ShieldAlert, Lock, Eye, EyeOff, Printer
 } from 'lucide-vue-next';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -85,10 +85,12 @@ const editForm = ref({
   tvaValue: 0,
   notes: '',
   status: '',
+  agency: '',
   password: '',
 });
 
 const showEditPassword = ref(false);
+const agencies = ref<string[]>([]);
 
 const openEditDialog = async () => {
   editError.value = '';
@@ -120,6 +122,7 @@ const openEditDialog = async () => {
       tvaValue: contrat.value.tvaValue || 0,
       notes: contrat.value.notes || '',
       status: contrat.value.status || 'active',
+      agency: contrat.value.agency || '',
       password: '',
     };
     
@@ -130,12 +133,16 @@ const openEditDialog = async () => {
   showEditDialog.value = true;
   
   try {
-    const [carsData, clientsData] = await Promise.all([
+    const [carsData, clientsData, settingsData] = await Promise.all([
       carApi.getAll(),
-      clientApi.getAll()
+      clientApi.getAll(),
+      settingApi.get()
     ]);
     cars.value = carsData.filter((c: any) => !c.disabled);
     clients.value = clientsData.filter((c: any) => !c.disabled);
+    if (settingsData?.agencies) {
+      agencies.value = settingsData.agencies;
+    }
   } catch (err) {
     console.error('Erreur lors du chargement des voitures/clients:', err);
   }
@@ -312,7 +319,85 @@ const fetchContrat = async () => {
   }
 };
 
-onMounted(fetchContrat);
+// Print State & Logic
+const showPrintModal = ref(false);
+const fullAgenciesList = ref<any[]>([]);
+const selectedAgenceForPrint = ref<any>(null);
+
+const fetchAgences = async () => {
+  try {
+    const data = await agenceApi.getAll();
+    fullAgenciesList.value = data || [];
+    agencies.value = fullAgenciesList.value.map((a: any) => a.name);
+  } catch (err) {
+    console.warn('Failed to fetch agences:', err);
+  }
+};
+
+onMounted(async () => {
+  await fetchContrat();
+  await fetchAgences();
+});
+
+const openPrintModal = () => {
+  if (!contrat.value) return;
+  // Match agency by contract agency name
+  const match = fullAgenciesList.value.find(
+    (a: any) => a.name?.toLowerCase() === contrat.value.agency?.toLowerCase()
+  );
+  if (match) {
+    selectedAgenceForPrint.value = match;
+  } else if (fullAgenciesList.value.length > 0) {
+    selectedAgenceForPrint.value = fullAgenciesList.value[0];
+  } else {
+    selectedAgenceForPrint.value = null;
+  }
+  showPrintModal.value = true;
+};
+
+const getPrintFieldValue = (fieldKey: string, customVal = '') => {
+  if (!contrat.value) return '';
+  if (fieldKey === 'customText') return customVal;
+
+  const c = contrat.value;
+  const client1 = c.clients?.[0];
+  const client2 = c.clients?.[1];
+
+  switch (fieldKey) {
+    case 'reference': return c.reference || '';
+    case 'agency': return c.agency || selectedAgenceForPrint.value?.name || '';
+    case 'startDate': return c.startDate ? formatDate(c.startDate) : '';
+    case 'startTime': return c.startDate ? new Date(c.startDate).toTimeString().substring(0, 5) : '';
+    case 'endDate': return c.endDate ? formatDate(c.endDate) : '';
+    case 'endTime': return c.endDate ? new Date(c.endDate).toTimeString().substring(0, 5) : '';
+    case 'rentDays': return c.startDate && c.endDate ? diffDays(c.startDate, c.endDate) + ' Jours' : '';
+    case 'carBrandModel': return (c.car?.brand || '') + ' ' + (c.car?.model || '');
+    case 'carRegistration': return c.car?.registrationNumber || c.car?.matricule || '';
+    case 'client1Name': return client1 ? `${client1.firstName || ''} ${client1.lastName || ''}`.trim() : '';
+    case 'client1Cin': return client1?.cin || '';
+    case 'client1Phone': return client1?.phone || '';
+    case 'client1License': return client1?.drivingLicense || '';
+    case 'client1Address': return client1?.address || '';
+    case 'client2Name': return client2 ? `${client2.firstName || ''} ${client2.lastName || ''}`.trim() : '';
+    case 'client2Cin': return client2?.cin || '';
+    case 'carDailyRate': return (c.carDailyRate !== undefined ? c.carDailyRate : (c.car?.dailyRate || 0)) + ' TND';
+    case 'subTotal': return ((c.totalAmount || 0) - (c.contractTaxValue || 0) - (c.tvaValue || 0)) + ' TND';
+    case 'contractTax': return (c.contractTaxValue || 0) + ' TND';
+    case 'tva': return (c.tvaValue || 0) + ' TND';
+    case 'totalAmount': return (c.totalAmount || 0) + ' TND';
+    case 'depositAmount': return (c.depositAmount || 0) + ' TND';
+    case 'paymentMethod': return c.paymentMethod === 'cheque' ? 'Chèque' : 'Espèce';
+    case 'startMileage': return c.startMileage ? c.startMileage + ' KM' : '';
+    case 'returnMileage': return c.returnMileage ? c.returnMileage + ' KM' : '';
+    case 'notes': return c.notes || '';
+    case 'currentDate': return new Date().toLocaleDateString('fr-FR');
+    default: return '';
+  }
+};
+
+const triggerPrint = () => {
+  window.print();
+};
 
 
 
@@ -420,7 +505,10 @@ const submitCloture = async () => {
                  </div>
               </div>
            </div>
-           <div class="relative z-10">
+           <div class="relative z-10 flex items-center gap-3">
+              <Button @click="openPrintModal" class="h-12 px-6 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black uppercase tracking-widest text-[10px] flex items-center gap-2 shadow-lg shadow-indigo-600/20">
+                <Printer class="w-4 h-4" /> Imprimer Contrat
+              </Button>
               <Button @click="downloadPdf" variant="outline" class="h-12 px-6 border-2 border-border rounded-xl font-black uppercase tracking-widest text-[10px] flex items-center gap-2">
                 <Download class="w-4 h-4" /> PDF
               </Button>
@@ -567,8 +655,12 @@ const submitCloture = async () => {
                               </p>
                            </div>
                            <div class="space-y-1">
-                              <p class="text-[9px] font-black opacity-40 uppercase tracking-widest">Tarif / Jour</p>
-                              <p class="text-lg font-black tabular-nums">{{ contrat.carDailyRate !== undefined ? contrat.carDailyRate : (contrat.car?.dailyRate || 0) }} <span class="text-[10px]">TND</span></p>
+                               <p class="text-[9px] font-black opacity-40 uppercase tracking-widest">Tarif / Jour</p>
+                               <p class="text-lg font-black tabular-nums">{{ contrat.carDailyRate !== undefined ? contrat.carDailyRate : (contrat.car?.dailyRate || 0) }} <span class="text-[10px]">TND</span></p>
+                           </div>
+                           <div v-if="contrat.agency" class="space-y-1">
+                               <p class="text-[9px] font-black opacity-40 uppercase tracking-widest">Agence</p>
+                               <p class="text-sm font-black uppercase italic">{{ contrat.agency }}</p>
                            </div>
                            <div class="space-y-1">
                               <p class="text-[9px] font-black opacity-40 uppercase tracking-widest">Distance</p>
@@ -775,17 +867,24 @@ const submitCloture = async () => {
                         <input type="number" v-model.number="editForm.tvaValue" class="w-full h-14 px-4 rounded-2xl bg-muted border-2 border-border focus:border-primary outline-none font-black tabular-nums" />
                      </div>
                   </div>
-                  <div v-if="editForm.paymentMethod === 'cheque'" class="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in duration-300">
-                     <div class="space-y-2">
-                        <label class="text-[9px] font-black uppercase pl-2 opacity-40">Numéro Chèque</label>
-                        <input v-model="editForm.chequeNumber" class="w-full h-14 px-4 rounded-2xl bg-muted border-2 border-border focus:border-primary outline-none font-bold" />
-                     </div>
-                     <div class="space-y-2">
-                        <label class="text-[9px] font-black uppercase pl-2 opacity-40">Banque</label>
-                        <input v-model="editForm.bankName" class="w-full h-14 px-4 rounded-2xl bg-muted border-2 border-border focus:border-primary outline-none font-bold" />
-                     </div>
-                  </div>
-               </div>
+                   <div v-if="editForm.paymentMethod === 'cheque'" class="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in duration-300">
+                      <div class="space-y-2">
+                         <label class="text-[9px] font-black uppercase pl-2 opacity-40">Numéro Chèque</label>
+                         <input v-model="editForm.chequeNumber" class="w-full h-14 px-4 rounded-2xl bg-muted border-2 border-border focus:border-primary outline-none font-bold" />
+                      </div>
+                      <div class="space-y-2">
+                         <label class="text-[9px] font-black uppercase pl-2 opacity-40">Banque</label>
+                         <input v-model="editForm.bankName" class="w-full h-14 px-4 rounded-2xl bg-muted border-2 border-border focus:border-primary outline-none font-bold" />
+                      </div>
+                   </div>
+                   <div v-if="agencies.length > 0" class="space-y-2">
+                      <label class="text-[9px] font-black uppercase pl-2 opacity-40">Agence</label>
+                      <select v-model="editForm.agency" class="w-full h-14 px-4 rounded-2xl bg-muted border-2 border-border focus:border-primary outline-none font-bold text-sm">
+                         <option value="">Aucune</option>
+                         <option v-for="a in agencies" :key="a" :value="a">{{ a }}</option>
+                      </select>
+                   </div>
+                </div>
 
                <!-- Observations & Sécurité -->
                <div class="space-y-4">
@@ -1012,11 +1111,104 @@ const submitCloture = async () => {
             <div class="absolute bottom-12 left-1/2 -translate-x-1/2 px-6 py-3 bg-white/10 backdrop-blur-md rounded-full border border-white/20 text-white text-[10px] font-black uppercase tracking-[0.3em] pointer-events-none shadow-2xl z-50">
                Loupe: {{ (zoomLevel * 100).toFixed(0) }}% <span v-if="zoomLevel > 1" class="ml-4 opacity-50 italic">— Cliquer pour réinitialiser</span>
             </div>
-         </DialogContent>
+          </DialogContent>
+      </Dialog>
+
+      <!-- PRINT CONTRACT MODAL -->
+      <Dialog v-model:open="showPrintModal">
+        <DialogContent class="sm:max-w-5xl bg-white text-slate-900 border-none shadow-3xl rounded-[2.5rem] p-0 overflow-hidden max-h-[95vh] flex flex-col no-print-dialog">
+          <DialogHeader class="p-6 bg-indigo-50 border-b border-indigo-100 flex flex-row items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center">
+                <Printer class="w-5 h-5" />
+              </div>
+              <div>
+                <DialogTitle class="text-xl font-black uppercase text-indigo-950">Impression du Contrat</DialogTitle>
+                <DialogDescription class="text-[10px] font-black uppercase tracking-widest text-indigo-600/70">
+                  Impression des informations sur papier pré-imprimé selon le modèle agence.
+                </DialogDescription>
+              </div>
+            </div>
+            <div class="flex items-center gap-4">
+              <div v-if="fullAgenciesList.length > 0" class="flex items-center gap-2">
+                <label class="text-[10px] font-black text-slate-400 uppercase">Modèle Agence:</label>
+                <select 
+                  :value="selectedAgenceForPrint?._id"
+                  @change="(e: Event) => { selectedAgenceForPrint = fullAgenciesList.find((a: any) => a._id === (e.target as HTMLSelectElement).value) }"
+                  class="h-10 px-3 rounded-xl bg-white border border-slate-200 text-xs font-bold text-slate-900 outline-none"
+                >
+                  <option v-for="a in fullAgenciesList" :key="a._id" :value="a._id">{{ a.name }}</option>
+                </select>
+              </div>
+              <Button @click="triggerPrint" class="h-11 px-6 bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase text-xs tracking-wider rounded-xl shadow-lg shadow-indigo-600/20 gap-2">
+                <Printer class="w-4 h-4" /> Lancer l'impression
+              </Button>
+            </div>
+          </DialogHeader>
+
+          <div class="p-8 overflow-y-auto bg-slate-100 flex justify-center custom-scrollbar">
+            <!-- A4 PREVIEW CANVAS -->
+            <div 
+              id="printable-contract-sheet"
+              class="relative bg-white text-slate-900 shadow-xl overflow-hidden border border-slate-200"
+              :style="{
+                width: '680px',
+                height: '962px',
+                backgroundImage: selectedAgenceForPrint?.templateImage ? `url(${getImageUrl(selectedAgenceForPrint.templateImage)})` : 'none',
+                backgroundSize: 'contain',
+                backgroundPosition: 'center',
+                backgroundRepeat: 'no-repeat'
+              }"
+            >
+              <div 
+                v-for="field in (selectedAgenceForPrint?.templateFields || [])" :key="field.id"
+                class="absolute field-print-item"
+                :style="{
+                  left: field.x + '%',
+                  top: field.y + '%',
+                  fontSize: (field.fontSize || 13) + 'px',
+                  fontWeight: field.fontWeight || 'normal',
+                  color: field.color || '#000000',
+                  textAlign: field.alignment || 'left',
+                  whiteSpace: 'nowrap'
+                }"
+              >
+                {{ getPrintFieldValue(field.key, field.customValue) }}
+              </div>
+            </div>
+          </div>
+        </DialogContent>
       </Dialog>
 
     </template>
   </div>
 </template>
+
+<style>
+@media print {
+  body * {
+    visibility: hidden !important;
+  }
+  #printable-contract-sheet, #printable-contract-sheet * {
+    visibility: visible !important;
+  }
+  #printable-contract-sheet {
+    position: fixed !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 210mm !important;
+    height: 297mm !important;
+    background-image: none !important; /* STRICT REQUIREMENT: PRINT ONLY TEXT INFORMATION ON PRE-PRINTED PAPER */
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+    z-index: 99999 !important;
+  }
+  .field-print-item {
+    color: #000000 !important;
+  }
+}
+</style>
 
 
