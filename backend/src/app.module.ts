@@ -18,6 +18,7 @@ import { UploadModule } from './upload/upload.module';
 import { JourneeModule } from './journee/journee.module';
 import { SharedModule } from './shared/shared.module';
 import { SettingModule } from './setting/setting.module';
+import { AgenceModule } from './agence/agence.module';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { SettingModule } from './setting/setting.module';
     UploadModule,
     JourneeModule,
     SettingModule,
+    AgenceModule,
   ],
   controllers: [AppController],
   providers: [AppService],

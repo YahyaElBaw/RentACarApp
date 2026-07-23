@@ -153,6 +153,9 @@ export class PdfService {
           },
           layout: 'lightHorizontalLines'
         },
+        contrat.agency ? [
+          { text: `Agence: ${contrat.agency}`, style: 'tdValue', margin: [0, 8, 0, 0] }
+        ] : [],
 
         // Section 3: BILAN DE RETOUR (Only if closed)
         isClosed ? [
