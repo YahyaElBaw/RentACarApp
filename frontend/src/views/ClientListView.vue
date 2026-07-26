@@ -8,7 +8,7 @@ import {
   Phone, Mail, MapPin, User,
   CreditCard, Shield, Upload,
   ArrowRight, ArrowLeft, Check, X,
-  Trash2, Eye, EyeOff
+  Trash2, Eye, EyeOff, ChevronLeft, ChevronRight
 } from 'lucide-vue-next'
 import { 
   Table, TableHeader, TableBody, TableHead, TableRow, TableCell 
@@ -35,6 +35,9 @@ const filters = reactive({
   query: ''
 })
 
+const currentPage = ref(1)
+const pageSize = 10
+
 const currentStep = ref(1)
 const isUploading = ref<Record<string, boolean>>({})
 const showSecurityModal = ref(false)
@@ -47,11 +50,15 @@ interface ClientForm {
   firstName: string;
   lastName: string;
   birthday: string;
+  lieuNaissance: string;
   cin: string;
   phone: string;
+  phoneCountryCode: string;
   email: string;
   address: string;
   drivingLicense: string;
+  lieuPermis: string;
+  nationality: string;
   cinDate: string;
   licenseDate: string;
   status: string;
@@ -67,11 +74,15 @@ const clientForm = reactive<ClientForm>({
   firstName: '',
   lastName: '',
   birthday: '',
+  lieuNaissance: '',
   cin: '',
   phone: '',
+  phoneCountryCode: '+216',
   email: '',
   address: '',
   drivingLicense: '',
+  lieuPermis: '',
+  nationality: '',
   cinDate: '',
   licenseDate: '',
   status: 'WHITE_LIST',
@@ -96,7 +107,7 @@ const loadClients = async () => {
 }
 
 onMounted(loadClients)
-watch(() => filters.query, loadClients)
+watch(() => filters.query, () => { currentPage.value = 1; loadClients() })
 
 const openAddModal = () => {
   editingClient.value = null
@@ -105,11 +116,15 @@ const openAddModal = () => {
     firstName: '',
     lastName: '',
     birthday: '',
+    lieuNaissance: '',
     cin: '',
     phone: '',
+    phoneCountryCode: '+216',
     email: '',
     address: '',
     drivingLicense: '',
+    lieuPermis: '',
+    nationality: '',
     cinDate: '',
     licenseDate: '',
     status: 'WHITE_LIST',
@@ -137,10 +152,15 @@ const editClient = (client: any) => {
 
 const saveClient = async () => {
   try {
+    const payload: any = { ...clientForm }
+    if (!payload.cinDate) delete payload.cinDate
+    if (!payload.licenseDate) delete payload.licenseDate
+    if (!payload.birthday) delete payload.birthday
+
     if (editingClient.value) {
-      await api.patch(`/clients/${editingClient.value._id}`, clientForm)
+      await api.patch(`/clients/${editingClient.value._id}`, payload)
     } else {
-      await api.post('/clients', clientForm)
+      await api.post('/clients', payload)
     }
     showForm.value = false
     loadClients()
@@ -218,23 +238,23 @@ const sortedClients = computed(() => {
   return [...clients.value];
 });
 
+const totalClientPages = computed(() => Math.ceil(sortedClients.value.length / pageSize))
+const paginatedClients = computed(() => {
+  const start = (currentPage.value - 1) * pageSize
+  return sortedClients.value.slice(start, start + pageSize)
+})
+
 const isStepValid = computed(() => {
   if (currentStep.value === 1) {
-    return !!(clientForm.firstName && clientForm.lastName && clientForm.birthday && clientForm.phone && clientForm.address);
+    return !!(clientForm.firstName && clientForm.lastName && clientForm.phone);
   }
   if (currentStep.value === 2) {
     return !!(clientForm.cin && clientForm.drivingLicense);
   }
-  if (currentStep.value === 3) {
-    if (clientForm.idCardType === 'passport') {
-      return !!(clientForm.cinFront && clientForm.licenseFront && clientForm.licenseBack);
-    }
-    return !!(clientForm.cinFront && clientForm.cinBack && clientForm.licenseFront && clientForm.licenseBack);
-  }
   return true;
 });
 </script><template>
-  <div class="client-list-container space-y-12 animate-in fade-in slide-in-from-bottom-2 duration-1000 p-8 max-w-7xl mx-auto">
+  <div class="client-list-container space-y-12 p-8 max-w-7xl mx-auto">
     <!-- Header & Integrated Action Bar -->
     <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-8">
       <div class="space-y-2">
@@ -277,7 +297,7 @@ const isStepValid = computed(() => {
             </TableHeader>
             <TableBody>
               <TableRow 
-                v-for="client in sortedClients" 
+                v-for="client in paginatedClients" 
                 :key="client._id"
                 @click="viewDetail(client._id)"
                 :class="[
@@ -372,6 +392,19 @@ const isStepValid = computed(() => {
             </TableBody>
           </Table>
         </div>
+        <div v-if="sortedClients.length > pageSize" class="flex items-center justify-between px-10 py-5 border-t border-slate-100 bg-slate-50/50">
+          <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+            Page {{ currentPage }} / {{ totalClientPages }} — {{ sortedClients.length }} résultats
+          </p>
+          <div class="flex items-center gap-2">
+            <Button variant="outline" size="sm" :disabled="currentPage <= 1" @click="currentPage--" class="h-9 px-4 rounded-xl font-black text-[10px] uppercase tracking-widest border-slate-200 disabled:opacity-30">
+              <ChevronLeft class="w-4 h-4 mr-1" /> Précédent
+            </Button>
+            <Button variant="outline" size="sm" :disabled="currentPage >= totalClientPages" @click="currentPage++" class="h-9 px-4 rounded-xl font-black text-[10px] uppercase tracking-widest border-slate-200 disabled:opacity-30">
+              Suivant <ChevronRight class="w-4 h-4 ml-1" />
+            </Button>
+          </div>
+        </div>
       </CardContent>
     </Card>
 
@@ -451,7 +484,31 @@ const isStepValid = computed(() => {
                 </div>
                 <div class="space-y-1.5 sm:space-y-2">
                   <Label class="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Numéro de Téléphone</Label>
-                  <Input v-model="clientForm.phone" class="h-10 sm:h-11 bg-slate-50 border-slate-100 focus:ring-4 focus:ring-indigo-600/5 rounded-xl font-black text-indigo-600 tabular-nums text-sm" />
+                  <div class="flex gap-2">
+                    <select v-model="clientForm.phoneCountryCode" class="h-10 sm:h-11 w-24 shrink-0 bg-slate-50 border border-slate-100 rounded-xl font-black text-slate-900 text-sm px-2 outline-none">
+                      <option value="+216">🇹🇳 +216</option>
+                      <option value="+33">🇫🇷 +33</option>
+                      <option value="+39">🇮🇹 +39</option>
+                      <option value="+49">🇩🇪 +49</option>
+                      <option value="+34">🇪🇸 +34</option>
+                      <option value="+1">🇺🇸 +1</option>
+                      <option value="+44">🇬🇧 +44</option>
+                      <option value="+212">🇲🇦 +212</option>
+                      <option value="+213">🇩🇿 +213</option>
+                      <option value="+966">🇸🇦 +966</option>
+                      <option value="+971">🇦🇪 +971</option>
+                      <option value="+218">🇱🇾 +218</option>
+                    </select>
+                    <Input v-model="clientForm.phone" class="h-10 sm:h-11 bg-slate-50 border-slate-100 focus:ring-4 focus:ring-indigo-600/5 rounded-xl font-black text-indigo-600 tabular-nums text-sm flex-1" />
+                  </div>
+                </div>
+                <div class="space-y-1.5 sm:space-y-2">
+                  <Label class="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Nationalité</Label>
+                  <Input v-model="clientForm.nationality" placeholder="Ex: Tunisienne" class="h-10 sm:h-11 bg-slate-50 border-slate-100 focus:ring-4 focus:ring-indigo-600/5 rounded-xl font-black text-slate-900 text-sm" />
+                </div>
+                <div class="space-y-1.5 sm:space-y-2">
+                  <Label class="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Lieu de Naissance</Label>
+                  <Input v-model="clientForm.lieuNaissance" placeholder="Ex: Djerba" class="h-10 sm:h-11 bg-slate-50 border-slate-100 focus:ring-4 focus:ring-indigo-600/5 rounded-xl font-black text-slate-900 text-sm" />
                 </div>
                 <div class="space-y-1.5 sm:space-y-2 col-span-2">
                   <Label class="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Adresse de Résidence</Label>
@@ -500,6 +557,10 @@ const isStepValid = computed(() => {
                 <div class="space-y-1.5 sm:space-y-2">
                   <Label class="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase tracking-[0.3em] ml-2">DATE D'EXPORTATION PERMIS</Label>
                   <Input type="date" v-model="clientForm.licenseDate" class="h-10 sm:h-12 bg-slate-50 border-2 border-slate-100 focus:ring-4 focus:ring-indigo-600/5 rounded-xl font-black text-slate-900 text-sm" />
+                </div>
+                <div class="space-y-1.5 sm:space-y-2">
+                  <Label class="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase tracking-[0.3em] ml-2">LIEU DE PERMIS</Label>
+                  <Input v-model="clientForm.lieuPermis" placeholder="Ex: Djerba" class="h-10 sm:h-12 bg-slate-50 border-2 border-slate-100 focus:ring-4 focus:ring-indigo-600/5 rounded-xl font-black text-slate-900 text-sm" />
                 </div>
               </div>
           </div>

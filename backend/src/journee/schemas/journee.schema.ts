@@ -27,6 +27,3 @@ export class Journee {
 
 export type JourneeDocument = Journee & Document;
 export const JourneeSchema = SchemaFactory.createForClass(Journee);
-
-// Ensure index on date for fast retrieval
-JourneeSchema.index({ date: 1 });

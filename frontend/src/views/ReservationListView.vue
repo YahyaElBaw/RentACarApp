@@ -1,5 +1,5 @@
 <template>
-  <div class="reservation-list-container space-y-10 animate-in fade-in slide-in-from-bottom-2 duration-1000 p-8 max-w-7xl mx-auto">
+  <div class="reservation-list-container space-y-10 p-8 max-w-7xl mx-auto">
     <!-- Header & Integrated Action Bar -->
     <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-8">
       <div class="space-y-2">
@@ -265,17 +265,26 @@
                 <div class="w-12 h-12 rounded-2xl bg-slate-200 flex items-center justify-center flex-shrink-0">
                   <CarIcon class="w-6 h-6 text-slate-500" />
                 </div>
-                <div v-if="selectedReservation.car">
+                <div v-if="selectedReservation.car" class="flex-1">
                   <p class="font-black text-slate-900 text-lg uppercase italic">{{ selectedReservation.car.brand }} {{ selectedReservation.car.model }}</p>
                   <div class="flex items-center gap-3 mt-0.5">
                     <span class="text-[10px] font-bold text-slate-500 bg-slate-200 px-2 py-0.5 rounded">{{ selectedReservation.car.matricule }}</span>
-                    <span class="text-[10px] font-bold text-indigo-600">{{ selectedReservation.car.dailyRate || '—' }} TND/jour</span>
+                    <span class="text-[10px] font-bold text-indigo-600">{{ getEffectiveDailyRate(selectedReservation) || '—' }} TND/jour</span>
                   </div>
                 </div>
-                <div v-else>
+                <div v-else class="flex-1">
                   <p class="font-black text-slate-500 text-lg uppercase italic">Non Assigné</p>
                   <p class="text-[10px] font-bold text-slate-400 mt-0.5">Veuillez assigner un véhicule pour confirmer</p>
                 </div>
+                <Button
+                  v-if="authStore.isAdmin && selectedReservation.status !== 'cancelled'"
+                  variant="ghost"
+                  @click="openChangeCarDialog()"
+                  class="h-10 px-3 text-indigo-600 hover:bg-indigo-50 font-black rounded-xl uppercase tracking-widest text-[10px] flex items-center gap-2 transition-all flex-shrink-0"
+                >
+                  <ArrowLeftRight class="w-3.5 h-3.5" />
+                  Changer
+                </Button>
               </div>
             </div>
 
@@ -285,9 +294,29 @@
               <p class="text-[9px] font-black uppercase tracking-[0.3em] text-slate-400 mb-4 relative z-10">Récapitulatif Financier</p>
 
               <div class="space-y-3 relative z-10">
-                <div class="flex justify-between items-center">
+                <div class="flex justify-between items-center gap-4">
                   <span class="text-xs font-bold text-slate-400">Tarif journalier</span>
-                  <span class="text-sm font-black text-white tabular-nums">{{ selectedReservation.car ? (selectedReservation.car.dailyRate + ' TND') : '—' }}</span>
+                  <div v-if="editingDailyRate !== null" class="flex items-center gap-2">
+                    <input
+                      type="number"
+                      v-model.number="editingDailyRate"
+                      class="w-24 h-8 bg-white/10 border border-white/20 rounded-lg px-2 text-sm font-black text-white text-right tabular-nums outline-none focus:ring-2 focus:ring-indigo-400"
+                      @keyup.enter="saveDailyRate"
+                      @keyup.escape="editingDailyRate = null"
+                      autofocus
+                    />
+                    <span class="text-xs font-bold text-white/40">TND</span>
+                    <button @click="saveDailyRate" class="w-7 h-7 rounded-lg bg-emerald-500 hover:bg-emerald-600 flex items-center justify-center transition-all">
+                      <CheckCircle2 class="w-3.5 h-3.5 text-white" />
+                    </button>
+                    <button @click="editingDailyRate = null" class="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition-all">
+                      <X class="w-3.5 h-3.5 text-white" />
+                    </button>
+                  </div>
+                  <div v-else class="flex items-center gap-2 cursor-pointer group/rate" @click="startEditDailyRate">
+                    <span class="text-sm font-black text-white tabular-nums">{{ getEffectiveDailyRate(selectedReservation) }} TND</span>
+                    <Pencil class="w-3 h-3 text-white/30 group-hover/rate:text-indigo-400 transition-colors" />
+                  </div>
                 </div>
                 <div class="flex justify-between items-center">
                   <span class="text-xs font-bold text-slate-400">Durée</span>
@@ -371,8 +400,10 @@
     <Dialog v-model:open="showAssignCarDialog">
       <DialogContent class="sm:max-w-lg bg-white border-none shadow-2xl rounded-[2rem] p-8 max-h-[90vh] overflow-y-auto no-scrollbar">
         <DialogHeader class="mb-4">
-          <DialogTitle class="text-xl font-black text-slate-900 uppercase italic tracking-tighter">Assigner un <span class="text-indigo-600">Véhicule</span></DialogTitle>
-          <p class="text-[10px] font-bold text-slate-400 tracking-widest uppercase">Choisissez le véhicule disponible</p>
+          <DialogTitle class="text-xl font-black text-slate-900 uppercase italic tracking-tighter">
+            {{ assignCarMode === 'change' ? 'Changer le ' : 'Assigner un ' }}<span class="text-indigo-600">Véhicule</span>
+          </DialogTitle>
+          <p class="text-[10px] font-bold text-slate-400 tracking-widest uppercase">{{ assignCarMode === 'change' ? 'Sélectionnez le nouveau véhicule disponible' : 'Choisissez le véhicule disponible' }}</p>
         </DialogHeader>
         
         <div v-if="assignCarInput !== 'NEW'" class="space-y-4">
@@ -383,7 +414,8 @@
               {{ car.brand }} {{ car.model }} ({{ car.matricule }})
             </option>
           </select>
-          <Button @click="proceedToAssignAndConfirm" :disabled="!assignCarInput" class="w-full h-14 bg-emerald-500 hover:bg-emerald-600 text-white font-black rounded-2xl uppercase tracking-widest text-xs mt-2">Valider & Confirmer</Button>
+          <Button v-if="assignCarMode === 'assign'" @click="proceedToAssignAndConfirm" :disabled="!assignCarInput" class="w-full h-14 bg-emerald-500 hover:bg-emerald-600 text-white font-black rounded-2xl uppercase tracking-widest text-xs mt-2">Valider & Confirmer</Button>
+          <Button v-else @click="proceedToChangeCar" :disabled="!assignCarInput || assignCarInput === selectedReservation?.car?._id" class="w-full h-14 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-2xl uppercase tracking-widest text-xs mt-2">Changer le Véhicule</Button>
         </div>
 
         <div v-else class="space-y-4 animate-in fade-in zoom-in-95 duration-300">
@@ -395,7 +427,7 @@
           </div>
           <div class="flex gap-2 pt-2">
             <Button variant="ghost" @click="assignCarInput = ''" class="flex-1 h-12 uppercase text-[10px] tracking-widest font-black text-slate-500 rounded-xl">Annuler</Button>
-            <Button @click="handleQuickAddCar" :loading="isAddingCar" :disabled="!newCarForm.brand || !newCarForm.matricule || !newCarForm.dailyRate" class="flex-1 h-12 bg-indigo-600 text-white uppercase text-[10px] tracking-widest font-black rounded-xl">Sauvegarder & Assigner</Button>
+            <Button @click="handleQuickAddCar" :loading="isAddingCar" :disabled="!newCarForm.brand || !newCarForm.matricule || !newCarForm.dailyRate" class="flex-1 h-12 bg-indigo-600 text-white uppercase text-[10px] tracking-widest font-black rounded-xl">Sauvegarder & {{ assignCarMode === 'change' ? 'Changer' : 'Assigner' }}</Button>
           </div>
         </div>
       </DialogContent>
@@ -467,13 +499,21 @@
               </select>
             </div>
 
+            <div v-if="form.car" class="space-y-2">
+              <Label class="text-[10px] font-black uppercase tracking-widest text-slate-400">Tarif Journalier (TND)</Label>
+              <div class="relative">
+                <Input type="number" min="0" v-model.number="form.dailyRate" :placeholder="`Défaut: ${selectedCarDetails?.dailyRate || 0}`" class="h-12 bg-slate-50 border-slate-200 rounded-xl font-bold pr-12" />
+                <span class="absolute right-4 top-1/2 -translate-y-1/2 font-black text-[10px] text-slate-400 uppercase">TND</span>
+              </div>
+            </div>
+
             <!-- Pricing Preview -->
             <div v-if="form.car && form.days" class="bg-slate-900 rounded-[1.5rem] p-5 shadow-2xl space-y-3 relative overflow-hidden">
               <div class="absolute -right-4 -top-4 w-24 h-24 bg-indigo-500/20 rounded-full blur-2xl"></div>
               <div class="flex justify-between items-end relative z-10">
                 <div class="space-y-1">
                   <p class="text-[9px] font-black uppercase tracking-[0.3em] text-slate-400">Total Location</p>
-                  <p class="text-sm font-black text-white uppercase italic">{{ form.days }} Jours × <span class="text-indigo-400">{{ selectedCarDetails?.dailyRate || 0 }} TND</span></p>
+                  <p class="text-sm font-black text-white uppercase italic">{{ form.days }} Jours × <span class="text-indigo-400">{{ form.dailyRate > 0 ? form.dailyRate : (selectedCarDetails?.dailyRate || 0) }} TND</span></p>
                 </div>
                 <div class="text-right">
                   <p class="text-2xl font-black tabular-nums text-white tracking-tighter">{{ totalRentPrice }} <span class="text-xs font-bold text-white/40">TND</span></p>
@@ -596,7 +636,8 @@ import {
   Search, Plus, Calendar, ArrowRight,
   Car as CarIcon, CheckCircle2, Trash2,
   FileText, X, User, StickyNote,
-  CalendarX, Clock, TrendingUp, AlertTriangle
+  CalendarX, Clock, TrendingUp, AlertTriangle,
+  ArrowLeftRight, Pencil
 } from 'lucide-vue-next';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -638,11 +679,23 @@ const form = reactive({
   startTime: '10:00',
   days: 1,
   endTime: '10:00',
+  dailyRate: 0,
   notes: ''
 });
 
+const editingDailyRate = ref<number | null>(null);
+
 watch(() => form.startTime, (newVal) => {
   form.endTime = newVal;
+});
+
+watch(() => form.car, (newCarId) => {
+  if (newCarId) {
+    const car = cars.value.find(c => c._id === newCarId);
+    if (car && form.dailyRate <= 0) {
+      form.dailyRate = car.dailyRate;
+    }
+  }
 });
 
 const filters = reactive({ query: '' });
@@ -653,6 +706,7 @@ const contractRefInput = ref('');
 
 const showAssignCarDialog = ref(false);
 const assignCarInput = ref('');
+const assignCarMode = ref<'assign' | 'change'>('assign');
 const isAddingCar = ref(false);
 const newCarForm = reactive({ brand: '', model: '', matricule: '', dailyRate: 100 });
 
@@ -693,7 +747,8 @@ const selectedCarDetails = computed(() => {
 
 const totalRentPrice = computed(() => {
   if (!selectedCarDetails.value || !form.days) return 0;
-  return selectedCarDetails.value.dailyRate * Number(form.days);
+  const rate = form.dailyRate > 0 ? form.dailyRate : selectedCarDetails.value.dailyRate;
+  return rate * Number(form.days);
 });
 
 
@@ -782,7 +837,30 @@ const initials = (res: any): string => {
 
 const calcTotal = (res: any): number => {
   const days = getDays(res.startDate, res.endDate);
-  return (res.car?.dailyRate || 0) * days;
+  const rate = (res.dailyRate > 0) ? res.dailyRate : (res.car?.dailyRate || 0);
+  return rate * days;
+};
+
+const getEffectiveDailyRate = (res: any): number => {
+  return (res.dailyRate > 0) ? res.dailyRate : (res.car?.dailyRate || 0);
+};
+
+const startEditDailyRate = () => {
+  if (!selectedReservation.value) return;
+  editingDailyRate.value = getEffectiveDailyRate(selectedReservation.value);
+};
+
+const saveDailyRate = async () => {
+  if (!selectedReservation.value || editingDailyRate.value === null) return;
+  try {
+    await reservationApi.update(selectedReservation.value._id, { dailyRate: editingDailyRate.value });
+    editingDailyRate.value = null;
+    await loadReservations();
+    selectedReservation.value = reservations.value.find(r => r._id === selectedReservation.value?._id) || null;
+  } catch (err) {
+    console.error('Failed to update daily rate', err);
+    alert('Erreur lors de la mise à jour du tarif.');
+  }
 };
 
 
@@ -826,6 +904,7 @@ const openForm = async () => {
   form.days = 1;
   form.startTime = '10:00';
   form.endTime = '10:00';
+  form.dailyRate = 0;
   form.notes = '';
 
   if (clients.value.length === 0) {
@@ -851,6 +930,9 @@ const submitReservation = async (force = false) => {
     };
     if (!payload.car) {
       delete (payload as any).car;
+    }
+    if (!payload.dailyRate || payload.dailyRate <= 0) {
+      delete (payload as any).dailyRate;
     }
     await reservationApi.create(payload);
     showForm.value = false;
@@ -931,7 +1013,17 @@ const proceedToContract = () => {
 };
 
 const openAssignCarDialog = async () => {
+  assignCarMode.value = 'assign';
   assignCarInput.value = '';
+  if (cars.value.length === 0) {
+    cars.value = await carApi.getAll();
+  }
+  showAssignCarDialog.value = true;
+};
+
+const openChangeCarDialog = async () => {
+  assignCarMode.value = 'change';
+  assignCarInput.value = selectedReservation.value?.car?._id || '';
   if (cars.value.length === 0) {
     cars.value = await carApi.getAll();
   }
@@ -950,6 +1042,19 @@ const proceedToAssignAndConfirm = async () => {
   } catch (err) {
     console.error('Failed to assign and confirm', err);
     alert('Erreur lors de l\'assignation du véhicule.');
+  }
+};
+
+const proceedToChangeCar = async () => {
+  if (!selectedReservation.value || !assignCarInput.value) return;
+  try {
+    await reservationApi.update(selectedReservation.value._id, { car: assignCarInput.value });
+    showAssignCarDialog.value = false;
+    await loadReservations();
+    selectedReservation.value = reservations.value.find(r => r._id === selectedReservation.value?._id) || null;
+  } catch (err) {
+    console.error('Failed to change car', err);
+    alert('Erreur lors du changement du véhicule.');
   }
 };
 

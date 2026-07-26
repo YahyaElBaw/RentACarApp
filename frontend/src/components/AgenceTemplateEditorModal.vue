@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, reactive } from 'vue';
+import { ref, watch, reactive, computed, onMounted, onUnmounted } from 'vue';
 import { agenceApi, uploadApi, getImageUrl } from '@/api';
 import { 
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter 
@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { 
-  Upload, Plus, Trash2, Save, Move, Type, Eye, Palette, Layout, AlignLeft, AlignCenter, AlignRight, Bold
+  Upload, Plus, Trash2, Save, Move, Type, Eye, Palette, Layout, AlignLeft, AlignCenter, AlignRight, Bold, Search
 } from 'lucide-vue-next';
 import { useToast } from 'primevue/usetoast';
 
@@ -23,6 +23,13 @@ const toast = useToast();
 const loading = ref(false);
 const uploading = ref(false);
 const selectedFieldId = ref<string | null>(null);
+const fieldSearch = ref('');
+
+const filteredAvailableKeys = computed(() => {
+  if (!fieldSearch.value) return availableKeys;
+  const q = fieldSearch.value.toLowerCase();
+  return availableKeys.filter(item => item.label.toLowerCase().includes(q) || item.key.toLowerCase().includes(q));
+});
 
 const agenceForm = reactive<{
   _id: string;
@@ -47,15 +54,34 @@ const availableKeys = [
   { key: 'endDate', label: 'Date Retour' },
   { key: 'endTime', label: 'Heure Retour' },
   { key: 'rentDays', label: 'Durée (Jours)' },
+  { key: 'lieuDepart', label: 'Lieu de Départ' },
+  { key: 'lieuRetour', label: 'Lieu de Retour' },
+  { key: 'carburantLevel', label: 'Niveau Carburant' },
+  { key: 'carBrand', label: 'Marque Véhicule' },
+  { key: 'carModel', label: 'Type / Modèle Véhicule' },
   { key: 'carBrandModel', label: 'Véhicule (Marque & Modèle)' },
   { key: 'carRegistration', label: 'Matricule Véhicule' },
   { key: 'client1Name', label: 'Client 1 - Nom & Prénom' },
   { key: 'client1Cin', label: 'Client 1 - CIN / Passeport' },
+  { key: 'client1CinDate', label: 'Client 1 - Date CIN / Passeport' },
   { key: 'client1Phone', label: 'Client 1 - Téléphone' },
-  { key: 'client1License', label: 'Client 1 - Permis de conduire' },
+  { key: 'client1Birthday', label: 'Client 1 - Date de Naissance' },
+  { key: 'client1LieuNaissance', label: 'Client 1 - Lieu de Naissance' },
+  { key: 'client1License', label: 'Client 1 - N° Permis' },
+  { key: 'client1LicenseDate', label: 'Client 1 - Date Permis' },
+  { key: 'client1LieuPermis', label: 'Client 1 - Lieu de Permis' },
   { key: 'client1Address', label: 'Client 1 - Adresse' },
+  { key: 'client1Nationality', label: 'Client 1 - Nationalité' },
   { key: 'client2Name', label: 'Client 2 - Nom & Prénom' },
   { key: 'client2Cin', label: 'Client 2 - CIN / Passeport' },
+  { key: 'client2CinDate', label: 'Client 2 - Date CIN / Passeport' },
+  { key: 'client2Phone', label: 'Client 2 - Téléphone' },
+  { key: 'client2Birthday', label: 'Client 2 - Date de Naissance' },
+  { key: 'client2LieuNaissance', label: 'Client 2 - Lieu de Naissance' },
+  { key: 'client2License', label: 'Client 2 - N° Permis' },
+  { key: 'client2LicenseDate', label: 'Client 2 - Date Permis' },
+  { key: 'client2LieuPermis', label: 'Client 2 - Lieu de Permis' },
+  { key: 'client2Nationality', label: 'Client 2 - Nationalité' },
   { key: 'carDailyRate', label: 'Tarif Journalier (TND)' },
   { key: 'subTotal', label: 'Sous-Total (TND)' },
   { key: 'contractTax', label: 'Frais Contrat (TND)' },
@@ -79,15 +105,34 @@ const sampleValues: Record<string, string> = {
   endDate: '20/08/2026',
   endTime: '18:00',
   rentDays: '5 Jours',
+  lieuDepart: 'Djerba',
+  lieuRetour: 'Djerba',
+  carburantLevel: '75%',
+  carBrand: 'PEUGEOT',
+  carModel: '208 AUTOMATIQUE',
   carBrandModel: 'PEUGEOT 208 AUTOMATIQUE',
   carRegistration: '220 TN 4567',
   client1Name: 'BEN ALI MOHAMED',
   client1Cin: '08765432',
+  client1CinDate: '10/01/2015',
   client1Phone: '+216 98 123 456',
+  client1Birthday: '15/03/1990',
+  client1LieuNaissance: 'Djerba',
   client1License: '12/345678',
+  client1LicenseDate: '20/06/2010',
+  client1LieuPermis: 'Djerba',
   client1Address: 'Avenue Habib Bourguiba, Tunis',
+  client1Nationality: 'Tunisienne',
   client2Name: 'TRABELSI AHMED',
   client2Cin: '05432109',
+  client2CinDate: '05/06/2012',
+  client2Phone: '+216 71 654 321',
+  client2Birthday: '22/07/1985',
+  client2LieuNaissance: 'Tunis',
+  client2License: '98/765432',
+  client2LicenseDate: '10/09/2008',
+  client2LieuPermis: 'Tunis',
+  client2Nationality: 'Tunisienne',
   carDailyRate: '120 TND',
   subTotal: '600 TND',
   contractTax: '10 TND',
@@ -230,6 +275,34 @@ const stopDrag = () => {
   window.removeEventListener('mouseup', stopDrag);
 };
 
+// Keyboard shortcuts for selected field
+const handleKeydown = (e: KeyboardEvent) => {
+  if (!selectedFieldId.value) return;
+  const field = agenceForm.templateFields.find(f => f.id === selectedFieldId.value);
+  if (!field) return;
+
+  if (e.ctrlKey || e.metaKey) {
+    if (e.key === 'b' || e.key === 'B') {
+      e.preventDefault();
+      field.fontWeight = field.fontWeight === 'bold' ? 'normal' : 'bold';
+    } else if (e.key === 'l' || e.key === 'L') {
+      e.preventDefault();
+      field.alignment = 'left';
+    } else if (e.key === 'r' || e.key === 'R') {
+      e.preventDefault();
+      field.alignment = 'right';
+    }
+  }
+};
+
+onMounted(() => {
+  window.addEventListener('keydown', handleKeydown);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeydown);
+});
+
 const saveTemplate = async () => {
   loading.value = true;
   try {
@@ -305,15 +378,25 @@ const saveTemplate = async () => {
             <Label class="text-[10px] font-black uppercase tracking-widest text-indigo-400 flex items-center gap-2">
               <Plus class="w-4 h-4" /> Ajouter un élément au contrat
             </Label>
-            <select 
-              @change="(e: any) => { if (e.target.value) { addField(e.target.value); e.target.value = ''; } }"
-              class="w-full h-12 px-4 rounded-xl bg-slate-800 border border-slate-700 text-white font-bold text-xs outline-none focus:border-indigo-500 cursor-pointer"
-            >
-              <option value="" disabled selected>Choisir une variable à placer...</option>
-              <option v-for="item in availableKeys" :key="item.key" :value="item.key">
+            <div class="relative">
+              <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+              <input 
+                v-model="fieldSearch"
+                placeholder="Rechercher un champ..."
+                class="w-full h-10 pl-9 pr-4 rounded-xl bg-slate-800 border border-slate-700 text-white font-bold text-xs outline-none focus:border-indigo-500 placeholder:text-slate-500"
+              />
+            </div>
+            <div class="max-h-48 overflow-y-auto custom-scrollbar space-y-1">
+              <button
+                v-for="item in filteredAvailableKeys"
+                :key="item.key"
+                @click="addField(item.key)"
+                class="w-full text-left px-3 py-2 rounded-lg text-xs font-bold text-slate-300 hover:bg-indigo-600/20 hover:text-indigo-300 transition-colors truncate"
+              >
                 {{ item.label }}
-              </option>
-            </select>
+              </button>
+              <p v-if="filteredAvailableKeys.length === 0" class="text-[10px] text-slate-500 italic text-center py-2">Aucun résultat</p>
+            </div>
           </div>
 
           <!-- SELECTED FIELD INSPECTOR -->
@@ -415,12 +498,12 @@ const saveTemplate = async () => {
         </div>
 
         <!-- CANVAS PREVIEW AREA (8 Cols) -->
-        <div class="lg:col-span-8 p-8 overflow-auto flex items-center justify-center bg-slate-950/80 relative">
+        <div class="lg:col-span-8 p-8 overflow-auto bg-slate-950/80 relative">
           
           <!-- A4 SHEET REPRESENTATION (Scaled aspect-ratio 210mm x 297mm approx 1:1.414) -->
           <div 
             ref="canvasRef"
-            class="relative bg-white text-slate-900 shadow-2xl rounded-sm overflow-hidden select-none border border-slate-300"
+            class="relative bg-white text-slate-900 shadow-2xl rounded-sm overflow-hidden select-none border border-slate-300 mx-auto my-auto shrink-0"
             :style="{
               width: '680px',
               height: '962px',

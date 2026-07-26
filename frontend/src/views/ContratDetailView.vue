@@ -86,11 +86,15 @@ const editForm = ref({
   notes: '',
   status: '',
   agency: '',
+  carburantLevel: 50,
+  lieuDepart: 'Djerba',
+  lieuRetour: 'Djerba',
   password: '',
 });
 
 const showEditPassword = ref(false);
 const agencies = ref<string[]>([]);
+const skipCarWatch = ref(false);
 
 const openEditDialog = async () => {
   editError.value = '';
@@ -99,12 +103,13 @@ const openEditDialog = async () => {
     const startObj = new Date(contrat.value.startDate);
     const endObj = new Date(contrat.value.endDate);
     
-    // Format dates to YYYY-MM-DD
-    const startDateStr = startObj.toISOString().split('T')[0];
-    const startTimeStr = startObj.toTimeString().substring(0, 5);
-    const endDateStr = endObj.toISOString().split('T')[0];
-    const endTimeStr = endObj.toTimeString().substring(0, 5);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const startDateStr = `${startObj.getFullYear()}-${pad(startObj.getMonth() + 1)}-${pad(startObj.getDate())}`;
+    const startTimeStr = `${pad(startObj.getHours())}:${pad(startObj.getMinutes())}`;
+    const endDateStr = `${endObj.getFullYear()}-${pad(endObj.getMonth() + 1)}-${pad(endObj.getDate())}`;
+    const endTimeStr = `${pad(endObj.getHours())}:${pad(endObj.getMinutes())}`;
 
+    skipCarWatch.value = true;
     editForm.value = {
       car: contrat.value.car?._id || '',
       carDailyRate: contrat.value.carDailyRate !== undefined ? contrat.value.carDailyRate : (contrat.value.car?.dailyRate || 0),
@@ -123,11 +128,15 @@ const openEditDialog = async () => {
       notes: contrat.value.notes || '',
       status: contrat.value.status || 'active',
       agency: contrat.value.agency || '',
+      carburantLevel: contrat.value.carburantLevel ?? 50,
+      lieuDepart: contrat.value.lieuDepart || 'Djerba',
+      lieuRetour: contrat.value.lieuRetour || 'Djerba',
       password: '',
     };
     
     selectedClient1.value = editForm.value.clients[0] || '';
     selectedClient2.value = editForm.value.clients[1] || '';
+    skipCarWatch.value = false;
   }
   
   showEditDialog.value = true;
@@ -180,6 +189,7 @@ watch(
 );
 
 watch(() => editForm.value.car, (newCarId) => {
+  if (skipCarWatch.value) return;
   const selectedCarObj = cars.value.find((c: any) => c._id === newCarId);
   if (selectedCarObj) {
     editForm.value.carDailyRate = selectedCarObj.dailyRate || 0;
@@ -211,7 +221,8 @@ const submitEdit = async (force = false) => {
       endDate: new Date(`${editForm.value.endDate}T${editForm.value.endTime}:00`).toISOString(),
       force: force
     };
-    await contratApi.update(contrat.value._id, payload);
+    const updated = await contratApi.update(contrat.value._id, payload);
+    if (updated) contrat.value = updated;
     showEditDialog.value = false;
     await fetchContrat();
   } catch (err: any) {
@@ -372,14 +383,30 @@ const getPrintFieldValue = (fieldKey: string, customVal = '') => {
     case 'endTime': return c.endDate ? new Date(c.endDate).toTimeString().substring(0, 5) : '';
     case 'rentDays': return c.startDate && c.endDate ? diffDays(c.startDate, c.endDate) + ' Jours' : '';
     case 'carBrandModel': return (c.car?.brand || '') + ' ' + (c.car?.model || '');
+    case 'carBrand': return c.car?.brand || '';
+    case 'carModel': return c.car?.model || '';
     case 'carRegistration': return c.car?.registrationNumber || c.car?.matricule || '';
     case 'client1Name': return client1 ? `${client1.firstName || ''} ${client1.lastName || ''}`.trim() : '';
     case 'client1Cin': return client1?.cin || '';
-    case 'client1Phone': return client1?.phone || '';
+    case 'client1CinDate': return client1?.cinDate ? formatDate(client1.cinDate) : '';
+    case 'client1Phone': return (client1?.phoneCountryCode || '+216') + ' ' + (client1?.phone || '');
+    case 'client1Birthday': return client1?.birthday ? formatDate(client1.birthday) : '';
     case 'client1License': return client1?.drivingLicense || '';
+    case 'client1LicenseDate': return client1?.licenseDate ? formatDate(client1.licenseDate) : '';
     case 'client1Address': return client1?.address || '';
+    case 'client1LieuNaissance': return client1?.lieuNaissance || '';
+    case 'client1LieuPermis': return client1?.lieuPermis || '';
+    case 'client1Nationality': return client1?.nationality || '';
     case 'client2Name': return client2 ? `${client2.firstName || ''} ${client2.lastName || ''}`.trim() : '';
     case 'client2Cin': return client2?.cin || '';
+    case 'client2CinDate': return client2?.cinDate ? formatDate(client2.cinDate) : '';
+    case 'client2Phone': return client2 ? (client2.phoneCountryCode || '+216') + ' ' + (client2.phone || '') : '';
+    case 'client2Birthday': return client2?.birthday ? formatDate(client2.birthday) : '';
+    case 'client2License': return client2?.drivingLicense || '';
+    case 'client2LicenseDate': return client2?.licenseDate ? formatDate(client2.licenseDate) : '';
+    case 'client2LieuNaissance': return client2?.lieuNaissance || '';
+    case 'client2LieuPermis': return client2?.lieuPermis || '';
+    case 'client2Nationality': return client2?.nationality || '';
     case 'carDailyRate': return (c.carDailyRate !== undefined ? c.carDailyRate : (c.car?.dailyRate || 0)) + ' TND';
     case 'subTotal': return ((c.totalAmount || 0) - (c.contractTaxValue || 0) - (c.tvaValue || 0)) + ' TND';
     case 'contractTax': return (c.contractTaxValue || 0) + ' TND';
@@ -391,12 +418,67 @@ const getPrintFieldValue = (fieldKey: string, customVal = '') => {
     case 'returnMileage': return c.returnMileage ? c.returnMileage + ' KM' : '';
     case 'notes': return c.notes || '';
     case 'currentDate': return new Date().toLocaleDateString('fr-FR');
+    case 'lieuDepart': return c.lieuDepart || 'Djerba';
+    case 'lieuRetour': return c.lieuRetour || 'Djerba';
+    case 'carburantLevel': return (c.carburantLevel ?? 50) + '%';
     default: return '';
   }
 };
 
 const triggerPrint = () => {
-  window.print();
+  const sheet = document.getElementById('printable-contract-sheet');
+  if (!sheet) return;
+
+  const printWindow = window.open('', '_blank', 'width=794,height=1123');
+  if (!printWindow) return;
+
+  const fields = selectedAgenceForPrint.value?.templateFields || [];
+  const bgImage = selectedAgenceForPrint.value?.templateImage
+    ? `url(${getImageUrl(selectedAgenceForPrint.value.templateImage)})`
+    : 'none';
+
+  let fieldsHtml = '';
+  fields.forEach((field: any) => {
+    const val = getPrintFieldValue(field.key, field.customValue);
+    fieldsHtml += `<div style="position:absolute;left:${field.x}%;top:${field.y}%;font-size:${field.fontSize || 13}px;font-weight:${field.fontWeight || 'normal'};color:${field.color || '#000000'};text-align:${field.alignment || 'left'};white-space:nowrap;">${val}</div>`;
+  });
+
+  printWindow.document.write(`<!DOCTYPE html>
+<html>
+<head>
+  <title>Impression Contrat</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    @page { size: A4; margin: 0; }
+    body { width: 210mm; height: 297mm; margin: 0; padding: 0; }
+    #sheet {
+      position: relative;
+      width: 210mm;
+      height: 295mm;
+      margin: 2mm auto 0;
+      background-image: ${bgImage};
+      background-size: contain;
+      background-position: center;
+      background-repeat: no-repeat;
+      background-color: white;
+      overflow: hidden;
+    }
+    @media print {
+      body { width: 210mm; height: 297mm; margin: 0; padding: 0; }
+      #sheet { height: 295mm; margin: 3mm auto 0; padding: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div id="sheet">${fieldsHtml}</div>
+  <script>
+    window.onload = function() {
+      setTimeout(function() { window.print(); window.close(); }, 300);
+    };
+  <\/script>
+</body>
+</html>`);
+  printWindow.document.close();
 };
 
 
@@ -647,30 +729,47 @@ const submitCloture = async () => {
                         <h4 class="text-[9px] font-black opacity-40 uppercase tracking-widest mb-8 border-b border-current/10 pb-4">Bilan Financier</h4>
                         
                         <!-- Details Grid -->
-                        <div class="grid grid-cols-2 md:grid-cols-4 gap-6 lg:gap-8 mb-12">
-                           <div class="space-y-1">
-                              <p class="text-[9px] font-black opacity-40 uppercase tracking-widest">Période</p>
-                              <p :class="['text-xs font-bold leading-relaxed', contrat.status === 'active' ? 'text-primary' : 'text-primary']">
-                                 {{ formatDate(contrat.startDate) }} <br/><span class="opacity-50">⎯</span> {{ formatDate(contrat.endDate) }}
-                              </p>
-                           </div>
-                           <div class="space-y-1">
-                               <p class="text-[9px] font-black opacity-40 uppercase tracking-widest">Tarif / Jour</p>
-                               <p class="text-lg font-black tabular-nums">{{ contrat.carDailyRate !== undefined ? contrat.carDailyRate : (contrat.car?.dailyRate || 0) }} <span class="text-[10px]">TND</span></p>
-                           </div>
-                           <div v-if="contrat.agency" class="space-y-1">
-                               <p class="text-[9px] font-black opacity-40 uppercase tracking-widest">Agence</p>
-                               <p class="text-sm font-black uppercase italic">{{ contrat.agency }}</p>
-                           </div>
-                           <div class="space-y-1">
-                              <p class="text-[9px] font-black opacity-40 uppercase tracking-widest">Distance</p>
-                              <p class="text-xl font-black tabular-nums">{{ (contrat.status === 'terminé' || contrat.status === 'clôturé') ? drivenDistance : '--' }} <span class="text-[9px] opacity-40">KM</span></p>
-                           </div>
-                           <div class="space-y-1">
-                              <p class="text-[9px] font-black opacity-40 uppercase tracking-widest">Caution Restante</p>
-                              <p class="text-lg font-black tabular-nums">{{ (contrat.depositAmount || 0).toFixed(0) }} <span class="text-[10px]">TND</span></p>
-                           </div>
-                        </div>
+                         <div class="grid grid-cols-2 md:grid-cols-4 gap-6 lg:gap-8 mb-12">
+                            <div class="space-y-1">
+                               <p class="text-[9px] font-black opacity-40 uppercase tracking-widest">Période</p>
+                               <p :class="['text-xs font-bold leading-relaxed', contrat.status === 'active' ? 'text-primary' : 'text-primary']">
+                                  {{ formatDate(contrat.startDate) }} <br/><span class="opacity-50">⎯</span> {{ formatDate(contrat.endDate) }}
+                               </p>
+                            </div>
+                            <div class="space-y-1">
+                                <p class="text-[9px] font-black opacity-40 uppercase tracking-widest">Tarif / Jour</p>
+                                <p class="text-lg font-black tabular-nums">{{ contrat.carDailyRate !== undefined ? contrat.carDailyRate : (contrat.car?.dailyRate || 0) }} <span class="text-[10px]">TND</span></p>
+                            </div>
+                            <div v-if="contrat.agency" class="space-y-1">
+                                <p class="text-[9px] font-black opacity-40 uppercase tracking-widest">Agence</p>
+                                <p class="text-sm font-black uppercase italic">{{ contrat.agency }}</p>
+                            </div>
+                            <div class="space-y-1">
+                               <p class="text-[9px] font-black opacity-40 uppercase tracking-widest">Distance</p>
+                               <p class="text-xl font-black tabular-nums">{{ (contrat.status === 'terminé' || contrat.status === 'clôturé') ? drivenDistance : '--' }} <span class="text-[9px] opacity-40">KM</span></p>
+                            </div>
+                            <div class="space-y-1">
+                               <p class="text-[9px] font-black opacity-40 uppercase tracking-widest">Caution Restante</p>
+                               <p class="text-lg font-black tabular-nums">{{ (contrat.depositAmount || 0).toFixed(0) }} <span class="text-[10px]">TND</span></p>
+                            </div>
+                            <div v-if="contrat.lieuDepart" class="space-y-1">
+                               <p class="text-[9px] font-black opacity-40 uppercase tracking-widest">Départ</p>
+                               <p class="text-sm font-black uppercase italic">{{ contrat.lieuDepart }}</p>
+                            </div>
+                            <div v-if="contrat.lieuRetour" class="space-y-1">
+                               <p class="text-[9px] font-black opacity-40 uppercase tracking-widest">Retour</p>
+                               <p class="text-sm font-black uppercase italic">{{ contrat.lieuRetour }}</p>
+                            </div>
+                            <div class="space-y-1">
+                               <p class="text-[9px] font-black opacity-40 uppercase tracking-widest">Carburant</p>
+                               <div class="flex items-center gap-2">
+                                  <div class="w-16 h-2 bg-slate-200 rounded-full overflow-hidden">
+                                     <div class="h-full rounded-full" :class="contrat.carburantLevel > 50 ? 'bg-emerald-500' : contrat.carburantLevel > 20 ? 'bg-amber-500' : 'bg-red-500'" :style="{ width: (contrat.carburantLevel || 0) + '%' }"></div>
+                                  </div>
+                                  <p class="text-sm font-black tabular-nums">{{ contrat.carburantLevel ?? '--' }}%</p>
+                               </div>
+                            </div>
+                         </div>
                      </div>
 
                      <!-- Totals Bottom -->
@@ -886,6 +985,25 @@ const submitCloture = async () => {
                    </div>
                 </div>
 
+                <!-- Lieux & Carburant -->
+                <div class="space-y-4">
+                   <h4 class="text-[10px] font-black uppercase tracking-[0.3em] text-indigo-600 pl-2 border-l-2 border-indigo-600">Lieux & Carburant</h4>
+                   <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      <div class="space-y-2">
+                         <label class="text-[9px] font-black uppercase pl-2 opacity-40">Lieu de Départ</label>
+                         <input v-model="editForm.lieuDepart" class="w-full h-14 px-4 rounded-2xl bg-muted border-2 border-border focus:border-primary outline-none font-bold text-sm" />
+                      </div>
+                      <div class="space-y-2">
+                         <label class="text-[9px] font-black uppercase pl-2 opacity-40">Lieu de Retour</label>
+                         <input v-model="editForm.lieuRetour" class="w-full h-14 px-4 rounded-2xl bg-muted border-2 border-border focus:border-primary outline-none font-bold text-sm" />
+                      </div>
+                      <div class="space-y-2">
+                         <label class="text-[9px] font-black uppercase pl-2 opacity-40">Carburant ({{ editForm.carburantLevel }}%)</label>
+                         <input type="range" v-model.number="editForm.carburantLevel" min="0" max="100" step="5" class="w-full h-2 mt-4 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600" />
+                      </div>
+                   </div>
+                </div>
+
                <!-- Observations & Sécurité -->
                <div class="space-y-4">
                   <h4 class="text-[10px] font-black uppercase tracking-[0.3em] text-indigo-600 pl-2 border-l-2 border-indigo-600">Observations & Mot de passe</h4>
@@ -1083,33 +1201,37 @@ const submitCloture = async () => {
       <Dialog v-model:open="showImageModal">
          <DialogContent 
             class="max-w-[95vw] max-h-[95vh] bg-black/95 border-none shadow-none p-0 overflow-hidden flex items-center justify-center select-none" 
-            @click="showImageModal = false"
-            @wheel.prevent="handleZoom"
-            @mousemove="handleMouseMove"
-            @mouseup="handleMouseUp"
-            @mouseleave="handleMouseUp"
          >
             <div 
-               class="relative will-change-transform flex items-center justify-center cursor-move"
-               :style="{ 
-                  transform: `scale(${zoomLevel}) translate(${position.x / zoomLevel}px, ${position.y / zoomLevel}px)` 
-               }"
-               @mousedown.prevent="handleMouseDown"
-               @click.stop="toggleZoom"
+               class="w-full h-full flex items-center justify-center relative select-none"
+               @click="showImageModal = false"
+               @wheel.prevent="handleZoom"
+               @mousemove="handleMouseMove"
+               @mouseup="handleMouseUp"
+               @mouseleave="handleMouseUp"
             >
-               <img 
-                  :src="selectedImageUrl" 
-                  class="max-w-full max-h-full object-contain pointer-events-none shadow-2xl" 
-               />
-            </div>
+               <div 
+                  class="relative will-change-transform flex items-center justify-center cursor-move"
+                  :style="{ 
+                     transform: `scale(${zoomLevel}) translate(${position.x / zoomLevel}px, ${position.y / zoomLevel}px)` 
+                  }"
+                  @mousedown.prevent="handleMouseDown"
+                  @click.stop="toggleZoom"
+               >
+                  <img 
+                     :src="selectedImageUrl" 
+                     class="max-w-full max-h-full object-contain pointer-events-none shadow-2xl" 
+                  />
+               </div>
 
-            <Button @click="showImageModal = false" variant="ghost" class="absolute top-6 right-6 text-white hover:bg-white/20 h-12 w-12 p-0 rounded-full border border-white/20 z-50">
-               <XCircle class="w-8 h-8" />
-            </Button>
-            
-            <!-- Zoom Indicator -->
-            <div class="absolute bottom-12 left-1/2 -translate-x-1/2 px-6 py-3 bg-white/10 backdrop-blur-md rounded-full border border-white/20 text-white text-[10px] font-black uppercase tracking-[0.3em] pointer-events-none shadow-2xl z-50">
-               Loupe: {{ (zoomLevel * 100).toFixed(0) }}% <span v-if="zoomLevel > 1" class="ml-4 opacity-50 italic">— Cliquer pour réinitialiser</span>
+               <Button @click="showImageModal = false" variant="ghost" class="absolute top-6 right-6 text-white hover:bg-white/20 h-12 w-12 p-0 rounded-full border border-white/20 z-50">
+                  <XCircle class="w-8 h-8" />
+               </Button>
+               
+               <!-- Zoom Indicator -->
+               <div class="absolute bottom-12 left-1/2 -translate-x-1/2 px-6 py-3 bg-white/10 backdrop-blur-md rounded-full border border-white/20 text-white text-[10px] font-black uppercase tracking-[0.3em] pointer-events-none shadow-2xl z-50">
+                  Loupe: {{ (zoomLevel * 100).toFixed(0) }}% <span v-if="zoomLevel > 1" class="ml-4 opacity-50 italic">— Cliquer pour réinitialiser</span>
+               </div>
             </div>
           </DialogContent>
       </Dialog>
@@ -1189,24 +1311,32 @@ const submitCloture = async () => {
   body * {
     visibility: hidden !important;
   }
-  #printable-contract-sheet, #printable-contract-sheet * {
+  #printable-contract-sheet,
+  #printable-contract-sheet * {
     visibility: visible !important;
   }
   #printable-contract-sheet {
-    position: fixed !important;
+    position: absolute !important;
     left: 0 !important;
     top: 0 !important;
     width: 210mm !important;
     height: 297mm !important;
-    background-image: none !important; /* STRICT REQUIREMENT: PRINT ONLY TEXT INFORMATION ON PRE-PRINTED PAPER */
+    background-image: none !important;
     margin: 0 !important;
     padding: 0 !important;
     box-shadow: none !important;
     border: none !important;
-    z-index: 99999 !important;
+    overflow: hidden !important;
+    background-color: white !important;
+    page-break-after: avoid !important;
+    page-break-inside: avoid !important;
   }
   .field-print-item {
     color: #000000 !important;
+  }
+  @page {
+    size: A4 !important;
+    margin: 0 !important;
   }
 }
 </style>

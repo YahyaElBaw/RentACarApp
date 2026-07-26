@@ -1,20 +1,62 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Client } from './schemas/client.schema';
 import { PdfService } from '../shared/pdf.service';
 
 @Injectable()
-export class ClientService {
+export class ClientService implements OnModuleInit {
   constructor(
     @InjectModel(Client.name) private clientModel: Model<Client>,
     private readonly pdfService: PdfService,
   ) {}
 
+  async onModuleInit() {
+    try {
+      await this.clientModel.updateMany(
+        { lieuNaissance: { $exists: false } },
+        { $set: { lieuNaissance: '' } }
+      ).exec();
+      await this.clientModel.updateMany(
+        { lieuPermis: { $exists: false } },
+        { $set: { lieuPermis: '' } }
+      ).exec();
+      await this.clientModel.updateMany(
+        { nationality: { $exists: false } },
+        { $set: { nationality: '' } }
+      ).exec();
+    } catch (err) {
+      console.error('Error auto-migrating client fields on module init:', err);
+    }
+  }
+
+  private sanitizeClientDto(dto: any): any {
+    const sanitized = { ...dto };
+    ['birthday', 'cinDate', 'licenseDate'].forEach((dateKey) => {
+      if (sanitized[dateKey] === '' || sanitized[dateKey] === null) {
+        delete sanitized[dateKey];
+      }
+    });
+    if (sanitized.lieuNaissance !== undefined && sanitized.lieuNaissance !== null) {
+      sanitized.lieuNaissance = String(sanitized.lieuNaissance).trim();
+    }
+    if (sanitized.lieuPermis !== undefined && sanitized.lieuPermis !== null) {
+      sanitized.lieuPermis = String(sanitized.lieuPermis).trim();
+    }
+    if (sanitized.nationality !== undefined && sanitized.nationality !== null) {
+      sanitized.nationality = String(sanitized.nationality).trim();
+    }
+    return sanitized;
+  }
+
   async create(createClientDto: any, userId?: string): Promise<Client> {
     try {
+      const sanitizedDto = this.sanitizeClientDto(createClientDto);
       const createdClient = new this.clientModel({
-        ...createClientDto,
+        lieuNaissance: '',
+        lieuPermis: '',
+        nationality: '',
+        ...sanitizedDto,
         addedBy: userId
       });
       return await createdClient.save();
@@ -65,15 +107,17 @@ export class ClientService {
   }
 
   async update(id: string, updateClientDto: any): Promise<Client> {
-    console.log(`[ClientService] Updating client ${id} with:`, JSON.stringify(updateClientDto, null, 2));
+    const sanitizedDto = this.sanitizeClientDto(updateClientDto);
+    console.log(`[ClientService] Updating client ${id} with:`, JSON.stringify(sanitizedDto, null, 2));
     const updatedClient = await this.clientModel
-      .findByIdAndUpdate(id, updateClientDto, { returnDocument: 'after' })
+      .findByIdAndUpdate(id, { $set: sanitizedDto }, { new: true, runValidators: false })
+      .populate('addedBy', 'firstName lastName')
       .exec();
     if (!updatedClient) {
         console.error(`[ClientService] Client ${id} NOT FOUND for update`);
         throw new NotFoundException(`Client with ID ${id} not found`);
     }
-    console.log(`[ClientService] Client ${id} updated successfully:`, JSON.stringify(updatedClient, null, 2));
+    console.log(`[ClientService] Client ${id} updated successfully`);
     return updatedClient;
   }
   async remove(id: string): Promise<any> {

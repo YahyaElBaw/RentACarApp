@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import { carApi, clientApi, contratApi, getImageUrl, settingApi } from '@/api';
+import { carApi, clientApi, contratApi, getImageUrl, settingApi, agenceApi } from '@/api';
 import { formatDate } from '@/lib/utils';
 import { 
   Car as CarIcon, User as UserIcon, Calendar as CalendarIcon, 
   ArrowRight, ArrowLeft, Check, Search, Eye, 
-  Clock, Hash, FileText, MapPin, ShieldCheck, FileWarning, AlertTriangle, Percent, DollarSign
+  Clock, Hash, FileText, MapPin, ShieldCheck, FileWarning, AlertTriangle, Percent, DollarSign, Building2
 } from 'lucide-vue-next';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -33,16 +33,28 @@ const steps = [
   { label: 'Validation', description: 'Vérifiez les informations', icon: ShieldCheck }
 ];
 const appSettings = ref<any>(null);
+const availableAgencies = ref<any[]>([]);
+
 const fetchAppSettings = async () => {
   try {
-    const data = await settingApi.get();
+    const [data, agenceRes] = await Promise.all([
+      settingApi.get(),
+      agenceApi.getAll()
+    ]);
     appSettings.value = data;
+    availableAgencies.value = agenceRes || [];
+    
+    // Auto-select first agency if available and form.agency is empty
+    if (availableAgencies.value.length > 0 && !form.agency) {
+      form.agency = availableAgencies.value[0].name;
+    }
+
     if (data) {
       form.contractTaxValue = data.contractTaxValue || 0;
       form.tvaValue = data.tvaValue || 0;
     }
   } catch (err) {
-    console.warn('Failed to fetch settings, using defaults');
+    console.warn('Failed to fetch settings/agencies, using defaults');
   }
 };
 
@@ -53,6 +65,12 @@ const manualReference = ref('');
 const availableCars = ref<any[]>([]);
 const selectedCar = ref<any>(null);
 const carSearch = ref('');
+const customDailyRate = ref(0);
+
+const effectiveDailyRate = computed(() => {
+  if (customDailyRate.value > 0) return customDailyRate.value;
+  return selectedCar.value?.dailyRate || 0;
+});
 
 const filteredCars = computed(() => {
   if (!carSearch.value) return availableCars.value;
@@ -121,6 +139,10 @@ const form = reactive({
   bankName: '',
   contractTaxValue: 0,
   tvaValue: 0,
+  agency: '',
+  carburantLevel: 50,
+  lieuDepart: 'Djerba',
+  lieuRetour: 'Djerba',
 });
 
 const showSuccessDialog = ref(false);
@@ -159,7 +181,7 @@ const handleRentDaysInput = () => {
 
 const subTotal = computed(() => {
   if (!selectedCar.value || diffDays.value <= 0) return 0;
-  return diffDays.value * selectedCar.value.dailyRate;
+  return diffDays.value * effectiveDailyRate.value;
 });
 
 const contractTaxAmount = computed(() => {
@@ -281,7 +303,7 @@ const submitContrat = async (force = false) => {
     const payload = {
       reference: manualReference.value || undefined,
       car: selectedCar.value._id,
-      carDailyRate: selectedCar.value.dailyRate || selectedCar.value.dailyPrice || 0,
+      carDailyRate: effectiveDailyRate.value,
       clients: selectedClients.value.map(c => c._id),
       startDate: new Date(`${form.startDate}T${form.startTime}:00`).toISOString(),
       endDate: new Date(`${form.endDate}T${form.endTime}:00`).toISOString(),
@@ -292,6 +314,10 @@ const submitContrat = async (force = false) => {
       bankName: form.bankName,
       contractTaxValue: form.contractTaxValue,
       tvaValue: form.tvaValue,
+      agency: form.agency,
+      carburantLevel: form.carburantLevel,
+      lieuDepart: form.lieuDepart,
+      lieuRetour: form.lieuRetour,
       isPaid: true,
       reservation: route.query.reservationId || undefined,
       force: force
@@ -331,7 +357,7 @@ watch(isRefModalOpen, (isOpen) => {
 </script>
 
 <template>
-  <div @keyup.enter="handleGlobalEnter" class="contract-form-view space-y-8 animate-in fade-in duration-700 p-6 max-w-[1400px] mx-auto text-slate-900">
+  <div @keyup.enter="handleGlobalEnter" class="contract-form-view space-y-8 p-6 max-w-[1400px] mx-auto text-slate-900">
     <!-- Header -->
     <div class="flex flex-col md:flex-row md:items-end justify-between gap-6">
       <div class="space-y-1">
@@ -543,7 +569,7 @@ watch(isRefModalOpen, (isOpen) => {
                   <input type="time" v-model="form.endTime" disabled class="h-14 w-full px-4 bg-slate-100 border border-slate-200 rounded-2xl font-bold text-slate-500 cursor-not-allowed italic" style="flex: 1;" />
                 </div>
               </div>
-              <div class="space-y-3">
+               <div class="space-y-3">
                  <label class="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] ml-2">Montant Caution (Bloquée)</label>
                  <div class="relative">
                     <ShieldCheck class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-emerald-600" />
@@ -551,7 +577,49 @@ watch(isRefModalOpen, (isOpen) => {
                     <span class="absolute right-4 top-1/2 -translate-y-1/2 font-black text-[10px] text-emerald-600/40 uppercase">TND</span>
                  </div>
                </div>
-               <div class="space-y-3 md:col-span-2">
+                <div class="space-y-3">
+                  <label class="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] ml-2">Tarif Journalier (TND)</label>
+                  <div class="relative">
+                     <DollarSign class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-indigo-600" />
+                     <input type="number" v-model.number="customDailyRate" :placeholder="`Défaut: ${selectedCar?.dailyRate || 0}`" class="h-14 w-full pl-12 pr-12 bg-slate-50/50 border border-slate-100 rounded-2xl font-black text-indigo-600 tabular-nums outline-none focus:ring-4 focus:ring-indigo-600/5 transition-all" />
+                     <span class="absolute right-4 top-1/2 -translate-y-1/2 font-black text-[10px] text-indigo-600/40 uppercase">TND</span>
+                  </div>
+                </div>
+                <div v-if="availableAgencies.length > 0" class="space-y-3">
+                  <label class="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] ml-2">Agence</label>
+                  <select v-model="form.agency" class="h-14 w-full px-6 bg-slate-50/50 border border-slate-100 rounded-2xl font-black text-slate-900 outline-none focus:ring-4 focus:ring-indigo-600/5 transition-all appearance-none cursor-pointer">
+                    <option value="" disabled>Choisir une agence...</option>
+                    <option v-for="a in availableAgencies" :key="a._id || a.name" :value="a.name">{{ a.name }}</option>
+                  </select>
+                </div>
+                <div class="space-y-3">
+                  <label class="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] ml-2">Lieu de Départ</label>
+                  <div class="relative">
+                    <MapPin class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-indigo-600" />
+                    <input v-model="form.lieuDepart" class="h-14 w-full pl-12 pr-6 bg-slate-50/50 border border-slate-100 rounded-2xl font-black text-slate-900 outline-none focus:ring-4 focus:ring-indigo-600/5 transition-all" />
+                  </div>
+                </div>
+                <div class="space-y-3">
+                  <label class="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] ml-2">Lieu de Retour</label>
+                  <div class="relative">
+                    <MapPin class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-indigo-600" />
+                    <input v-model="form.lieuRetour" class="h-14 w-full pl-12 pr-6 bg-slate-50/50 border border-slate-100 rounded-2xl font-black text-slate-900 outline-none focus:ring-4 focus:ring-indigo-600/5 transition-all" />
+                  </div>
+                </div>
+                <div class="space-y-3 md:col-span-2">
+                  <label class="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] ml-2">Niveau Carburant ({{ form.carburantLevel }}%)</label>
+                  <div class="relative px-2">
+                    <input type="range" v-model.number="form.carburantLevel" min="0" max="100" step="5" class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600" />
+                    <div class="flex justify-between text-[9px] font-black text-slate-400 mt-1">
+                      <span>Vide</span>
+                      <span>1/4</span>
+                      <span>1/2</span>
+                      <span>3/4</span>
+                      <span>Plein</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="space-y-3 md:col-span-2">
                  <label class="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] ml-2">Méthode de Règlement</label>
                  <div class="grid grid-cols-2 gap-4">
                     <button v-for="m in [['espece','Espèce'],['cheque','Chèque']]" :key="m[0]" @click="form.paymentMethod = m[0]" :class="['h-14 rounded-2xl border-2 font-black uppercase text-[10px] transition-all', form.paymentMethod === m[0] ? 'border-indigo-600 bg-indigo-50 text-indigo-600 shadow-lg shadow-indigo-600/10' : 'border-slate-100 bg-slate-50 text-slate-400']">{{ m[1] }}</button>
@@ -613,15 +681,18 @@ watch(isRefModalOpen, (isOpen) => {
 
              <div class="space-y-6 bg-white/70 backdrop-blur-3xl p-10 rounded-[2.5rem] border border-slate-200/50 shadow-2xl">
                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                 <!-- Car details -->
-                 <div class="space-y-2">
-                   <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Véhicule</span>
-                   <div v-if="selectedCar" class="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                     <p class="font-black text-slate-900 uppercase italic text-sm">{{ selectedCar.brand }} {{ selectedCar.model }}</p>
-                     <p class="text-xs font-bold text-slate-500 mt-1">Matricule: <span class="font-mono text-indigo-600 font-bold">{{ selectedCar.matricule }}</span></p>
-                     <p class="text-xs font-bold text-slate-500">Prix Journalier: <span class="font-black text-slate-800">{{ selectedCar.dailyRate || selectedCar.dailyPrice }} TND/J</span></p>
+                  <!-- Car details -->
+                   <div class="space-y-2">
+                     <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Véhicule</span>
+                     <div v-if="selectedCar" class="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                       <p class="font-black text-slate-900 uppercase italic text-sm">{{ selectedCar.brand }} {{ selectedCar.model }}</p>
+                       <p class="text-xs font-bold text-slate-500 mt-1">Matricule: <span class="font-mono text-indigo-600 font-bold">{{ selectedCar.matricule }}</span></p>
+                       <p class="text-xs font-bold text-slate-500">Prix Journalier: <span class="font-black text-slate-800">{{ effectiveDailyRate }} TND/J</span>
+                         <span v-if="customDailyRate > 0 && customDailyRate !== selectedCar.dailyRate" class="text-[9px] text-indigo-500 font-black ml-1">(personnalisé)</span>
+                       </p>
+                       <p v-if="form.agency" class="text-xs font-bold text-slate-500">Agence: <span class="font-black text-slate-800">{{ form.agency }}</span></p>
+                     </div>
                    </div>
-                 </div>
 
                  <!-- Client details -->
                  <div class="space-y-2">
@@ -646,10 +717,22 @@ watch(isRefModalOpen, (isOpen) => {
                        <span class="text-[8px] font-black text-slate-400 uppercase block">Date Retour (Est.)</span>
                        <span class="text-xs font-black text-slate-900">{{ formatDate(new Date(`${form.endDate}T${form.endTime}:00`)) }}</span>
                      </div>
-                     <div>
-                       <span class="text-[8px] font-black text-slate-400 uppercase block">Durée Totale</span>
-                       <span class="text-xs font-black text-indigo-600 uppercase">{{ diffDays }} Jours</span>
-                     </div>
+                       <div>
+                         <span class="text-[8px] font-black text-slate-400 uppercase block">Durée Totale</span>
+                         <span class="text-xs font-black text-indigo-600 uppercase">{{ diffDays }} Jours</span>
+                       </div>
+                       <div>
+                         <span class="text-[8px] font-black text-slate-400 uppercase block">Départ</span>
+                         <span class="text-xs font-black text-slate-900">{{ form.lieuDepart }}</span>
+                       </div>
+                       <div>
+                         <span class="text-[8px] font-black text-slate-400 uppercase block">Retour</span>
+                         <span class="text-xs font-black text-slate-900">{{ form.lieuRetour }}</span>
+                       </div>
+                       <div>
+                         <span class="text-[8px] font-black text-slate-400 uppercase block">Carburant</span>
+                         <span class="text-xs font-black text-slate-900">{{ form.carburantLevel }}%</span>
+                       </div>
                    </div>
                  </div>
 
@@ -657,10 +740,10 @@ watch(isRefModalOpen, (isOpen) => {
                  <div class="space-y-2 md:col-span-2">
                    <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest block font-bold">Bilan Financier</span>
                    <div class="p-5 bg-slate-900 text-white rounded-2xl space-y-3">
-                     <div class="flex justify-between text-xs">
-                       <span class="opacity-60 uppercase">Base Location ({{ diffDays }} jours × {{ selectedCar?.dailyRate || selectedCar?.dailyPrice }} TND)</span>
-                       <span class="font-black">{{ subTotal }} TND</span>
-                     </div>
+                      <div class="flex justify-between text-xs">
+                        <span class="opacity-60 uppercase">Base Location ({{ diffDays }} jours × {{ effectiveDailyRate }} TND)</span>
+                        <span class="font-black">{{ subTotal }} TND</span>
+                      </div>
                      <div v-if="appSettings?.contractTaxEnabled" class="flex justify-between text-xs text-rose-300">
                        <span class="opacity-60 uppercase">Frais de contrat</span>
                        <span class="font-black">+ {{ contractTaxAmount }} TND</span>
@@ -771,10 +854,10 @@ watch(isRefModalOpen, (isOpen) => {
                   </div>
                   
                   <div v-if="appSettings && (appSettings.tvaEnabled || appSettings.contractTaxEnabled)" class="space-y-2 border-y border-slate-50 py-4 animate-in fade-in duration-500">
-                     <div class="flex justify-between text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                        <span>Base HT ({{ diffDays }} jours)</span>
+                  <div class="flex justify-between text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        <span>Base HT ({{ diffDays }} jours × {{ effectiveDailyRate }} TND)</span>
                         <span>{{ subTotal }} TND</span>
-                     </div>
+                      </div>
                      <div v-if="appSettings.contractTaxEnabled" class="flex justify-between text-[10px] font-bold uppercase tracking-wider text-rose-400">
                         <span>Frais sur contrat (Charge Agence)</span>
                         <span>{{ contractTaxAmount }} TND</span>
@@ -820,6 +903,15 @@ watch(isRefModalOpen, (isOpen) => {
         </CardHeader>
         <div class="px-10 py-10 relative z-10">
             <div class="space-y-6">
+                <div v-if="availableAgencies.length > 0" class="space-y-2">
+                    <label class="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2 flex items-center gap-2">
+                        <Building2 class="w-3.5 h-3.5 text-indigo-600" /> Agence Émettrice
+                    </label>
+                    <select v-model="form.agency" class="h-14 w-full px-6 bg-slate-50 border-2 border-slate-100 focus:border-indigo-600 rounded-2xl font-black text-slate-900 text-sm outline-none transition-all cursor-pointer">
+                        <option value="" disabled>Choisir une agence...</option>
+                        <option v-for="a in availableAgencies" :key="a._id || a.name" :value="a.name">{{ a.name }}</option>
+                    </select>
+                </div>
                 <div class="relative group">
                     <input 
                         v-model="manualReference" 

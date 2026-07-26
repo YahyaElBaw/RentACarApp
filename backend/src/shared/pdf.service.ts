@@ -113,7 +113,9 @@ export class PdfService {
                 { text: 'LOCATAIRES', style: 'sectionLabel' },
                 ...(contrat.clients || []).map((client: any) => [
                   { text: `${client.firstName} ${client.lastName}`, style: 'valueBold' },
-                  { text: `CIN: ${client.cin || 'N/A'} | Tél: ${client.phone || 'N/A'}`, style: 'valueSmall', margin: [0, 0, 0, 4] },
+                  { text: `CIN: ${client.cin || 'N/A'} | Tél: ${(client.phoneCountryCode || '+216') + ' ' + (client.phone || 'N/A')}`, style: 'valueSmall', margin: [0, 0, 0, 2] },
+                { text: `Né le: ${this.formatSimpleDate(client.birthday)} à ${client.lieuNaissance || 'N/A'} | Nationalité: ${client.nationality || 'N/A'}`, style: 'valueSmall', margin: [0, 0, 0, 2] },
+                { text: `Permis: ${client.drivingLicense || 'N/A'} (Lieu: ${client.lieuPermis || 'N/A'})`, style: 'valueSmall', margin: [0, 0, 0, 4] },
                 ]).flat()
               ]
             },
@@ -153,9 +155,27 @@ export class PdfService {
           },
           layout: 'lightHorizontalLines'
         },
-        contrat.agency ? [
-          { text: `Agence: ${contrat.agency}`, style: 'tdValue', margin: [0, 8, 0, 0] }
-        ] : [],
+        {
+          table: {
+            widths: ['*', '*', '*', '*'],
+            body: [
+              [
+                { text: 'Lieu Départ', style: 'tdLabel' },
+                { text: 'Lieu Retour', style: 'tdLabel' },
+                { text: 'Carburant', style: 'tdLabel' },
+                { text: 'Agence', style: 'tdLabel' }
+              ],
+              [
+                { text: contrat.lieuDepart || 'Djerba', style: 'tdValue' },
+                { text: contrat.lieuRetour || 'Djerba', style: 'tdValue' },
+                { text: `${contrat.carburantLevel ?? 50}%`, style: 'tdValue' },
+                { text: contrat.agency || 'N/A', style: 'tdValue' }
+              ]
+            ]
+          },
+          layout: 'lightHorizontalLines',
+          margin: [0, 8, 0, 0]
+        },
 
         // Section 3: BILAN DE RETOUR (Only if closed)
         isClosed ? [

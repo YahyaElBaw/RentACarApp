@@ -15,6 +15,9 @@ export class Client {
   @Prop()
   birthday: Date;
 
+  @Prop({ default: '' })
+  lieuNaissance: string;
+
   @Prop({ default: 'cin', enum: ['cin', 'passport', 'carte_sejour'] })
   idCardType: string;
 
@@ -29,6 +32,15 @@ export class Client {
 
   @Prop()
   licenseDate: Date;
+
+  @Prop({ default: '' })
+  lieuPermis: string;
+
+  @Prop({ default: '' })
+  nationality: string;
+
+  @Prop({ default: '+216' })
+  phoneCountryCode: string;
 
   @Prop({ required: true })
   phone: string;

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ConflictException, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Contrat, ContratDocument } from './schemas/contrat.schema';
@@ -12,7 +12,7 @@ import { BookingConflictService } from '../shared/booking-conflict.service';
 import { SettingService } from '../setting/setting.service';
 
 @Injectable()
-export class ContratService {
+export class ContratService implements OnModuleInit {
   constructor(
     @InjectModel(Contrat.name) private contratModel: Model<ContratDocument>,
     @InjectModel(Car.name) private carModel: Model<CarDocument>,
@@ -23,6 +23,25 @@ export class ContratService {
     private bookingConflictService: BookingConflictService,
     private settingService: SettingService,
   ) { }
+
+  async onModuleInit() {
+    try {
+      await this.contratModel.updateMany(
+        { carburantLevel: { $exists: false } },
+        { $set: { carburantLevel: 50 } }
+      ).exec();
+      await this.contratModel.updateMany(
+        { lieuDepart: { $exists: false } },
+        { $set: { lieuDepart: 'Djerba' } }
+      ).exec();
+      await this.contratModel.updateMany(
+        { lieuRetour: { $exists: false } },
+        { $set: { lieuRetour: 'Djerba' } }
+      ).exec();
+    } catch (err) {
+      console.error('Error auto-migrating contrat fields on module init:', err);
+    }
+  }
 
   private generateReference(): string {
     const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
@@ -280,12 +299,12 @@ export class ContratService {
   }
 
   async update(id: string, updateContratDto: any): Promise<ContratDocument> {
-    const contrat = await this.findOne(id);
+    const contrat = await this.contratModel.findById(id).exec();
     if (!contrat) throw new NotFoundException(`Contract with ID ${id} not found`);
 
     const startDate = updateContratDto.startDate ? new Date(updateContratDto.startDate) : contrat.startDate;
     const endDate = updateContratDto.endDate ? new Date(updateContratDto.endDate) : contrat.endDate;
-    const carId = updateContratDto.car || (contrat.car ? (contrat.car as any)._id.toString() : null);
+    const carId = updateContratDto.car || (contrat.car ? contrat.car.toString() : null);
 
     if (!carId) throw new BadRequestException('Contract has no car assigned.');
 
@@ -296,9 +315,12 @@ export class ContratService {
       throw new BadRequestException('A contract can have a maximum of 2 clients.');
     }
 
-    // Check conflict if car or dates changed
-    const datesChanged = updateContratDto.startDate || updateContratDto.endDate;
-    const carChanged = updateContratDto.car && updateContratDto.car.toString() !== (contrat.car ? (contrat.car as any)._id.toString() : '');
+    // Check conflict if car or dates changed (60s tolerance to handle timezone/rounding)
+    const TOLERANCE_MS = 60 * 1000;
+    const datesChanged = 
+      (updateContratDto.startDate && Math.abs(new Date(updateContratDto.startDate).getTime() - new Date(contrat.startDate).getTime()) > TOLERANCE_MS) ||
+      (updateContratDto.endDate && Math.abs(new Date(updateContratDto.endDate).getTime() - new Date(contrat.endDate).getTime()) > TOLERANCE_MS);
+    const carChanged = updateContratDto.car && updateContratDto.car.toString() !== contrat.car.toString();
 
     if (datesChanged || carChanged) {
       const conflicts = await this.bookingConflictService.findConflicts(
@@ -335,7 +357,6 @@ export class ContratService {
     const dailyRate = updateContratDto.carDailyRate !== undefined
       ? updateContratDto.carDailyRate
       : (contrat.carDailyRate !== undefined ? contrat.carDailyRate : (car.dailyRate || 0));
-    updateContratDto.carDailyRate = dailyRate;
 
     const baseAmount = diffDays * dailyRate;
 
@@ -352,21 +373,18 @@ export class ContratService {
       tvaAmount = baseAmount * (currentTvaValue / 100);
     }
 
-    if (updateContratDto.totalAmount === undefined) {
-      updateContratDto.totalAmount = Math.round((baseAmount + tvaAmount) * 100) / 100;
-    }
-
-    updateContratDto.contractTaxValue = currentTaxValue;
-    updateContratDto.tvaValue = currentTvaValue;
+    const totalAmount = updateContratDto.totalAmount !== undefined
+      ? updateContratDto.totalAmount
+      : Math.round((baseAmount + tvaAmount) * 100) / 100;
 
     // Handle car availability if car changed or status changed
-    const oldCarId = contrat.car ? (contrat.car as any)._id.toString() : null;
+    const oldCarId = contrat.car ? contrat.car.toString() : null;
     const oldStatus = contrat.status;
     const newStatus = updateContratDto.status || contrat.status;
 
     // Handle client count adjustments if clients changed
     if (updateContratDto.clients) {
-      const oldClients = contrat.clients ? contrat.clients.map(c => (c as any)._id.toString()) : [];
+      const oldClients = contrat.clients ? contrat.clients.map(c => c.toString()) : [];
       const newClients = updateContratDto.clients.map((c: any) => c.toString());
 
       const addedClients = newClients.filter((c: any) => !oldClients.includes(c));
@@ -386,12 +404,34 @@ export class ContratService {
       }
     }
 
-    const updatedContrat = await this.contratModel
-      .findByIdAndUpdate(id, updateContratDto, { new: true })
-      .populate('car')
-      .populate({ path: 'clients', model: 'Client' })
-      .populate('createdBy', 'firstName lastName')
-      .exec();
+    // Apply all updates directly to the document
+    contrat.car = carId;
+    contrat.startDate = startDate;
+    contrat.endDate = endDate;
+    contrat.carDailyRate = dailyRate;
+    contrat.totalAmount = totalAmount;
+    contrat.contractTaxValue = currentTaxValue;
+    contrat.tvaValue = currentTvaValue;
+
+    if (updateContratDto.clients !== undefined) contrat.clients = updateContratDto.clients;
+    if (updateContratDto.depositAmount !== undefined) contrat.depositAmount = Number(updateContratDto.depositAmount);
+    if (updateContratDto.status !== undefined) contrat.status = updateContratDto.status;
+    if (updateContratDto.paymentMethod !== undefined) contrat.paymentMethod = updateContratDto.paymentMethod;
+    if (updateContratDto.chequeNumber !== undefined) contrat.chequeNumber = updateContratDto.chequeNumber;
+    if (updateContratDto.bankName !== undefined) contrat.bankName = updateContratDto.bankName;
+    if (updateContratDto.notes !== undefined) contrat.notes = updateContratDto.notes;
+    if (updateContratDto.agency !== undefined) contrat.agency = updateContratDto.agency;
+    if (updateContratDto.carburantLevel !== undefined && updateContratDto.carburantLevel !== null) {
+      contrat.carburantLevel = Number(updateContratDto.carburantLevel);
+    }
+    if (updateContratDto.lieuDepart !== undefined) {
+      contrat.lieuDepart = String(updateContratDto.lieuDepart).trim();
+    }
+    if (updateContratDto.lieuRetour !== undefined) {
+      contrat.lieuRetour = String(updateContratDto.lieuRetour).trim();
+    }
+
+    await contrat.save();
 
     // Auto-update car's dailyRate if the contract rate changed
     if (dailyRate > 0 && dailyRate !== car.dailyRate) {
@@ -408,7 +448,7 @@ export class ContratService {
       }
     }
 
-    return updatedContrat as any;
+    return this.findOne(id);
   }
 
   async remove(id: string): Promise<any> {

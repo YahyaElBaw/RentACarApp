@@ -441,10 +441,8 @@ watch(() => vidangeForm.mileageAtChange, (newVal) => {
         <!-- Route Content -->
         <div class="flex-1 p-0 overflow-x-hidden">
            <router-view v-slot="{ Component }">
-              <transition name="fade">
-                 <component :is="Component" />
-              </transition>
-           </router-view>
+               <component :is="Component" />
+            </router-view>
         </div>
       </main>
     </div>

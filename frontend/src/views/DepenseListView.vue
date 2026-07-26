@@ -1,5 +1,5 @@
 <template>
-  <div class="depense-list-container space-y-12 animate-in fade-in slide-in-from-bottom-2 duration-1000 p-8 max-w-7xl mx-auto">
+  <div class="depense-list-container space-y-12 p-8 max-w-7xl mx-auto">
     <!-- Header & Integrated Action Bar -->
     <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-8">
       <div class="space-y-2">
@@ -65,7 +65,7 @@
                       <span class="font-black text-slate-800 uppercase italic text-sm">{{ depense.car.brand }} {{ depense.car.model }}</span>
                     </div>
                     <span class="text-[10px] font-bold text-slate-400 tabular-nums pl-5" v-if="depense.car">{{ depense.car.matricule }}</span>
-                    <span v-else class="text-[10px] font-bold text-slate-300 italic uppercase">Frais Généraux</span>
+                    <span v-else class="text-[10px] font-bold text-slate-300 italic uppercase">Depense Generale</span>
                   </div>
                 </TableCell>
 
@@ -142,14 +142,15 @@
                 <option value="mechanique">Mechanique</option>
                 <option value="vidange">Vidange</option>
                 <option value="lavage">Lavage</option>
+                <option value="depense_generale">Depense Generale</option>
                 <option value="autre">Autre</option>
               </select>
             </div>
           </div>
           <div class="space-y-2">
-            <Label class="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Véhicule (Optionnel)</Label>
+            <Label class="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Vehicule (Optionnel)</Label>
             <select v-model="depenseForm.car" class="w-full h-12 bg-slate-50 border border-slate-100 rounded-xl px-4 font-black text-slate-700 outline-none">
-              <option value="">Frais Généraux (Aucun véhicule)</option>
+              <option value="">Depense Generale (Aucun vehicule)</option>
               <option v-for="car in cars" :key="car._id" :value="car._id">{{ car.brand }} {{ car.model }} ({{ car.matricule }})</option>
             </select>
           </div>

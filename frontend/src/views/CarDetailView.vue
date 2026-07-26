@@ -1,5 +1,5 @@
 <template>
-  <div class="car-detail-container space-y-12 animate-in fade-in duration-1000 p-8 max-w-6xl mx-auto" v-if="car">
+  <div class="car-detail-container space-y-12 p-8 max-w-6xl mx-auto" v-if="car">
     <!-- Header with Breadcrumbs Style -->
     <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
       <div class="flex items-center gap-4">

@@ -75,6 +75,15 @@ export class Contrat {
 
   @Prop({ default: '' })
   agency: string;
+
+  @Prop({ default: 50 })
+  carburantLevel: number;
+
+  @Prop({ default: 'Djerba' })
+  lieuDepart: string;
+
+  @Prop({ default: 'Djerba' })
+  lieuRetour: string;
 }
 
 export type ContratDocument = Contrat & Document;

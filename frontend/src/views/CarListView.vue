@@ -6,7 +6,7 @@ import { formatDate } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth'
 import { 
   Plus, Search, Pencil, Trash, 
-  Car as CarIcon, Eye, EyeOff
+  Car as CarIcon, Eye, EyeOff, ChevronLeft, ChevronRight
 } from 'lucide-vue-next'
 import { 
   Table, TableHeader, TableBody, TableHead, TableRow, TableCell 
@@ -33,9 +33,18 @@ const showSecurityModal = ref(false)
 const carToDelete = ref<any>(null)
 const submitting = ref(false)
 
+const currentPage = ref(1)
+const pageSize = 10
+
 const sortedCars = computed(() => {
   return [...cars.value];
 });
+
+const totalCarPages = computed(() => Math.ceil(sortedCars.value.length / pageSize))
+const paginatedCars = computed(() => {
+  const start = (currentPage.value - 1) * pageSize
+  return sortedCars.value.slice(start, start + pageSize)
+})
 
 const filters = reactive({
   brand: '',
@@ -76,8 +85,8 @@ onMounted(() => {
     openAddModal()
   }
 })
-watch(() => filters.brand, loadCars)
-watch(() => filters.availableOnly, loadCars)
+watch(() => filters.brand, () => { currentPage.value = 1; loadCars() })
+watch(() => filters.availableOnly, () => { currentPage.value = 1; loadCars() })
 
 const saveCar = async () => {
   if (editingCar.value && !adminPassword.value) {
@@ -161,7 +170,7 @@ const getStatusBadge = (car: any) => {
 </script>
 
 <template>
-  <div class="car-list-container space-y-12 animate-in fade-in slide-in-from-bottom-2 duration-1000 p-8 max-w-7xl mx-auto">
+  <div class="car-list-container space-y-12 p-8 max-w-7xl mx-auto">
     <!-- Header & Integrated Action Bar -->
     <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-8">
       <div class="space-y-2">
@@ -205,7 +214,7 @@ const getStatusBadge = (car: any) => {
             </TableHeader>
             <TableBody>
               <TableRow 
-                v-for="car in sortedCars" 
+                v-for="car in paginatedCars" 
                 :key="car._id"
                 @click="router.push(`/cars/${car._id}`)"
                 :class="[
@@ -280,6 +289,19 @@ const getStatusBadge = (car: any) => {
               </TableRow>
             </TableBody>
           </Table>
+        </div>
+        <div v-if="sortedCars.length > pageSize" class="flex items-center justify-between px-10 py-5 border-t border-slate-100 bg-slate-50/50">
+          <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+            Page {{ currentPage }} / {{ totalCarPages }} — {{ sortedCars.length }} résultats
+          </p>
+          <div class="flex items-center gap-2">
+            <Button variant="outline" size="sm" :disabled="currentPage <= 1" @click="currentPage--" class="h-9 px-4 rounded-xl font-black text-[10px] uppercase tracking-widest border-slate-200 disabled:opacity-30">
+              <ChevronLeft class="w-4 h-4 mr-1" /> Précédent
+            </Button>
+            <Button variant="outline" size="sm" :disabled="currentPage >= totalCarPages" @click="currentPage++" class="h-9 px-4 rounded-xl font-black text-[10px] uppercase tracking-widest border-slate-200 disabled:opacity-30">
+              Suivant <ChevronRight class="w-4 h-4 ml-1" />
+            </Button>
+          </div>
         </div>
       </CardContent>
     </Card>

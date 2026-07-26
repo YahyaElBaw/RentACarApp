@@ -1,5 +1,5 @@
 <template>
-  <div v-if="client" class="client-detail-container space-y-12 animate-in fade-in duration-1000 p-8 max-w-7xl mx-auto">
+  <div v-if="client" class="client-detail-container space-y-12 p-8 max-w-7xl mx-auto">
     <!-- Header with Breadcrumbs Style -->
     <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
       <div class="flex items-center gap-4">
@@ -76,7 +76,7 @@
                            <button @click="cancelEditing" class="text-rose-500"><X class="w-4 h-4" /></button>
                         </div>
                         <div v-else class="flex items-center justify-between">
-                           <span class="font-black text-slate-900 tabular-nums"> +216 {{ client.phone }}</span>
+                           <span class="font-black text-slate-900 tabular-nums"> {{ client.phoneCountryCode || '+216' }} {{ client.phone }}</span>
                            <button v-if="authStore.isAdmin" @click="startEditing('phone')" class="opacity-0 group-hover:opacity-100 p-1 hover:bg-slate-100 rounded transition-all">
                               <Pencil class="w-3.5 h-3.5 text-slate-400" />
                            </button>
@@ -169,7 +169,23 @@
                    <div v-else class="flex items-center gap-2">
                       <span class="font-black text-slate-900 tabular-nums text-sm uppercase">{{ client.drivingLicense || 'N/A' }}</span>
                       <button v-if="authStore.isAdmin" @click="startEditing('drivingLicense')" class="opacity-0 group-hover:opacity-100 p-1 hover:bg-slate-100 rounded transition-all">
-                        <Pencil class="w-3 h-3 text-slate-400" />
+                         <Pencil class="w-3 h-3 text-slate-400" />
+                      </button>
+                   </div>
+                </div>
+                <div class="flex justify-between items-center py-2 group border-b border-slate-50/50">
+                   <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                      <MapPin class="w-3 h-3" /> Lieu de Permis
+                   </span>
+                   <div v-if="editingField === 'lieuPermis'" class="flex items-center gap-2">
+                      <Input v-model="tempValue" class="h-8 text-xs font-black" @keyup.enter="triggerSave('lieuPermis')" />
+                      <button @click="triggerSave('lieuPermis')" class="text-emerald-500"><Check class="w-4 h-4" /></button>
+                      <button @click="cancelEditing" class="text-rose-500"><X class="w-4 h-4" /></button>
+                   </div>
+                   <div v-else class="flex items-center gap-2">
+                      <span class="font-black text-slate-700 text-sm">{{ client.lieuPermis || 'N/A' }}</span>
+                      <button v-if="authStore.isAdmin" @click="startEditing('lieuPermis')" class="opacity-0 group-hover:opacity-100 p-1 hover:bg-slate-100 rounded transition-all">
+                         <Pencil class="w-3 h-3 text-slate-400" />
                       </button>
                    </div>
                 </div>
@@ -199,7 +215,39 @@
                    <div v-else class="flex items-center gap-2">
                       <span class="font-black text-slate-700 text-sm tabular-nums">{{ formatDate(client.birthday) }}</span>
                       <button v-if="authStore.isAdmin" @click="startEditing('birthday')" class="opacity-0 group-hover:opacity-100 p-1 hover:bg-slate-100 rounded transition-all">
-                        <Pencil class="w-3 h-3 text-slate-400" />
+                         <Pencil class="w-3 h-3 text-slate-400" />
+                      </button>
+                   </div>
+                </div>
+                <div class="flex justify-between items-center py-2 group">
+                   <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                      <MapPin class="w-3 h-3" /> Lieu de Naissance
+                   </span>
+                   <div v-if="editingField === 'lieuNaissance'" class="flex items-center gap-2">
+                      <Input v-model="tempValue" class="h-8 text-xs font-black" @keyup.enter="triggerSave('lieuNaissance')" />
+                      <button @click="triggerSave('lieuNaissance')" class="text-emerald-500"><Check class="w-4 h-4" /></button>
+                      <button @click="cancelEditing" class="text-rose-500"><X class="w-4 h-4" /></button>
+                   </div>
+                   <div v-else class="flex items-center gap-2">
+                      <span class="font-black text-slate-700 text-sm">{{ client.lieuNaissance || 'N/A' }}</span>
+                      <button v-if="authStore.isAdmin" @click="startEditing('lieuNaissance')" class="opacity-0 group-hover:opacity-100 p-1 hover:bg-slate-100 rounded transition-all">
+                         <Pencil class="w-3 h-3 text-slate-400" />
+                      </button>
+                   </div>
+                </div>
+                <div class="flex justify-between items-center py-2 group">
+                   <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                      <Globe class="w-3 h-3" /> Nationalité
+                   </span>
+                   <div v-if="editingField === 'nationality'" class="flex items-center gap-2">
+                      <Input v-model="tempValue" class="h-8 text-xs font-black" @keyup.enter="triggerSave('nationality')" />
+                      <button @click="triggerSave('nationality')" class="text-emerald-500"><Check class="w-4 h-4" /></button>
+                      <button @click="cancelEditing" class="text-rose-500"><X class="w-4 h-4" /></button>
+                   </div>
+                   <div v-else class="flex items-center gap-2">
+                      <span class="font-black text-slate-700 text-sm">{{ client.nationality || 'N/A' }}</span>
+                      <button v-if="authStore.isAdmin" @click="startEditing('nationality')" class="opacity-0 group-hover:opacity-100 p-1 hover:bg-slate-100 rounded transition-all">
+                         <Pencil class="w-3 h-3 text-slate-400" />
                       </button>
                    </div>
                 </div>
@@ -424,6 +472,18 @@
               <label class="text-[9px] sm:text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Date d'exportation Permis</label>
               <Input type="date" v-model="finishForm.licenseDate" class="h-10 sm:h-12 rounded-xl text-sm" />
             </div>
+            <div v-if="!client.lieuNaissance" class="space-y-1.5 sm:space-y-2">
+              <label class="text-[9px] sm:text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Lieu de Naissance</label>
+              <Input v-model="finishForm.lieuNaissance" placeholder="Ex: Djerba" class="h-10 sm:h-12 rounded-xl text-sm" />
+            </div>
+            <div v-if="!client.lieuPermis" class="space-y-1.5 sm:space-y-2">
+              <label class="text-[9px] sm:text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Lieu de Permis</label>
+              <Input v-model="finishForm.lieuPermis" placeholder="Ex: Djerba" class="h-10 sm:h-12 rounded-xl text-sm" />
+            </div>
+            <div v-if="!client.nationality" class="space-y-1.5 sm:space-y-2">
+              <label class="text-[9px] sm:text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Nationalité</label>
+              <Input v-model="finishForm.nationality" placeholder="Ex: Tunisienne" class="h-10 sm:h-12 rounded-xl text-sm" />
+            </div>
 
             <!-- Identity Documents Upload (CIN) -->
             <div v-if="!client.cinFront" class="space-y-2 sm:space-y-3 pt-3 sm:pt-4 border-t border-slate-50 col-span-full sm:col-span-1">
@@ -525,7 +585,23 @@
             </div>
             <div class="space-y-1.5 sm:space-y-2">
               <label class="text-[9px] sm:text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Téléphone</label>
-              <Input v-model="editForm.phone" class="h-10 sm:h-12 rounded-xl text-sm" />
+              <div class="flex gap-2">
+                <select v-model="editForm.phoneCountryCode" class="h-10 sm:h-12 w-24 shrink-0 rounded-xl border border-slate-200 px-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 bg-slate-50/50">
+                  <option value="+216">🇹🇳 +216</option>
+                  <option value="+33">🇫🇷 +33</option>
+                  <option value="+39">🇮🇹 +39</option>
+                  <option value="+49">🇩🇪 +49</option>
+                  <option value="+34">🇪🇸 +34</option>
+                  <option value="+1">🇺🇸 +1</option>
+                  <option value="+44">🇬🇧 +44</option>
+                  <option value="+212">🇲🇦 +212</option>
+                  <option value="+213">🇩🇿 +213</option>
+                  <option value="+966">🇸🇦 +966</option>
+                  <option value="+971">🇦🇪 +971</option>
+                  <option value="+218">🇱🇾 +218</option>
+                </select>
+                <Input v-model="editForm.phone" class="h-10 sm:h-12 rounded-xl text-sm flex-1" />
+              </div>
             </div>
             <div class="space-y-1.5 sm:space-y-2">
               <label class="text-[9px] sm:text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Email</label>
@@ -534,6 +610,14 @@
             <div class="space-y-1.5 sm:space-y-2 col-span-full">
               <label class="text-[9px] sm:text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Adresse Domicile</label>
               <Input v-model="editForm.address" placeholder="Ex: 12 Rue des Oliviers, Tunis" class="h-10 sm:h-12 rounded-xl text-sm" />
+            </div>
+            <div class="space-y-1.5 sm:space-y-2">
+              <label class="text-[9px] sm:text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Lieu de Naissance</label>
+              <Input v-model="editForm.lieuNaissance" placeholder="Ex: Djerba" class="h-10 sm:h-12 rounded-xl text-sm" />
+            </div>
+            <div class="space-y-1.5 sm:space-y-2">
+              <label class="text-[9px] sm:text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Nationalité</label>
+              <Input v-model="editForm.nationality" placeholder="Ex: Tunisienne" class="h-10 sm:h-12 rounded-xl text-sm" />
             </div>
             <div class="space-y-1.5 sm:space-y-2 col-span-full">
                <label class="text-[9px] sm:text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Type de Pièce d'Identité</label>
@@ -552,6 +636,10 @@
             <div class="space-y-1.5 sm:space-y-2">
               <label class="text-[9px] sm:text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Date d'exportation Permis</label>
               <Input type="date" v-model="editForm.licenseDate" class="h-10 sm:h-12 rounded-xl text-sm" />
+            </div>
+            <div class="space-y-1.5 sm:space-y-2">
+              <label class="text-[9px] sm:text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Lieu de Permis</label>
+              <Input v-model="editForm.lieuPermis" placeholder="Ex: Djerba" class="h-10 sm:h-12 rounded-xl text-sm" />
             </div>
             <div class="space-y-1.5 sm:space-y-2 col-span-full">
                <label class="text-[9px] sm:text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Statut Client</label>
@@ -680,7 +768,7 @@ import { useAuthStore } from '@/stores/auth'
 import { formatDate } from '@/lib/utils'
 import { useToast } from 'primevue/usetoast'
 import { 
-ChevronLeft, Phone, Mail, MapPin, 
+ChevronLeft, Phone, Mail, MapPin, Globe,
 CreditCard, ShieldCheck, Calendar, 
 FileWarning, ExternalLink, Download, Pencil, RotateCw, Upload, Trash2,
 Car as CarIcon, History as HistoryIcon, X, AlertCircle, Check, Loader2, Eye, EyeOff
@@ -724,20 +812,30 @@ const finishForm = reactive({
   cinFront: '',
   cinBack: '',
   licenseFront: '',
-  licenseBack: ''
+  licenseBack: '',
+  lieuNaissance: '',
+  lieuPermis: '',
+  nationality: ''
 })
 
 const editForm = reactive({
   firstName: '',
   lastName: '',
+  cin: '',
+  drivingLicense: '',
   email: '',
   phone: '',
+  phoneCountryCode: '+216',
   address: '',
   description: '',
+  birthday: '',
   cinDate: '',
   licenseDate: '',
   status: '',
-  idCardType: ''
+  idCardType: '',
+  lieuNaissance: '',
+  lieuPermis: '',
+  nationality: ''
 })
 
 // Inline Editing State
@@ -787,18 +885,28 @@ const fetchClientData = async () => {
     finishForm.cinBack = clientData.cinBack || ''
     finishForm.licenseFront = clientData.licenseFront || ''
     finishForm.licenseBack = clientData.licenseBack || ''
+    finishForm.lieuNaissance = clientData.lieuNaissance || ''
+    finishForm.lieuPermis = clientData.lieuPermis || ''
+    finishForm.nationality = clientData.nationality || ''
 
     // Initialize edit form
     editForm.firstName = clientData.firstName || ''
     editForm.lastName = clientData.lastName || ''
+    editForm.cin = clientData.cin || ''
+    editForm.drivingLicense = clientData.drivingLicense || ''
     editForm.email = clientData.email || ''
     editForm.phone = clientData.phone || ''
+    editForm.phoneCountryCode = clientData.phoneCountryCode || '+216'
     editForm.address = clientData.address || ''
     editForm.description = clientData.description || ''
+    editForm.birthday = clientData.birthday ? new Date(clientData.birthday).toISOString().split('T')[0] : ''
     editForm.cinDate = clientData.cinDate ? new Date(clientData.cinDate).toISOString().split('T')[0] : ''
     editForm.licenseDate = clientData.licenseDate ? new Date(clientData.licenseDate).toISOString().split('T')[0] : ''
     editForm.status = clientData.status || ''
     editForm.idCardType = clientData.idCardType || 'cin'
+    editForm.lieuNaissance = clientData.lieuNaissance || ''
+    editForm.lieuPermis = clientData.lieuPermis || ''
+    editForm.nationality = clientData.nationality || ''
 
     if (route.query.finishInfo === 'true' && !isComplete.value) {
       showFinishInfoDialog.value = true
@@ -910,6 +1018,9 @@ const saveIncompleteInfo = async () => {
   if (finishForm.cinDate) payload.cinDate = new Date(finishForm.cinDate)
   if (finishForm.licenseDate) payload.licenseDate = new Date(finishForm.licenseDate)
   if (finishForm.address) payload.address = finishForm.address
+  if (finishForm.lieuNaissance) payload.lieuNaissance = finishForm.lieuNaissance
+  if (finishForm.lieuPermis) payload.lieuPermis = finishForm.lieuPermis
+  if (finishForm.nationality) payload.nationality = finishForm.nationality
   if (finishForm.cinFront) payload.cinFront = finishForm.cinFront
   if (finishForm.cinBack && client.value.idCardType !== 'passport') payload.cinBack = finishForm.cinBack
   if (finishForm.licenseFront) payload.licenseFront = finishForm.licenseFront
@@ -957,8 +1068,14 @@ const updateClientProfile = async () => {
   saving.value = true
   
   try {
-    const updatedClient = await clientApi.update(client.value._id, editForm)
+    const payload: any = { ...editForm }
+    if (!payload.cinDate) delete payload.cinDate
+    if (!payload.licenseDate) delete payload.licenseDate
+    if (!payload.birthday) delete payload.birthday
+
+    const updatedClient = await clientApi.update(client.value._id, payload)
     client.value = updatedClient
+    await fetchClientData()
     isEditing.value = false
     toast.add({ 
       severity: 'success', 
@@ -1014,6 +1131,7 @@ const confirmSave = async () => {
     
     const updatedClient = await clientApi.update(client.value._id, payload)
     client.value = updatedClient
+    await fetchClientData()
     editingField.value = null
     showPasswordDialog.value = false
     toast.add({ severity: 'success', summary: 'Succès', detail: 'Information mise à jour.', life: 3000 })

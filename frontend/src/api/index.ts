@@ -115,6 +115,14 @@ export const settingApi = {
   update: (data: any) => api.patch('/settings', data).then(res => res.data),
 };
 
+export const agenceApi = {
+  getAll: () => api.get('/agences').then(res => res.data),
+  getOne: (id: string) => api.get(`/agences/${id}`).then(res => res.data),
+  create: (data: any) => api.post('/agences', data).then(res => res.data),
+  update: (id: string, data: any) => api.patch(`/agences/${id}`, data).then(res => res.data),
+  delete: (id: string) => api.delete(`/agences/${id}`).then(res => res.data),
+};
+
 export const getImageUrl = (path: string) => {
   if (!path) return '';
   if (path.startsWith('http')) return path;

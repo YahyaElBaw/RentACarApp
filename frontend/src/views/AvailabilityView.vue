@@ -1,5 +1,5 @@
 <template>
-  <div class="availability-container space-y-12 animate-in fade-in slide-in-from-bottom-2 duration-1000 p-8 max-w-7xl mx-auto">
+  <div class="availability-container space-y-12 p-8 max-w-7xl mx-auto">
     <!-- Header Section -->
     <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
       <div class="space-y-2">

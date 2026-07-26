@@ -5,7 +5,7 @@ import { contratApi } from '@/api'
 import { formatDate } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth'
 import { 
-  Plus, Search, FileText, Eye, Download
+  Plus, Search, FileText, Eye, Download, ChevronLeft, ChevronRight
 } from 'lucide-vue-next'
 import { 
   Table, TableHeader, TableBody, TableHead, TableRow, TableCell 
@@ -19,6 +19,8 @@ const router = useRouter()
 const authStore = useAuthStore()
 const contrats = ref<any[]>([])
 const loading = ref(true)
+const currentPage = ref(1)
+const pageSize = 10
 
 const filters = reactive({
   status: '',
@@ -40,7 +42,7 @@ const loadContrats = async () => {
 }
 
 onMounted(loadContrats)
-watch(() => filters.status, loadContrats)
+watch(() => filters.status, () => { currentPage.value = 1; loadContrats() })
 
 const filteredContrats = computed(() => {
   if (!filters.reference) return contrats.value
@@ -65,6 +67,12 @@ const filteredContrats = computed(() => {
     
     return refMatch || clientMatch || carMatch
   })
+})
+
+const totalContratPages = computed(() => Math.ceil(filteredContrats.value.length / pageSize))
+const paginatedContrats = computed(() => {
+  const start = (currentPage.value - 1) * pageSize
+  return filteredContrats.value.slice(start, start + pageSize)
 })
 
 const viewContrat = (id: string) => {
@@ -107,7 +115,7 @@ const getStatusBadge = (contrat: any) => {
 </script>
 
 <template>
-  <div class="contrat-list-container space-y-12 animate-in fade-in slide-in-from-bottom-2 duration-1000 p-8 max-w-7xl mx-auto">
+  <div class="contrat-list-container space-y-12 p-8 max-w-7xl mx-auto">
     <!-- Header & Integrated Search Bar -->
     <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-8">
       <div class="space-y-2">
@@ -151,7 +159,7 @@ const getStatusBadge = (contrat: any) => {
             </TableHeader>
             <TableBody>
               <TableRow 
-                v-for="contrat in filteredContrats" 
+                v-for="contrat in paginatedContrats" 
                 :key="contrat._id"
                 @click="viewContrat(contrat._id)"
                 class="group border-slate-100 transition-all duration-500 cursor-pointer hover:bg-white :bg-slate-800/50 hover:shadow-2xl relative active:scale-[0.998]"
@@ -237,6 +245,19 @@ const getStatusBadge = (contrat: any) => {
               </TableRow>
             </TableBody>
           </Table>
+        </div>
+        <div v-if="filteredContrats.length > pageSize" class="flex items-center justify-between px-10 py-5 border-t border-slate-100 bg-slate-50/50">
+          <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+            Page {{ currentPage }} / {{ totalContratPages }} — {{ filteredContrats.length }} résultats
+          </p>
+          <div class="flex items-center gap-2">
+            <Button variant="outline" size="sm" :disabled="currentPage <= 1" @click="currentPage--" class="h-9 px-4 rounded-xl font-black text-[10px] uppercase tracking-widest border-slate-200 disabled:opacity-30">
+              <ChevronLeft class="w-4 h-4 mr-1" /> Précédent
+            </Button>
+            <Button variant="outline" size="sm" :disabled="currentPage >= totalContratPages" @click="currentPage++" class="h-9 px-4 rounded-xl font-black text-[10px] uppercase tracking-widest border-slate-200 disabled:opacity-30">
+              Suivant <ChevronRight class="w-4 h-4 ml-1" />
+            </Button>
+          </div>
         </div>
       </CardContent>
     </Card>
