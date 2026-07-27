@@ -37,16 +37,23 @@ export class ContratController {
 
   @Get(':id/pdf')
   async getPdf(@Param('id') id: string, @Res() res: Response) {
-    const contrat = await this.contratService.findOne(id);
-    const buffer = await this.pdfService.generateContractPDF(contrat);
-    
-    res.set({
-      'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename=contrat-${contrat.reference}.pdf`,
-      'Content-Length': buffer.length,
-    });
+    try {
+      const contrat = await this.contratService.findOne(id);
+      const buffer = await this.pdfService.generateContractPDF(contrat);
 
-    res.end(buffer);
+      res.set({
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename=contrat-${contrat.reference}.pdf`,
+        'Content-Length': buffer.length,
+      });
+
+      res.end(buffer);
+    } catch (err) {
+      console.error('PDF generation failed:', err);
+      if (!res.headersSent) {
+        res.status(500).json({ message: 'Erreur lors de la génération du PDF' });
+      }
+    }
   }
 
   @Patch(':id/close')

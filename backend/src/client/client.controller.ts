@@ -31,13 +31,20 @@ export class ClientController {
   @Get(':id/pdf')
   @UseGuards(JwtAuthGuard)
   async getPdf(@Param('id') id: string, @Res() res: Response) {
-    const buffer = await this.clientService.generatePdf(id);
-    res.set({
-      'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename=client-${id}.pdf`,
-      'Content-Length': buffer.length,
-    });
-    res.end(buffer);
+    try {
+      const buffer = await this.clientService.generatePdf(id);
+      res.set({
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename=client-${id}.pdf`,
+        'Content-Length': buffer.length,
+      });
+      res.end(buffer);
+    } catch (err) {
+      console.error('Client PDF generation failed:', err);
+      if (!res.headersSent) {
+        res.status(500).json({ message: 'Erreur lors de la génération du PDF client' });
+      }
+    }
   }
 
   @Patch(':id')
