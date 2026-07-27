@@ -7,7 +7,8 @@ import * as https from 'https';
 @Injectable()
 export class PdfService {
   constructor() {
-    const fontPath = path.join(process.cwd(), 'node_modules', 'pdfmake', 'fonts', 'Roboto');
+    const pdfMakePath = path.dirname(require.resolve('pdfmake/package.json'));
+    const fontPath = path.join(pdfMakePath, 'fonts', 'Roboto');
     const fonts = {
       Roboto: {
         normal: path.join(fontPath, 'Roboto-Regular.ttf'),
