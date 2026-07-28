@@ -44,6 +44,7 @@ const showSecurityModal = ref(false)
 const adminPassword = ref('')
 const showPassword = ref(false)
 const clientToDelete = ref<string | null>(null)
+const pendingEdit = ref(false)
 const submitting = ref(false)
 
 interface ClientForm {
@@ -151,17 +152,19 @@ const editClient = (client: any) => {
 }
 
 const saveClient = async () => {
+  if (editingClient.value) {
+    pendingEdit.value = true
+    adminPassword.value = ''
+    showSecurityModal.value = true
+    return
+  }
   try {
     const payload: any = { ...clientForm }
     if (!payload.cinDate) delete payload.cinDate
     if (!payload.licenseDate) delete payload.licenseDate
     if (!payload.birthday) delete payload.birthday
 
-    if (editingClient.value) {
-      await api.patch(`/clients/${editingClient.value._id}`, payload)
-    } else {
-      await api.post('/clients', payload)
-    }
+    await api.post('/clients', payload)
     showForm.value = false
     loadClients()
   } catch (err) {
@@ -216,15 +219,25 @@ const executeDelete = async () => {
   if (!adminPassword.value) return
   submitting.value = true
   try {
-    await api.delete(`/clients/${clientToDelete.value}`, {
-      data: { password: adminPassword.value }
-    })
+    if (pendingEdit.value) {
+      const payload: any = { ...clientForm, password: adminPassword.value }
+      if (!payload.cinDate) delete payload.cinDate
+      if (!payload.licenseDate) delete payload.licenseDate
+      if (!payload.birthday) delete payload.birthday
+      await api.patch(`/clients/${editingClient.value._id}`, payload)
+      pendingEdit.value = false
+    } else {
+      await api.delete(`/clients/${clientToDelete.value}`, {
+        data: { password: adminPassword.value }
+      })
+    }
     showSecurityModal.value = false
+    showForm.value = false
     loadClients()
   } catch (err: any) {
     console.error(err)
     if (err.response?.status === 401) alert("Mot de passe incorrect.")
-    else alert("Erreur lors de la suppression.")
+    else alert("Erreur lors de l'opération.")
   } finally {
     submitting.value = false
   }
@@ -701,7 +714,7 @@ const isStepValid = computed(() => {
               <Shield class="w-6 h-6 text-white" />
             </div>
             <div>
-              <DialogTitle class="text-xl font-black uppercase tracking-tighter text-white italic">Confirmation <span class="text-rose-200">Requise</span></DialogTitle>
+              <DialogTitle class="text-xl font-black uppercase tracking-tighter text-white italic">Confirmation <span class="text-rose-200">{{ pendingEdit ? 'Admin' : 'Requise' }}</span></DialogTitle>
               <DialogDescription class="text-white/60 text-[8px] font-black uppercase tracking-[0.3em] mt-1">Action Administrative Sécurisée</DialogDescription>
             </div>
           </div>
@@ -710,7 +723,7 @@ const isStepValid = computed(() => {
         <div class="p-8 space-y-6">
           <div class="p-4 bg-rose-50 border border-rose-100 rounded-2xl flex items-start gap-3">
              <div class="w-2 h-2 rounded-full bg-rose-500 mt-1.5 shrink-0"></div>
-             <p class="text-[11px] font-bold text-rose-700 leading-relaxed italic">Cette action va désactiver le client. Veuillez saisir votre mot de passe administrateur pour confirmer.</p>
+              <p class="text-[11px] font-bold text-rose-700 leading-relaxed italic">{{ pendingEdit ? 'Cette action va modifier les informations du client. Veuillez saisir votre mot de passe administrateur pour confirmer.' : 'Cette action va désactiver le client. Veuillez saisir votre mot de passe administrateur pour confirmer.' }}</p>
           </div>
           
           <div class="space-y-3">
@@ -742,7 +755,7 @@ const isStepValid = computed(() => {
               Traitement...
             </template>
             <template v-else>
-              Confirmer la Désactivation
+              {{ pendingEdit ? 'Confirmer la Modification' : 'Confirmer la Désactivation' }}
             </template>
           </Button>
           <Button variant="ghost" @click="showSecurityModal = false" class="w-full h-12 font-black rounded-xl text-slate-400 uppercase tracking-widest text-[9px]">Annuler</Button>

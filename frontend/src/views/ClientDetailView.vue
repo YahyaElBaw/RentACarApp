@@ -71,7 +71,21 @@
                      <div class="flex-1">
                         <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Téléphone</span>
                         <div v-if="editingField === 'phone'" class="flex items-center gap-2 mt-1">
-                           <Input v-model="tempValue" class="h-8 text-xs font-black tabular-nums" @keyup.enter="triggerSave('phone')" />
+                           <select v-model="tempPhoneCountryCode" class="h-8 w-20 rounded-xl border border-slate-200 px-1 text-[10px] font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 bg-white">
+                             <option value="+216">+216</option>
+                             <option value="+33">+33</option>
+                             <option value="+39">+39</option>
+                             <option value="+49">+49</option>
+                             <option value="+34">+34</option>
+                             <option value="+1">+1</option>
+                             <option value="+44">+44</option>
+                             <option value="+212">+212</option>
+                             <option value="+213">+213</option>
+                             <option value="+966">+966</option>
+                             <option value="+971">+971</option>
+                             <option value="+218">+218</option>
+                           </select>
+                           <Input v-model="tempValue" class="h-8 text-xs font-black tabular-nums flex-1" @keyup.enter="triggerSave('phone')" />
                            <button @click="triggerSave('phone')" class="text-emerald-500"><Check class="w-4 h-4" /></button>
                            <button @click="cancelEditing" class="text-rose-500"><X class="w-4 h-4" /></button>
                         </div>
@@ -841,6 +855,7 @@ const editForm = reactive({
 // Inline Editing State
 const editingField = ref<string | null>(null)
 const tempValue = ref<any>(null)
+const tempPhoneCountryCode = ref('+216')
 const showPasswordDialog = ref(false)
 const adminPassword = ref('')
 const showPassword = ref(false)
@@ -1099,6 +1114,9 @@ const updateClientProfile = async () => {
 const startEditing = (field: string) => {
   editingField.value = field
   tempValue.value = client.value[field]
+  if (field === 'phone') {
+    tempPhoneCountryCode.value = client.value.phoneCountryCode || '+216'
+  }
   if ((field === 'birthday' || field === 'cinDate' || field === 'licenseDate') && tempValue.value) {
     tempValue.value = new Date(tempValue.value).toISOString().split('T')[0]
   }
@@ -1124,9 +1142,12 @@ const confirmSave = async () => {
   
   saving.value = true
   try {
-    const payload = {
+    const payload: any = {
       [pendingSaveField.value]: tempValue.value,
       password: adminPassword.value
+    }
+    if (pendingSaveField.value === 'phone') {
+      payload.phoneCountryCode = tempPhoneCountryCode.value
     }
     
     const updatedClient = await clientApi.update(client.value._id, payload)

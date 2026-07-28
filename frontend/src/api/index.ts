@@ -19,6 +19,7 @@ api.interceptors.response.use(
     if (error.response?.status === 401 && !error.config.url.includes('/auth/login')) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
+      window.dispatchEvent(new CustomEvent('auth:logout'));
       router.push('/login');
     }
     if (!error.response || error.code === 'ERR_NETWORK' || error.message === 'Network Error') {

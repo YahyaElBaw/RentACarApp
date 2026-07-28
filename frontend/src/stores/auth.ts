@@ -10,6 +10,15 @@ export const useAuthStore = defineStore('auth', () => {
   const isAuthenticated = computed(() => !!token.value);
   const isAdmin = computed(() => user.value?.role === 'admin');
 
+  const clearState = () => {
+    token.value = '';
+    user.value = null;
+  };
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener('auth:logout', clearState);
+  }
+
   async function login(credentials: { cin: string; phone: string }) {
     try {
       const data = await authApi.login(credentials);

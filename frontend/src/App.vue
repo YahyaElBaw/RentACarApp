@@ -55,6 +55,10 @@ const menuItems = computed(() => {
   return items;
 })
 
+const refreshApp = () => {
+  window.location.reload()
+}
+
 const handleLogout = () => {
   authStore.logout()
   router.push('/login')
@@ -326,7 +330,7 @@ watch(() => vidangeForm.mileageAtChange, (newVal) => {
         ]"
       >
         <div class="p-8 flex items-center justify-between gap-3">
-          <div class="flex items-center gap-3">
+          <div class="flex items-center gap-3 cursor-pointer" @click="refreshApp">
             <div class="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shadow-lg shadow-primary/20">
               <Car class="text-white w-6 h-6" />
             </div>

@@ -143,6 +143,7 @@ const form = reactive({
   carburantLevel: 50,
   lieuDepart: 'Djerba',
   lieuRetour: 'Djerba',
+  kilometrageDepart: 0,
 });
 
 const showSuccessDialog = ref(false);
@@ -167,6 +168,13 @@ watch([() => form.startDate, () => form.endDate, () => form.startTime, () => for
 // AUTO-SYNC RETURN TIME WITH START TIME
 watch(() => form.startTime, (newVal) => {
   form.endTime = newVal;
+});
+
+// Set initial kilometrageDepart when car is selected
+watch(() => selectedCar.value, (car) => {
+  if (car?.mileage) {
+    form.kilometrageDepart = car.mileage;
+  }
 });
 
 // Sync endDate when rentDays changes
@@ -318,6 +326,7 @@ const submitContrat = async (force = false) => {
       carburantLevel: form.carburantLevel,
       lieuDepart: form.lieuDepart,
       lieuRetour: form.lieuRetour,
+      startMileage: form.kilometrageDepart,
       isPaid: true,
       reservation: route.query.reservationId || undefined,
       force: force
@@ -550,7 +559,7 @@ watch(isRefModalOpen, (isOpen) => {
                 <label class="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] ml-2">Date Sortie (Départ)</label>
                 <div class="flex gap-2 relative group">
                   <CalendarIcon class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-indigo-600 z-10" />
-                  <input type="date" v-model="form.startDate" disabled class="h-14 w-full pl-12 pr-4 bg-slate-100 border border-slate-200 rounded-2xl font-bold text-slate-500 cursor-not-allowed italic" style="flex: 2;" />
+                  <input type="date" v-model="form.startDate" class="h-14 w-full pl-12 pr-4 bg-slate-50/50 border border-slate-100 rounded-2xl font-black text-slate-900 outline-none focus:ring-4 focus:ring-indigo-600/5 transition-all" style="flex: 2;" />
                   <input type="time" v-model="form.startTime" class="h-14 w-full px-4 bg-slate-50/50 border border-slate-100 rounded-2xl font-black text-slate-900 outline-none focus:ring-4 focus:ring-indigo-600/5 transition-all" style="flex: 1;" />
                 </div>
               </div>
@@ -645,14 +654,6 @@ watch(isRefModalOpen, (isOpen) => {
                   </div>
                 </div>
 
-                <div v-if="appSettings?.tvaEnabled" class="space-y-3">
-                  <label class="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] ml-2">TVA (%)</label>
-                  <div class="relative">
-                    <Percent class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-indigo-600" />
-                    <input type="number" v-model="form.tvaValue" class="h-14 w-full pl-12 pr-6 bg-slate-50/50 border border-slate-100 rounded-2xl font-black text-slate-900 outline-none focus:ring-4 focus:ring-indigo-600/5 transition-all" />
-                  </div>
-                </div>
-
                <div class="md:col-span-2 p-6 bg-rose-50 border border-rose-100 rounded-[2rem] flex items-center gap-4">
                   <div class="w-10 h-10 rounded-2xl bg-rose-500 text-white flex items-center justify-center shrink-0 shadow-lg shadow-rose-500/20"><FileWarning class="w-5 h-5" /></div>
                   <p class="text-[10px] font-black text-rose-600 uppercase leading-relaxed tracking-wide">
@@ -729,12 +730,28 @@ watch(isRefModalOpen, (isOpen) => {
                          <span class="text-[8px] font-black text-slate-400 uppercase block">Retour</span>
                          <span class="text-xs font-black text-slate-900">{{ form.lieuRetour }}</span>
                        </div>
-                       <div>
-                         <span class="text-[8px] font-black text-slate-400 uppercase block">Carburant</span>
-                         <span class="text-xs font-black text-slate-900">{{ form.carburantLevel }}%</span>
-                       </div>
-                   </div>
-                 </div>
+                        <div>
+                          <span class="text-[8px] font-black text-slate-400 uppercase block">Carburant</span>
+                          <span class="text-xs font-black text-slate-900">{{ form.carburantLevel }}%</span>
+                        </div>
+                    </div>
+                  </div>
+
+                  <!-- Kilometrage Depart in validation -->
+                  <div class="space-y-2 md:col-span-2">
+                    <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Kilométrage Départ</span>
+                    <div class="p-5 bg-amber-50 border border-amber-100 rounded-2xl">
+                      <div class="flex items-center gap-4">
+                        <div class="relative flex-1">
+                          <input type="number" v-model.number="form.kilometrageDepart" class="h-14 w-full px-6 bg-white border border-amber-200 rounded-2xl font-black text-amber-700 tabular-nums outline-none focus:ring-4 focus:ring-amber-600/10 transition-all text-lg" />
+                          <span class="absolute right-4 top-1/2 -translate-y-1/2 font-black text-[10px] text-amber-400 uppercase">KM</span>
+                        </div>
+                        <div class="text-[9px] font-black text-amber-600 leading-tight max-w-[200px]">
+                          Ce kilométrage sera enregistré sur le contrat <br/>et mis à jour sur la fiche du véhicule.
+                        </div>
+                      </div>
+                    </div>
+                  </div>
 
                  <!-- Pricing details -->
                  <div class="space-y-2 md:col-span-2">

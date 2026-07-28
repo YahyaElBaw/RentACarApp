@@ -22,6 +22,12 @@ function createWindow() {
     mainWindow.webContents.openDevTools();
   }
 
+  mainWindow.on('close', (e) => {
+    if (mainWindow && mainWindow.webContents) {
+      mainWindow.webContents.executeJavaScript('localStorage.clear()');
+    }
+  });
+
   mainWindow.on('closed', () => {
     mainWindow = null;
   });

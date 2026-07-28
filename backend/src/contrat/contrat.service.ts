@@ -101,7 +101,9 @@ export class ContratService implements OnModuleInit {
       createContratDto.reference = this.generateReference();
     }
 
-    createContratDto.startMileage = car.mileage || 0;
+    if (!createContratDto.startMileage) {
+      createContratDto.startMileage = car.mileage || 0;
+    }
 
     // Conflict Check (Overlapping confirmed reservations OR other contracts)
     const conflicts = await this.bookingConflictService.findConflicts(
@@ -145,6 +147,11 @@ export class ContratService implements OnModuleInit {
     // Auto-update car's dailyRate to match the contract's rate
     if (dailyRate > 0 && dailyRate !== car.dailyRate) {
       await this.carModel.findByIdAndUpdate(car._id, { dailyRate }).exec();
+    }
+
+    // Auto-update car's mileage with the contract's start mileage
+    if (createContratDto.startMileage > (car.mileage || 0)) {
+      await this.carModel.findByIdAndUpdate(car._id, { mileage: createContratDto.startMileage }).exec();
     }
 
     // Create a Depense (Expense) for the contract fee if it exists
