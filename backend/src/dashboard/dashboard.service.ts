@@ -17,20 +17,31 @@ export class DashboardService {
     @InjectModel(Reservation.name) private reservationModel: Model<ReservationDocument>,
   ) { }
 
-  async getStats(user: any): Promise<any> {
+  async getStats(user: any, from?: string, to?: string): Promise<any> {
     const isAdmin = user?.role === 'admin';
     const totalCars = await this.carModel.countDocuments({ disabled: { $ne: true } });
     const availableCars = await this.carModel.countDocuments({ isAvailable: true, disabled: { $ne: true } });
     const activeContrats = await this.contratModel.countDocuments({ status: 'active' });
 
+    const hasRange = Boolean(from && to);
+    const revenueMatch: any = { status: { $ne: 'cancelled' } };
+    const expenseMatch: any = {};
+    if (hasRange && from && to) {
+      const fromDate = new Date(from);
+      const toDate = new Date(to);
+      revenueMatch.startDate = { $gte: fromDate, $lte: toDate };
+      expenseMatch.date = { $gte: fromDate, $lte: toDate };
+    }
+
     // Financial calculations
     const revenueResult = await this.contratModel.aggregate([
-      { $match: { status: { $ne: 'cancelled' } } },
+      { $match: revenueMatch },
       { $group: { _id: null, total: { $sum: '$totalAmount' } } }
     ]);
     const totalRevenue = revenueResult[0]?.total || 0;
 
     const expenseResult = await this.depenseModel.aggregate([
+      { $match: expenseMatch },
       { $group: { _id: null, total: { $sum: '$amount' } } }
     ]);
     const totalExpenses = expenseResult[0]?.total || 0;

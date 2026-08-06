@@ -77,7 +77,7 @@ const isDateInPeriod = (dateString: string | Date | undefined) => {
   return true
 }
 
-const filteredContrats = computed(() => contrats.value.filter(c => isDateInPeriod(c.startDate)))
+const filteredContrats = computed(() => contrats.value.filter(c => c.status !== 'cancelled' && isDateInPeriod(c.startDate)))
 const filteredDepenses = computed(() => depenses.value.filter(d => isDateInPeriod(d.date || d.createdAt)))
 
 const allTransactions = computed<Transaction[]>(() => {

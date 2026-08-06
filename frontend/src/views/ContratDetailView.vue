@@ -309,6 +309,40 @@ const closureForm = ref({
   isPaid: true
 });
 
+// Missing Return Mileage Alert
+const showReturnMileageAlert = ref(false);
+const returnMileageInput = ref(0);
+const savingReturnMileage = ref(false);
+
+const missingReturnMileage = computed(() => {
+  if (!contrat.value) return false;
+  return (contrat.value.status === 'terminé' || contrat.value.status === 'clôturé') && !contrat.value.returnMileage;
+});
+
+const submitReturnMileage = async () => {
+  if (returnMileageInput.value < (contrat.value.startMileage || 0)) {
+    alert(`Le kilométrage de retour ne peut pas être inférieur au kilométrage de départ (${contrat.value.startMileage} km).`);
+    return;
+  }
+  savingReturnMileage.value = true;
+  try {
+    await contratApi.close(contrat.value._id, {
+      closureType: contrat.value.closureType || 'terminé',
+      returnMileage: returnMileageInput.value,
+      carStateAtReturn: contrat.value.carStateAtReturn || 'disponible',
+      closureNotes: contrat.value.closureNotes || '',
+      isPaid: contrat.value.isPaid || false
+    });
+    showReturnMileageAlert.value = false;
+    await fetchContrat();
+  } catch (err) {
+    console.error('Erreur lors de la sauvegarde du kilométrage:', err);
+    alert('Une erreur est survenue lors de la sauvegarde.');
+  } finally {
+    savingReturnMileage.value = false;
+  }
+};
+
 const openClientModal = (client: any) => {
   activeClient.value = client;
   showClientModal.value = true;
@@ -348,6 +382,10 @@ const fetchAgences = async () => {
 onMounted(async () => {
   await fetchContrat();
   await fetchAgences();
+  if (missingReturnMileage.value && authStore.isAdmin) {
+    returnMileageInput.value = contrat.value.car?.mileage || 0;
+    showReturnMileageAlert.value = true;
+  }
 });
 
 const openPrintModal = () => {
@@ -387,6 +425,8 @@ const getPrintFieldValue = (fieldKey: string, customVal = '') => {
     case 'carModel': return c.car?.model || '';
     case 'carRegistration': return c.car?.registrationNumber || c.car?.matricule || '';
     case 'client1Name': return client1 ? `${client1.firstName || ''} ${client1.lastName || ''}`.trim() : '';
+    case 'client1FirstName': return client1?.firstName || '';
+    case 'client1LastName': return client1?.lastName || '';
     case 'client1Cin': return client1?.cin || '';
     case 'client1CinDate': return client1?.cinDate ? formatDate(client1.cinDate) : '';
     case 'client1Phone': return (client1?.phoneCountryCode || '+216') + ' ' + (client1?.phone || '');
@@ -398,6 +438,8 @@ const getPrintFieldValue = (fieldKey: string, customVal = '') => {
     case 'client1LieuPermis': return client1?.lieuPermis || '';
     case 'client1Nationality': return client1?.nationality || '';
     case 'client2Name': return client2 ? `${client2.firstName || ''} ${client2.lastName || ''}`.trim() : '';
+    case 'client2FirstName': return client2?.firstName || '';
+    case 'client2LastName': return client2?.lastName || '';
     case 'client2Cin': return client2?.cin || '';
     case 'client2CinDate': return client2?.cinDate ? formatDate(client2.cinDate) : '';
     case 'client2Phone': return client2 ? (client2.phoneCountryCode || '+216') + ' ' + (client2.phone || '') : '';
@@ -406,6 +448,7 @@ const getPrintFieldValue = (fieldKey: string, customVal = '') => {
     case 'client2LicenseDate': return client2?.licenseDate ? formatDate(client2.licenseDate) : '';
     case 'client2LieuNaissance': return client2?.lieuNaissance || '';
     case 'client2LieuPermis': return client2?.lieuPermis || '';
+    case 'client2Address': return client2?.address || '';
     case 'client2Nationality': return client2?.nationality || '';
     case 'carDailyRate': return (c.carDailyRate !== undefined ? c.carDailyRate : (c.car?.dailyRate || 0)) + ' TND';
     case 'subTotal': return ((c.totalAmount || 0) - (c.contractTaxValue || 0) - (c.tvaValue || 0)) + ' TND';
@@ -449,23 +492,27 @@ const triggerPrint = () => {
   <title>Impression Contrat</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 210mm; height: 297mm; margin: 0; padding: 0; overflow: hidden; }
     @page { size: A4; margin: 0; }
-    body { width: 210mm; height: 297mm; margin: 0; padding: 0; }
     #sheet {
       position: relative;
       width: 210mm;
-      height: 295mm;
-      margin: 2mm auto 0;
+      height: 297mm;
+      margin: 3mm 0 0 0;
+      padding: 0;
       background-image: ${bgImage};
       background-size: contain;
       background-position: center;
       background-repeat: no-repeat;
       background-color: white;
       overflow: hidden;
+      page-break-after: avoid;
+      page-break-inside: avoid;
     }
     @media print {
-      body { width: 210mm; height: 297mm; margin: 0; padding: 0; }
-      #sheet { height: 295mm; margin: 3mm auto 0; padding: 0; }
+      html, body { width: 210mm; height: 297mm; margin: 0; padding: 0; overflow: hidden; }
+      #sheet { width: 210mm; height: 297mm; margin: 3mm 0 0 0;
+      padding: 0; overflow: hidden; page-break-after: avoid; page-break-inside: avoid; }
     }
   </style>
 </head>
@@ -522,6 +569,12 @@ const diffDays = (start: string, end: string) => {
   const e = new Date(end);
   const diff = e.getTime() - s.getTime();
   return Math.ceil(diff / (1000 * 60 * 60 * 24));
+};
+
+const formatTime = (date: string) => {
+  if (!date) return '--';
+  const d = new Date(date);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 };
 
 const drivenDistance = computed(() => {
@@ -731,11 +784,19 @@ const submitCloture = async () => {
                         <!-- Details Grid -->
                          <div class="grid grid-cols-2 md:grid-cols-4 gap-6 lg:gap-8 mb-12">
                             <div class="space-y-1">
-                               <p class="text-[9px] font-black opacity-40 uppercase tracking-widest">Période</p>
-                               <p :class="['text-xs font-bold leading-relaxed', contrat.status === 'active' ? 'text-primary' : 'text-primary']">
-                                  {{ formatDate(contrat.startDate) }} <br/><span class="opacity-50">⎯</span> {{ formatDate(contrat.endDate) }}
-                               </p>
-                            </div>
+                                <p class="text-[9px] font-black opacity-40 uppercase tracking-widest">Période</p>
+                                <p :class="['text-xs font-bold leading-relaxed', contrat.status === 'active' ? 'text-primary' : 'text-primary']">
+                                   {{ formatDate(contrat.startDate) }} <br/><span class="opacity-50">⎯</span> {{ formatDate(contrat.endDate) }}
+                                </p>
+                             </div>
+                             <div class="space-y-1">
+                                <p class="text-[9px] font-black opacity-40 uppercase tracking-widest">Heure Départ</p>
+                                <p class="text-sm font-black tabular-nums">{{ formatTime(contrat.startDate) }}</p>
+                             </div>
+                             <div class="space-y-1">
+                                <p class="text-[9px] font-black opacity-40 uppercase tracking-widest">Heure Retour</p>
+                                <p class="text-sm font-black tabular-nums">{{ formatTime(contrat.endDate) }}</p>
+                             </div>
                             <div class="space-y-1">
                                 <p class="text-[9px] font-black opacity-40 uppercase tracking-widest">Tarif / Jour</p>
                                 <p class="text-lg font-black tabular-nums">{{ contrat.carDailyRate !== undefined ? contrat.carDailyRate : (contrat.car?.dailyRate || 0) }} <span class="text-[10px]">TND</span></p>
@@ -744,12 +805,20 @@ const submitCloture = async () => {
                                 <p class="text-[9px] font-black opacity-40 uppercase tracking-widest">Agence</p>
                                 <p class="text-sm font-black uppercase italic">{{ contrat.agency }}</p>
                             </div>
-                            <div class="space-y-1">
-                               <p class="text-[9px] font-black opacity-40 uppercase tracking-widest">Distance</p>
-                               <p class="text-xl font-black tabular-nums">{{ (contrat.status === 'terminé' || contrat.status === 'clôturé') ? drivenDistance : '--' }} <span class="text-[9px] opacity-40">KM</span></p>
-                            </div>
-                            <div class="space-y-1">
-                               <p class="text-[9px] font-black opacity-40 uppercase tracking-widest">Caution Restante</p>
+                             <div class="space-y-1">
+                                <p class="text-[9px] font-black opacity-40 uppercase tracking-widest">Distance</p>
+                                <p class="text-xl font-black tabular-nums">{{ (contrat.status === 'terminé' || contrat.status === 'clôturé') ? drivenDistance : '--' }} <span class="text-[9px] opacity-40">KM</span></p>
+                             </div>
+                             <div class="space-y-1">
+                                <p class="text-[9px] font-black opacity-40 uppercase tracking-widest">KM Départ</p>
+                                <p class="text-lg font-black tabular-nums">{{ contrat.startMileage ?? '--' }} <span class="text-[9px] opacity-40">KM</span></p>
+                             </div>
+                             <div class="space-y-1">
+                                <p class="text-[9px] font-black opacity-40 uppercase tracking-widest">KM Retour</p>
+                                <p :class="['text-lg font-black tabular-nums', !contrat.returnMileage && (contrat.status === 'terminé' || contrat.status === 'clôturé') ? 'text-red-500' : '']">{{ contrat.returnMileage ?? '--' }} <span class="text-[9px] opacity-40">KM</span></p>
+                             </div>
+                             <div class="space-y-1">
+                                <p class="text-[9px] font-black opacity-40 uppercase tracking-widest">Caution Restante</p>
                                <p class="text-lg font-black tabular-nums">{{ (contrat.depositAmount || 0).toFixed(0) }} <span class="text-[10px]">TND</span></p>
                             </div>
                             <div v-if="contrat.lieuDepart" class="space-y-1">
@@ -1067,6 +1136,39 @@ const submitCloture = async () => {
                <textarea v-model="closureForm.closureNotes" rows="2" class="w-full p-6 rounded-[2rem] bg-muted/50 border-2 border-border focus:border-primary outline-none font-bold text-sm" placeholder="Observations..."></textarea>
             </div>
                <Button @click="submitCloture" :loading="cloturing" class="flex-[2] h-14 bg-emerald-600 text-white rounded-2xl uppercase text-[10px] font-black">Clôturer</Button>
+         </DialogContent>
+      </Dialog>
+
+      <!-- RETURN MILEAGE ALERT DIALOG -->
+      <Dialog v-model:open="showReturnMileageAlert">
+         <DialogContent class="max-w-lg bg-white border-border shadow-3xl rounded-[3rem] p-0 overflow-hidden text-foreground" @interact-outside.prevent @pointer-down-outside.prevent>
+            <DialogHeader class="p-10 bg-red-50 border-b border-red-100">
+               <div class="flex items-center gap-5">
+                  <div class="w-14 h-14 bg-red-500 rounded-2xl flex items-center justify-center shadow-lg shadow-red-500/30"><AlertCircle class="w-7 h-7 text-white" /></div>
+                  <div>
+                    <DialogTitle class="text-2xl font-black uppercase tracking-tight text-red-900">Kilométrage Retour Manquant</DialogTitle>
+                    <DialogDescription class="text-red-500/70 font-bold uppercase text-[9px] mt-1">Ce contrat a été clôturé automatiquement</DialogDescription>
+                  </div>
+               </div>
+            </DialogHeader>
+            <div class="p-10 space-y-6">
+               <div class="bg-red-50 border border-red-200 rounded-3xl p-6">
+                  <p class="text-[10px] font-black text-red-700 uppercase tracking-widest mb-2">Attention</p>
+                  <p class="text-sm text-red-600 font-bold">Le kilométrage de retour n'a pas été enregistré pour ce contrat. Veuillez saisir le kilométrage actuel du véhicule pour compléter le dossier.</p>
+               </div>
+               <div class="space-y-2">
+                  <label class="text-[9px] font-black uppercase pl-2 opacity-40">KM Départ</label>
+                  <p class="text-lg font-black tabular-nums text-slate-900">{{ contrat.startMileage || 0 }} KM</p>
+               </div>
+               <div class="space-y-2">
+                  <label class="text-[9px] font-black uppercase pl-2 opacity-40">KM Retour</label>
+                  <input v-model.number="returnMileageInput" type="number" class="w-full h-14 px-6 rounded-2xl bg-muted border-2 border-red-300 focus:border-red-500 outline-none font-black tabular-nums text-lg" placeholder="Saisir le kilométrage de retour" />
+               </div>
+            </div>
+            <div class="p-10 pt-0 flex gap-4">
+               <Button @click="showReturnMileageAlert = false" variant="ghost" class="flex-1 h-14 rounded-2xl font-black uppercase text-[10px]">Plus tard</Button>
+               <Button @click="submitReturnMileage" :loading="savingReturnMileage" class="flex-[2] h-14 bg-red-600 hover:bg-red-700 text-white rounded-2xl font-black uppercase text-[10px] shadow-xl shadow-red-600/20">Enregistrer le Kilométrage</Button>
+            </div>
          </DialogContent>
       </Dialog>
 

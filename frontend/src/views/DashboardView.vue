@@ -28,14 +28,63 @@
           }
         }"
         @mouseleave="hoveredKpi = null"
-        class="group relative overflow-hidden border border-slate-100 shadow-2xl shadow-slate-200/50 bg-white rounded-[2.5rem] transition-all duration-500 cursor-default active:scale-[0.98]"
+        :class="['group relative border border-slate-100 shadow-2xl shadow-slate-200/50 bg-white rounded-[2.5rem] transition-all duration-500 cursor-default active:scale-[0.98]', revenueMenuOwner === kpi.label ? 'overflow-visible z-30' : 'overflow-hidden']"
       >
         <CardContent class="p-8 relative z-10">
           <div class="flex justify-between items-start mb-6">
             <div :class="['p-4 rounded-2xl transition-all duration-500 group-hover:scale-110 group-hover:rotate-6 shadow-xl border border-white ', kpi.bg]">
               <component :is="kpi.icon" :class="['w-6 h-6', kpi.color]" />
             </div>
-            <div v-if="kpi.trend" class="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-600 text-[10px] font-black uppercase tracking-widest shadow-sm border border-emerald-100">
+            <div v-if="isPeriodKpi(kpi.label) && authStore.isAdmin" class="revenue-period-menu relative">
+              <button
+                @click.stop="revenueMenuOwner = revenueMenuOwner === kpi.label ? null : kpi.label"
+                class="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-50 text-slate-400 text-[10px] font-black uppercase tracking-widest shadow-sm border border-slate-100 hover:text-indigo-600 hover:bg-indigo-50 hover:border-indigo-100 transition-all outline-none"
+                :title="revenuePeriodLabel"
+              >
+                <CalendarRange class="w-3.5 h-3.5" />
+              </button>
+              <div v-if="revenueMenuOwner === kpi.label" class="absolute right-0 top-10 w-60 bg-white border border-slate-100 shadow-2xl rounded-2xl p-2 space-y-1 z-50 animate-in fade-in zoom-in-95 duration-150">
+                <button
+                  @click="selectRevenuePeriod('month')"
+                  :class="['w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all', revenuePeriod === 'month' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:bg-slate-50']"
+                >
+                  Ce mois
+                  <Check v-if="revenuePeriod === 'month'" class="w-3.5 h-3.5" />
+                </button>
+                <button
+                  @click="selectRevenuePeriod('prevMonth')"
+                  :class="['w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all', revenuePeriod === 'prevMonth' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:bg-slate-50']"
+                >
+                  Mois dernier
+                  <Check v-if="revenuePeriod === 'prevMonth'" class="w-3.5 h-3.5" />
+                </button>
+                <button
+                  @click="revenuePeriod = 'custom'"
+                  :class="['w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all', revenuePeriod === 'custom' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:bg-slate-50']"
+                >
+                  Période personnalisée
+                  <Check v-if="revenuePeriod === 'custom'" class="w-3.5 h-3.5" />
+                </button>
+                <div v-if="revenuePeriod === 'custom'" class="p-2 pt-3 space-y-2 border-t border-slate-100 mt-1">
+                  <div class="space-y-1.5">
+                    <label class="text-[8px] font-black uppercase tracking-widest text-slate-400 pl-1">Du</label>
+                    <input type="date" v-model="customFrom" class="w-full h-10 px-3 rounded-xl bg-slate-50 border border-slate-200 outline-none text-xs font-bold text-slate-700 focus:border-indigo-400" />
+                  </div>
+                  <div class="space-y-1.5">
+                    <label class="text-[8px] font-black uppercase tracking-widest text-slate-400 pl-1">Au</label>
+                    <input type="date" v-model="customTo" class="w-full h-10 px-3 rounded-xl bg-slate-50 border border-slate-200 outline-none text-xs font-bold text-slate-700 focus:border-indigo-400" />
+                  </div>
+                  <Button
+                    @click.stop="applyCustomPeriod"
+                    :loading="loadingRevenue"
+                    class="w-full h-10 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase text-[10px] tracking-widest shadow-lg shadow-indigo-600/20"
+                  >
+                    Appliquer
+                  </Button>
+                </div>
+              </div>
+            </div>
+            <div v-else-if="kpi.trend" class="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-600 text-[10px] font-black uppercase tracking-widest shadow-sm border border-emerald-100">
               <TrendingUp class="w-3.5 h-3.5" />
               {{ kpi.trend }}
             </div>
@@ -54,6 +103,7 @@
                 </template>
               </h3>
             </div>
+            <p v-if="isPeriodKpi(kpi.label) && authStore.isAdmin" class="text-[9px] font-black text-indigo-400 uppercase tracking-widest pl-0.5">{{ loadingRevenue ? 'Chargement...' : revenuePeriodLabel }}</p>
           </div>
 
           <div 
@@ -253,7 +303,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, reactive } from 'vue'
+import { ref, onMounted, onUnmounted, computed, reactive } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { dashboardApi, getImageUrl } from '@/api'
@@ -261,7 +311,7 @@ import { useAuthStore } from '@/stores/auth'
 import { 
   Car as CarIcon, FileText, Users, Calendar, Wallet, 
   TrendingUp, CheckCircle2, 
-  DollarSign, Calculator,
+  DollarSign, Calculator, CalendarRange, Check,
   Search, Loader2, ShieldAlert, Bell
 } from 'lucide-vue-next'
 import { 
@@ -284,6 +334,87 @@ const lastUpdated = ref<string>('')
 const hoveredKpi = ref<number | null>(null)
 const history = ref<any[]>([])
 const showConverterModal = ref(false)
+
+// Revenue Period State
+type RevenuePeriod = 'month' | 'prevMonth' | 'custom'
+const revenuePeriod = ref<RevenuePeriod>('month')
+const customFrom = ref('')
+const customTo = ref('')
+const revenueMenuOwner = ref<string | null>(null)
+const loadingRevenue = ref(false)
+
+const isPeriodKpi = (label: string) => label === 'dashboard.revenue' || label === 'dashboard.profit'
+
+const toLocalDateTime = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}T${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`
+
+const getPeriodRange = (): { from?: string; to?: string } => {
+  const now = new Date()
+  if (revenuePeriod.value === 'month') {
+    return {
+      from: toLocalDateTime(new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0)),
+      to: toLocalDateTime(now)
+    }
+  }
+  if (revenuePeriod.value === 'prevMonth') {
+    return {
+      from: toLocalDateTime(new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0)),
+      to: toLocalDateTime(new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59))
+    }
+  }
+  return {
+    from: customFrom.value ? toLocalDateTime(new Date(customFrom.value + 'T00:00:00')) : '',
+    to: customTo.value ? toLocalDateTime(new Date(customTo.value + 'T23:59:59')) : ''
+  }
+}
+
+const revenuePeriodLabel = computed(() => {
+  const now = new Date()
+  const months = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre']
+  if (revenuePeriod.value === 'month') {
+    return `${months[now.getMonth()]} ${now.getFullYear()}`
+  }
+  if (revenuePeriod.value === 'prevMonth') {
+    const d = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+    return `${months[d.getMonth()]} ${d.getFullYear()}`
+  }
+  return customFrom.value && customTo.value ? `Du ${customFrom.value} au ${customTo.value}` : 'Période personnalisée'
+})
+
+const selectRevenuePeriod = (p: RevenuePeriod) => {
+  revenuePeriod.value = p
+  revenueMenuOwner.value = null
+  loadRevenue()
+}
+
+const applyCustomPeriod = () => {
+  if (!customFrom.value || !customTo.value) return
+  revenueMenuOwner.value = null
+  loadRevenue()
+}
+
+const loadRevenue = async () => {
+  if (!authStore.isAdmin) return
+  loadingRevenue.value = true
+  try {
+    const range = getPeriodRange()
+    const data = await dashboardApi.getStats(range)
+    if (stats.value) {
+      stats.value.totalRevenue = data.kpis?.totalRevenue ?? 0
+      stats.value.netProfit = data.kpis?.netProfit ?? 0
+    }
+  } catch (err) {
+    console.error('Failed to load revenue for period', err)
+  } finally {
+    loadingRevenue.value = false
+  }
+}
+
+const onDocClick = (e: MouseEvent) => {
+  const target = e.target as HTMLElement
+  if (revenueMenuOwner.value && !target.closest('.revenue-period-menu')) {
+    revenueMenuOwner.value = null
+  }
+}
 
 // Animation State for Count-Up
 const displayStats = reactive({
@@ -377,7 +508,7 @@ const kpis = computed(() => {
   ]
   if (authStore.isAdmin) {
     base.push(
-      { label: 'dashboard.revenue', value: stats.value.totalRevenue || 0, icon: DollarSign, color: 'text-indigo-600', bg: 'bg-indigo-50  border-indigo-100 ', type: 'currency', trend: '+14.2%', path: generateSparklinePath(history.value.map(h => h.revenue)) },
+      { label: 'dashboard.revenue', value: stats.value.totalRevenue || 0, icon: DollarSign, color: 'text-indigo-600', bg: 'bg-indigo-50  border-indigo-100 ', type: 'currency', path: generateSparklinePath(history.value.map(h => h.revenue)) },
       { label: 'dashboard.profit', value: stats.value.netProfit || 0, icon: Wallet, color: 'text-rose-600', bg: 'bg-rose-50  border-rose-100 ', type: 'currency', path: generateSparklinePath(history.value.map(h => h.profit)) }
     )
   }
@@ -435,7 +566,7 @@ const getStatusBadgeClasses = (status: string) => {
 const loadDashboardData = async () => {
   try {
     const [dashData] = await Promise.all([
-      dashboardApi.getStats(),
+      dashboardApi.getStats(getPeriodRange()),
       fetchLiveRates()
     ])
     stats.value = dashData.kpis || {}
@@ -453,8 +584,13 @@ const loadDashboardData = async () => {
 
 onMounted(async () => {
   loading.value = true
+  document.addEventListener('click', onDocClick)
   await loadDashboardData()
   loading.value = false
+})
+
+onUnmounted(() => {
+  document.removeEventListener('click', onDocClick)
 })
 </script>
 

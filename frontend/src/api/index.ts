@@ -40,7 +40,7 @@ export const userApi = {
 };
 
 export const dashboardApi = {
-  getStats: () => api.get('/dashboard').then(res => res.data),
+  getStats: (params?: any) => api.get('/dashboard', { params }).then(res => res.data),
   getAppVersion: () => api.get('/version').then(res => res.data),
 };
 
