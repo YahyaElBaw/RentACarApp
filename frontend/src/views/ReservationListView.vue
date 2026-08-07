@@ -148,11 +148,11 @@
                       <CheckCircle2 class="w-4 h-4 stroke-[2.5]" />
                     </Button>
                     <Button
-                      v-if="authStore.isAdmin && res.status === 'confirmed'"
+                      v-if="authStore.isAdmin && res.status === 'confirmed' && !res.contrat"
                       variant="secondary"
                       size="icon"
                       @click.stop="openContractRefDialog(res)"
-                      title="Convertir en Contrat"
+                      title="Planifier Contrat"
                       class="h-9 w-9 text-indigo-500 hover:text-white hover:bg-indigo-500 rounded-xl transition-all"
                     >
                       <FileText class="w-4 h-4 stroke-[2.5]" />
@@ -242,7 +242,7 @@
               </p>
               <div class="flex items-center gap-4">
                 <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-100 to-indigo-200 flex items-center justify-center flex-shrink-0">
-                  <span class="text-sm font-black text-indigo-700">{{ initials(selectedReservation.client || selectedReservation.clients?.[0]) }}</span>
+                  <span class="text-sm font-black text-indigo-700">{{ initials(selectedReservation) }}</span>
                 </div>
                 <div>
                   <p class="font-black text-slate-900 text-lg uppercase tracking-tight">
@@ -346,14 +346,14 @@
 
           <!-- Panel Footer Actions -->
           <div class="border-t border-slate-100 p-6 space-y-3 flex-shrink-0">
-            <!-- Convert to Contract (confirmed only) -->
+            <!-- Planifier Contrat (confirmed only and if no contract yet) -->
             <Button
-              v-if="authStore.isAdmin && selectedReservation.status === 'confirmed'"
+              v-if="authStore.isAdmin && selectedReservation.status === 'confirmed' && !selectedReservation.contrat"
               @click="openContractRefDialog(selectedReservation)"
               class="w-full h-12 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-2xl uppercase tracking-widest text-[10px] flex items-center justify-center gap-3 shadow-lg shadow-indigo-200 transition-all active:scale-95"
             >
               <FileText class="w-4 h-4" />
-              Convertir en Contrat
+              Planifier Contrat
             </Button>
 
             <!-- Confirm (pending only) -->
@@ -387,11 +387,14 @@
       <DialogContent class="sm:max-w-md bg-white border-none shadow-2xl rounded-[2rem] p-8 max-h-[90vh] overflow-y-auto no-scrollbar">
         <DialogHeader class="mb-4">
           <DialogTitle class="text-xl font-black text-slate-900 uppercase italic tracking-tighter">Numéro du <span class="text-indigo-600">Contrat</span></DialogTitle>
-          <p class="text-[10px] font-bold text-slate-400 tracking-widest uppercase">Dernière étape avant la création</p>
+          <p class="text-[10px] font-bold text-slate-400 tracking-widest uppercase">Obligatoire pour planifier le contrat</p>
         </DialogHeader>
         <div class="space-y-4">
-          <Input v-model="contractRefInput" placeholder="Ex: C-000123" class="h-14 bg-slate-50 border-slate-200 text-lg font-black uppercase text-center rounded-2xl" autofocus />
-          <Button @click="proceedToContract" :disabled="!contractRefInput" class="w-full h-14 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-2xl uppercase tracking-widest text-xs">Transférer vers Contrat</Button>
+          <Input v-model="contractRefInput" placeholder="Ex: CTR-2026-001" class="h-14 bg-slate-50 border-slate-200 text-lg font-black uppercase text-center rounded-2xl" autofocus />
+          <div class="flex gap-2">
+            <Button variant="ghost" @click="showContractRefDialog = false" class="flex-1 h-12 uppercase text-[10px] tracking-widest font-black text-slate-500 rounded-xl">Annuler</Button>
+            <Button @click="proceedToContract" :disabled="!contractRefInput || !contractRefInput.trim()" class="flex-1 h-12 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-xl uppercase tracking-widest text-xs">Planifier Contrat</Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
@@ -984,6 +987,11 @@ const deleteReservation = async (id: string) => {
 };
 
 const openContractRefDialog = (res: any) => {
+  if (!res) return;
+  if (res.contrat) {
+    alert('Cette réservation a déjà été planifiée avec un contrat.');
+    return;
+  }
   selectedReservation.value = res;
   if (!res.car) {
     openAssignCarDialog();
@@ -994,7 +1002,11 @@ const openContractRefDialog = (res: any) => {
 };
 
 const proceedToContract = () => {
-  if (!selectedReservation.value || !contractRefInput.value) return;
+  const numContrat = contractRefInput.value ? contractRefInput.value.trim() : '';
+  if (!selectedReservation.value || !numContrat) {
+    alert('Le numéro de contrat est obligatoire pour planifier le contrat.');
+    return;
+  }
   const res = selectedReservation.value;
   router.push({
     name: 'contrat-new',
@@ -1006,7 +1018,7 @@ const proceedToContract = () => {
       startTime: res.startDate ? new Date(res.startDate).toLocaleTimeString('en-GB') : undefined,
       endTime: res.endDate ? new Date(res.endDate).toLocaleTimeString('en-GB') : undefined,
       reservationId: res._id,
-      contractNumber: contractRefInput.value
+      contractNumber: numContrat
     }
   });
   showContractRefDialog.value = false;

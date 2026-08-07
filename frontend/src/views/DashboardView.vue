@@ -142,50 +142,256 @@
       </Button>
     </div>
 
-    <!-- Daily Actions Section -->
-
-    <!-- Daily Actions Section -->
+    <!-- Daily Actions / Monthly Calendar Section -->
     <div class="space-y-6">
       <Card class="border border-slate-100 shadow-2xl shadow-slate-200/50 bg-white rounded-[2.5rem] overflow-hidden">
-        <CardHeader class="p-8 pb-4 flex flex-row items-center justify-between">
+        <CardHeader class="p-8 pb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div class="space-y-1">
             <h2 class="text-2xl font-black text-slate-900 uppercase tracking-tight flex items-center gap-3">
-              Actions du <span class="text-indigo-600 italic">Jour</span>
-              <span class="relative flex h-3 w-3">
-                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span class="relative inline-flex rounded-full h-3 w-3 bg-emerald-500 border border-white"></span>
-              </span>
+              <template v-if="dashboardViewMode === 'today'">
+                Actions du <span class="text-indigo-600 italic">Jour</span>
+                <span class="relative flex h-3 w-3">
+                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span class="relative inline-flex rounded-full h-3 w-3 bg-emerald-500 border border-white"></span>
+                </span>
+              </template>
+              <template v-else>
+                Calendrier <span class="text-indigo-600 italic">Mensuel</span>
+                <Calendar class="w-6 h-6 text-indigo-600" />
+              </template>
             </h2>
-            <CardDescription class="text-[9px] font-black text-slate-400 uppercase tracking-widest pl-0.5">Planning opérationnel de départ et retour (Aujourd'hui)</CardDescription>
+            <CardDescription class="text-[9px] font-black text-slate-400 uppercase tracking-widest pl-0.5">
+              {{ dashboardViewMode === 'today' ? "Planning opérationnel de départ et retour (Aujourd'hui)" : "Planning mensuel des réservations et contrats par véhicule" }}
+            </CardDescription>
           </div>
-          <div class="flex items-center gap-4">
-             <div class="flex items-center gap-2 bg-slate-50 border border-slate-100 px-4 py-2 rounded-xl">
-                <div class="w-2 h-2 rounded-full bg-indigo-500"></div>
-                <span class="text-[9px] font-black text-slate-600 uppercase tracking-widest">Temps Réel</span>
+
+          <div class="flex flex-wrap items-center gap-3">
+             <!-- Action Filter Tabs for Today (Toutes, Départs, Retours) -->
+             <div v-if="dashboardViewMode === 'today'" class="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+                <button
+                   @click="todayActionFilter = 'all'"
+                   :class="['px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all', todayActionFilter === 'all' ? 'bg-white shadow text-slate-900' : 'text-slate-500 hover:text-slate-900']"
+                >
+                   Toutes ({{ todayActions.length }})
+                </button>
+                <button
+                   @click="todayActionFilter = 'départ'"
+                   :class="['px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5', todayActionFilter === 'départ' ? 'bg-indigo-600 text-white shadow font-black' : 'text-slate-600 hover:text-indigo-600 hover:bg-indigo-50']"
+                >
+                   <span class="w-2 h-2 rounded-full bg-indigo-400"></span>
+                   Départs ({{ todayActions.filter(a => a.type?.toLowerCase() === 'départ').length }})
+                </button>
+                <button
+                   @click="todayActionFilter = 'retour'"
+                   :class="['px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5', todayActionFilter === 'retour' ? 'bg-emerald-600 text-white shadow font-black' : 'text-slate-600 hover:text-emerald-600 hover:bg-emerald-50']"
+                >
+                   <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                   Retours ({{ todayActions.filter(a => a.type?.toLowerCase() === 'retour').length }})
+                </button>
              </div>
-             <Button variant="ghost" class="h-10 px-6 rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-indigo-50 hover:text-indigo-600 transition-all" @click="router.push('/contrats')">Tous les Contrats</Button>
+
+             <!-- Calendar Toggle Button (Replaces "Tous les Contrats") -->
+             <Button
+                variant="outline"
+                @click="dashboardViewMode = dashboardViewMode === 'today' ? 'calendar' : 'today'"
+                class="h-10 px-5 rounded-xl font-black uppercase text-[10px] tracking-widest flex items-center gap-2 transition-all shadow-sm border-indigo-100 bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white"
+             >
+                <component :is="dashboardViewMode === 'today' ? Calendar : List" class="w-4 h-4" />
+                <span>{{ dashboardViewMode === 'today' ? 'Vue Calendrier' : 'Actions du Jour' }}</span>
+             </Button>
           </div>
         </CardHeader>
+
         <CardContent class="p-0">
-          <div v-if="loading" class="p-20 flex flex-col items-center justify-center space-y-4">
+          <div v-if="loading || (dashboardViewMode === 'calendar' && loadingCalendar)" class="p-20 flex flex-col items-center justify-center space-y-4">
              <Loader2 class="w-10 h-10 text-indigo-200 animate-spin" />
              <p class="text-[10px] font-black text-slate-300 uppercase tracking-[0.3em]">Synchronisation de l'agenda...</p>
           </div>
-          <template v-else-if="todayActions && todayActions.length">
+
+          <!-- BIG MONTHLY CALENDAR VIEW -->
+          <div v-else-if="dashboardViewMode === 'calendar'" class="p-6 space-y-6">
+            <!-- Calendar Controls & Filters Header -->
+            <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-slate-50/80 p-4 rounded-2xl border border-slate-100">
+              <!-- Month Navigation -->
+              <div class="flex items-center gap-3">
+                <div class="flex items-center bg-white rounded-xl shadow-sm border border-slate-200 p-1">
+                  <Button variant="ghost" size="icon" class="w-8 h-8 rounded-lg text-slate-600 hover:bg-slate-100" @click="prevCalendarMonth">
+                    <ChevronLeft class="w-4 h-4" />
+                  </Button>
+                  <span class="px-4 text-xs font-black text-slate-900 uppercase tracking-wider min-w-[140px] text-center italic">
+                    {{ calendarMonthYearLabel }}
+                  </span>
+                  <Button variant="ghost" size="icon" class="w-8 h-8 rounded-lg text-slate-600 hover:bg-slate-100" @click="nextCalendarMonth">
+                    <ChevronRight class="w-4 h-4" />
+                  </Button>
+                </div>
+                <Button variant="outline" size="sm" @click="resetCalendarToToday" class="h-10 px-3 rounded-xl text-[9px] font-black uppercase tracking-widest bg-white border-slate-200 text-slate-600 hover:bg-slate-100">
+                  Aujourd'hui
+                </Button>
+              </div>
+
+              <!-- Filters: Car Filter & Action Filter -->
+              <div class="flex flex-wrap items-center gap-4">
+                <!-- Vehicle Filter -->
+                <div class="flex items-center gap-2">
+                  <label class="text-[9px] font-black uppercase tracking-widest text-slate-400">Véhicule:</label>
+                  <select
+                    v-model="calendarCarFilter"
+                    class="h-10 px-3 rounded-xl bg-white border border-slate-200 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-sm transition-all cursor-pointer"
+                  >
+                    <option value="all">Tous les véhicules ({{ allCars.length }})</option>
+                    <option v-for="car in allCars" :key="car._id" :value="car._id">
+                      {{ car.brand }} {{ car.model }} — N° Série: {{ car.matricule || 'Sans plaque' }}
+                    </option>
+                  </select>
+                </div>
+
+                <!-- Action Type Filter (Reservation = Yellow, Contrat = Green) -->
+                <div class="flex items-center gap-1 bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
+                  <button
+                    @click="calendarActionFilter = 'all'"
+                    :class="['px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all', calendarActionFilter === 'all' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-500 hover:text-slate-900']"
+                  >
+                    Toutes
+                  </button>
+
+                  <!-- Reservation Button (Yellow Color) -->
+                  <button
+                    @click="calendarActionFilter = 'reservation'"
+                    :class="[
+                      'px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5',
+                      calendarActionFilter === 'reservation' ? 'bg-amber-400 text-amber-950 shadow-md font-black' : 'text-slate-600 hover:text-amber-600 hover:bg-amber-50'
+                    ]"
+                  >
+                    <span class="w-2.5 h-2.5 rounded-full bg-amber-500 border border-amber-600/30"></span>
+                    <span>Réservation</span>
+                  </button>
+
+                  <!-- Contrat Button (Green Color) -->
+                  <button
+                    @click="calendarActionFilter = 'contrat'"
+                    :class="[
+                      'px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5',
+                      calendarActionFilter === 'contrat' ? 'bg-emerald-600 text-white shadow-md font-black' : 'text-slate-600 hover:text-emerald-600 hover:bg-emerald-50'
+                    ]"
+                  >
+                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 border border-white"></span>
+                    <span>Contrat</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Big Calendar Grid -->
+            <div class="border border-slate-200 rounded-3xl overflow-hidden shadow-sm bg-slate-200">
+              <!-- Weekday Headers -->
+              <div class="grid grid-cols-7 bg-slate-900 text-white text-center font-black text-[10px] tracking-[0.2em] py-3 uppercase">
+                <div>Lun</div>
+                <div>Mar</div>
+                <div>Mer</div>
+                <div>Jeu</div>
+                <div>Ven</div>
+                <div>Sam</div>
+                <div>Dim</div>
+              </div>
+
+              <!-- Days Grid -->
+              <div class="grid grid-cols-7 gap-px bg-slate-200">
+                <div
+                  v-for="day in calendarGrid"
+                  :key="day.dateStr"
+                  @click="openDayModal(day)"
+                  :class="[
+                    'min-h-[130px] p-2 flex flex-col justify-start gap-1 transition-all duration-200 relative group cursor-pointer',
+                    day.isCurrentMonth ? 'bg-white hover:bg-indigo-50/30' : 'bg-slate-50/70 text-slate-300',
+                    day.isToday ? 'ring-2 ring-indigo-600 ring-inset bg-indigo-50/40' : ''
+                  ]"
+                >
+                  <!-- Day Header -->
+                  <div class="flex items-center justify-between w-full mb-1">
+                    <span
+                      :class="[
+                        'text-xs font-black tracking-tight',
+                        day.isToday
+                          ? 'w-6 h-6 rounded-full bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-200'
+                          : (day.isCurrentMonth ? 'text-slate-700' : 'text-slate-300')
+                      ]"
+                    >
+                      {{ day.dayNumber }}
+                    </span>
+                    <span v-if="getDayEvents(day.dateStr).length > 0" class="text-[8px] font-black text-slate-400 uppercase tracking-tighter">
+                      {{ getDayEvents(day.dateStr).length }} act.
+                    </span>
+                  </div>
+
+                  <!-- Events in Day Cell -->
+                  <div class="flex-1 flex flex-col gap-1 overflow-hidden">
+                    <div
+                      v-for="evt in getDayEvents(day.dateStr).slice(0, 3)"
+                      :key="evt.id + evt.category"
+                      @click.stop="navigateToEvent(evt)"
+                      :class="[
+                        'px-2 py-1 rounded-lg border text-[9px] font-black uppercase tracking-tight flex items-center gap-1.5 transition-all duration-200 truncate cursor-pointer shadow-2xs hover:scale-[1.02]',
+                        evt.category === 'reservation'
+                          ? 'bg-amber-400/20 border-amber-300 text-amber-950 hover:bg-amber-400/40'
+                          : 'bg-emerald-500/20 border-emerald-300 text-emerald-950 hover:bg-emerald-500/40'
+                      ]"
+                      :title="`${evt.category === 'contrat' ? 'Contrat' : 'Réservation'}: ${evt.carBrandModel} (${evt.carMatricule}) - ${evt.clientName}`"
+                    >
+                      <!-- Color Indicator Dot: Yellow for Reservation, Green for Contrat -->
+                      <span
+                        :class="[
+                          'w-2 h-2 rounded-full shrink-0 shadow-2xs',
+                          evt.category === 'reservation' ? 'bg-amber-500' : 'bg-emerald-600'
+                        ]"
+                      ></span>
+
+                      <span class="truncate font-black flex items-center gap-1">
+                        <span>{{ evt.carBrandModel }}</span>
+                        <span v-if="evt.carMatricule && evt.carMatricule !== 'Sans Plaque'" class="text-[7.5px] font-mono text-slate-800 bg-white/70 px-1 rounded border border-slate-300 shrink-0">
+                          {{ evt.carMatricule }}
+                        </span>
+                      </span>
+
+                      <!-- Start/End Badge -->
+                      <span v-if="evt.startDateStr === day.dateStr" class="ml-auto text-[7px] font-black opacity-75 shrink-0 px-1 rounded bg-black/10">
+                        DEP
+                      </span>
+                      <span v-else-if="evt.endDateStr === day.dateStr" class="ml-auto text-[7px] font-black opacity-75 shrink-0 px-1 rounded bg-black/10">
+                        RET
+                      </span>
+                    </div>
+
+                    <!-- More indicator -->
+                    <div
+                      v-if="getDayEvents(day.dateStr).length > 3"
+                      class="text-[8px] font-black text-indigo-600 uppercase tracking-widest pt-0.5 text-center hover:underline"
+                    >
+                      + {{ getDayEvents(day.dateStr).length - 3 }} autre(s)
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- TODAY ACTIONS TABLE (DEFAULT MODE) -->
+          <template v-else-if="filteredTodayActions && filteredTodayActions.length">
             <Table>
               <TableHeader>
                 <TableRow class="bg-slate-50/50 border-b border-slate-100">
-                  <TableHead class="pl-10 py-5 text-slate-400 font-black text-[9px] tracking-[0.3em] uppercase">TYPE & HEURE</TableHead>
+                  <TableHead class="pl-10 py-5 text-slate-400 font-black text-[9px] tracking-[0.3em] uppercase">ACTION & HEURE</TableHead>
                   <TableHead class="text-slate-400 font-black text-[9px] tracking-[0.3em] uppercase">CLIENTS & DOSSIER</TableHead>
-                  <TableHead class="text-slate-400 font-black text-[9px] tracking-[0.3em] uppercase">VÉHICULE & MATRICULE</TableHead>
+                  <TableHead class="text-slate-400 font-black text-[9px] tracking-[0.3em] uppercase">VÉHICULE & N° SÉRIE</TableHead>
                   <TableHead class="pr-10 text-right text-slate-400 font-black text-[9px] tracking-[0.3em] uppercase">STATUT</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                <TableRow v-for="action in todayActions" :key="action.id + action.type" class="group hover:bg-slate-50/50 transition-all duration-500 cursor-pointer border-slate-100" @click="router.push(action.category === 'contrat' ? `/contrats/${action.id}` : `/reservations?id=${action.id}`)">
+                <TableRow v-for="action in filteredTodayActions" :key="action.id + action.type" class="group hover:bg-slate-50/50 transition-all duration-500 cursor-pointer border-slate-100" @click="router.push(action.category === 'contrat' ? `/contrats/${action.id}` : `/reservations?id=${action.id}`)">
                   <TableCell class="pl-10 py-6">
                     <div class="flex items-center gap-4">
-                       <Badge :variant="action.type === 'départ' ? 'default' : 'secondary'" :class="['h-10 px-4 rounded-xl font-black uppercase text-[10px] tracking-widest border-2', action.type === 'départ' ? 'bg-indigo-600 border-indigo-100' : 'bg-slate-50 border-slate-200 text-slate-600 group-hover:bg-slate-900 group-hover:text-white transition-colors']">
+                       <Badge :class="['h-10 px-4 rounded-xl font-black uppercase text-[10px] tracking-widest border-2 flex items-center gap-2 shadow-2xs', action.type === 'départ' ? 'bg-indigo-600 text-white border-indigo-200' : 'bg-emerald-600 text-white border-emerald-200']">
+                          <span :class="['w-2 h-2 rounded-full', action.type === 'départ' ? 'bg-indigo-300' : 'bg-emerald-300']"></span>
                           {{ action.type }}
                        </Badge>
                        <div class="flex flex-col">
@@ -212,8 +418,8 @@
                           <CarIcon v-else class="w-5 h-5 text-slate-300" />
                        </div>
                        <div class="flex flex-col">
-                         <span class="font-black text-slate-900 uppercase text-xs italic tracking-tight">{{ action.car?.brand }} {{ action.car?.model }}</span>
-                         <span class="font-mono text-[9px] font-black text-indigo-400 uppercase">{{ action.car?.matricule || 'Sans Plaque' }}</span>
+                          <span class="font-black text-slate-900 uppercase text-xs italic tracking-tight">{{ action.car?.brand }} {{ action.car?.model }}</span>
+                          <span class="font-mono text-[9px] font-black text-indigo-600 uppercase bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100 w-fit mt-0.5">N° Série: {{ action.car?.matricule || 'Sans Plaque' }}</span>
                        </div>
                     </div>
                   </TableCell>
@@ -239,6 +445,106 @@
         </CardContent>
       </Card>
     </div>
+
+    <!-- Day Action Details Modal Dialog -->
+    <Dialog v-model:open="showDayModal">
+      <DialogContent v-if="selectedDayData" class="sm:max-w-xl bg-white border-none shadow-2xl rounded-[2.5rem] p-8 overflow-y-auto max-h-[85vh] no-scrollbar">
+        <div class="space-y-6">
+          <div class="flex items-center justify-between border-b border-slate-100 pb-4">
+            <div>
+              <DialogTitle class="text-2xl font-black text-slate-900 uppercase tracking-tight">
+                Actions du <span class="text-indigo-600 italic">{{ selectedDayData.dateFormatted }}</span>
+              </DialogTitle>
+              <p class="text-[9px] font-black uppercase tracking-widest text-slate-400 mt-0.5">
+                {{ selectedDayData.events.length }} action(s) répertoriée(s) pour cette date
+              </p>
+            </div>
+          </div>
+
+          <div class="space-y-3">
+            <div
+              v-for="evt in selectedDayData.events"
+              :key="evt.id + evt.category"
+              @click="navigateToEvent(evt)"
+              :class="[
+                'p-4 rounded-2xl border-2 transition-all cursor-pointer flex items-center justify-between gap-4 group hover:shadow-lg',
+                evt.category === 'reservation'
+                  ? 'border-amber-200 bg-amber-50/40 hover:border-amber-400'
+                  : 'border-emerald-200 bg-emerald-50/40 hover:border-emerald-400'
+              ]"
+            >
+              <div class="flex items-center gap-4">
+                <div
+                  :class="[
+                    'w-12 h-12 rounded-xl flex items-center justify-center font-black text-xs shadow-md shrink-0 uppercase',
+                    evt.category === 'reservation' ? 'bg-amber-400 text-amber-950' : 'bg-emerald-600 text-white'
+                  ]"
+                >
+                  {{ evt.category === 'reservation' ? 'RES' : 'CTR' }}
+                </div>
+
+                <div class="flex flex-col">
+                  <div class="flex items-center gap-2">
+                    <span class="font-black text-slate-900 uppercase text-sm italic group-hover:text-indigo-600 transition-colors">
+                      {{ evt.carBrandModel }}
+                    </span>
+                    <Badge variant="outline" class="text-[8px] font-black uppercase border-slate-200">
+                      {{ evt.carMatricule }}
+                    </Badge>
+                  </div>
+
+                  <span class="text-xs font-bold text-slate-600 uppercase mt-0.5">
+                    Client: <span class="font-black text-slate-900">{{ evt.clientName }}</span>
+                  </span>
+
+                  <div class="flex items-center gap-3 text-[9px] font-bold text-slate-400 mt-1">
+                    <span>Du {{ evt.startDateStr }}</span>
+                    <span>•</span>
+                    <span>Au {{ evt.endDateStr }}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="flex items-center gap-2">
+                <!-- Action Type: Départ / Retour / En cours -->
+                <Badge
+                  v-if="selectedDayData.dateStr === evt.startDateStr"
+                  class="text-[8px] font-black uppercase px-3 py-1 rounded-full bg-indigo-600 text-white border border-indigo-500 shadow-xs"
+                >
+                  DÉPART
+                </Badge>
+                <Badge
+                  v-else-if="selectedDayData.dateStr === evt.endDateStr"
+                  class="text-[8px] font-black uppercase px-3 py-1 rounded-full bg-rose-600 text-white border border-rose-500 shadow-xs"
+                >
+                  RETOUR
+                </Badge>
+                <Badge
+                  v-else
+                  class="text-[8px] font-black uppercase px-3 py-1 rounded-full bg-slate-100 text-slate-600 border border-slate-200"
+                >
+                  EN COURS
+                </Badge>
+
+                <!-- Category: Contrat / Réservation -->
+                <Badge
+                  :class="[
+                    'text-[8px] font-black uppercase px-3 py-1 rounded-full border',
+                    evt.category === 'reservation'
+                      ? 'bg-amber-100 text-amber-800 border-amber-300'
+                      : 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                  ]"
+                >
+                  {{ evt.category === 'reservation' ? 'RÉSERVATION' : 'CONTRAT' }}
+                </Badge>
+
+                <ArrowRight class="w-5 h-5 text-slate-400 group-hover:text-indigo-600 group-hover:translate-x-1 transition-all" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
 
     <!-- Floating Converter Button -->
     <Teleport to="body">
@@ -306,13 +612,14 @@
 import { ref, onMounted, onUnmounted, computed, reactive } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { dashboardApi, getImageUrl } from '@/api'
+import { dashboardApi, contratApi, reservationApi, carApi, getImageUrl } from '@/api'
 import { useAuthStore } from '@/stores/auth'
 import { 
   Car as CarIcon, FileText, Users, Calendar, Wallet, 
   TrendingUp, CheckCircle2, 
   DollarSign, Calculator, CalendarRange, Check,
-  Search, Loader2, ShieldAlert, Bell
+  Search, Loader2, ShieldAlert, Bell,
+  ChevronLeft, ChevronRight, List, ArrowRight
 } from 'lucide-vue-next'
 import { 
   Table, TableHeader, TableBody, TableHead, TableRow, TableCell 
@@ -335,6 +642,31 @@ const hoveredKpi = ref<number | null>(null)
 const history = ref<any[]>([])
 const showConverterModal = ref(false)
 
+// Dashboard View Mode
+const dashboardViewMode = ref<'today' | 'calendar'>('today')
+
+// Today Actions State & Filter
+const todayActionFilter = ref<'all' | 'départ' | 'retour'>('all')
+
+const filteredTodayActions = computed(() => {
+  if (!todayActions.value) return []
+  if (todayActionFilter.value === 'all') return todayActions.value
+  return todayActions.value.filter(a => a.type?.toLowerCase() === todayActionFilter.value)
+})
+
+// Big Calendar State
+const allContrats = ref<any[]>([])
+const allReservations = ref<any[]>([])
+const allCars = ref<any[]>([])
+const loadingCalendar = ref(false)
+const calendarCurrentDate = ref(new Date())
+const calendarCarFilter = ref<string>('all')
+const calendarActionFilter = ref<'all' | 'reservation' | 'contrat'>('all')
+
+// Selected Day Modal State
+const selectedDayData = ref<{ dateStr: string; dateFormatted: string; events: any[] } | null>(null)
+const showDayModal = ref(false)
+
 // Revenue Period State
 type RevenuePeriod = 'month' | 'prevMonth' | 'custom'
 const revenuePeriod = ref<RevenuePeriod>('month')
@@ -346,6 +678,208 @@ const loadingRevenue = ref(false)
 const isPeriodKpi = (label: string) => label === 'dashboard.revenue' || label === 'dashboard.profit'
 
 const toLocalDateTime = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}T${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`
+
+const formatDateStr = (d: Date) => {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+const calendarMonthYearLabel = computed(() => {
+  const months = [
+    'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+    'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
+  ]
+  const d = calendarCurrentDate.value
+  return `${months[d.getMonth()]} ${d.getFullYear()}`
+})
+
+const prevCalendarMonth = () => {
+  const d = calendarCurrentDate.value
+  calendarCurrentDate.value = new Date(d.getFullYear(), d.getMonth() - 1, 1)
+}
+
+const nextCalendarMonth = () => {
+  const d = calendarCurrentDate.value
+  calendarCurrentDate.value = new Date(d.getFullYear(), d.getMonth() + 1, 1)
+}
+
+const resetCalendarToToday = () => {
+  calendarCurrentDate.value = new Date()
+}
+
+interface CalendarGridDay {
+  date: Date
+  dateStr: string
+  dayNumber: number
+  isCurrentMonth: boolean
+  isToday: boolean
+}
+
+const calendarGrid = computed<CalendarGridDay[]>(() => {
+  const year = calendarCurrentDate.value.getFullYear()
+  const month = calendarCurrentDate.value.getMonth()
+
+  const firstDayOfMonth = new Date(year, month, 1)
+  const lastDayOfMonth = new Date(year, month + 1, 0)
+
+  let startDayOfWeek = firstDayOfMonth.getDay() - 1
+  if (startDayOfWeek < 0) startDayOfWeek = 6
+
+  const todayStr = formatDateStr(new Date())
+  const days: CalendarGridDay[] = []
+
+  const prevMonthLastDay = new Date(year, month, 0).getDate()
+  for (let i = startDayOfWeek - 1; i >= 0; i--) {
+    const d = new Date(year, month - 1, prevMonthLastDay - i)
+    const dateStr = formatDateStr(d)
+    days.push({
+      date: d,
+      dateStr,
+      dayNumber: d.getDate(),
+      isCurrentMonth: false,
+      isToday: dateStr === todayStr
+    })
+  }
+
+  for (let day = 1; day <= lastDayOfMonth.getDate(); day++) {
+    const d = new Date(year, month, day)
+    const dateStr = formatDateStr(d)
+    days.push({
+      date: d,
+      dateStr,
+      dayNumber: day,
+      isCurrentMonth: true,
+      isToday: dateStr === todayStr
+    })
+  }
+
+  const remaining = 7 - (days.length % 7)
+  if (remaining < 7) {
+    for (let i = 1; i <= remaining; i++) {
+      const d = new Date(year, month + 1, i)
+      const dateStr = formatDateStr(d)
+      days.push({
+        date: d,
+        dateStr,
+        dayNumber: i,
+        isCurrentMonth: false,
+        isToday: dateStr === todayStr
+      })
+    }
+  }
+
+  return days
+})
+
+const calendarEvents = computed(() => {
+  const events: any[] = []
+
+  // Process Contrats (exclude cancelled)
+  for (const c of allContrats.value) {
+    if (!c.startDate || !c.endDate) continue
+    const status = String(c.status || 'active').toLowerCase()
+    if (status === 'cancelled' || status === 'annulé') continue
+
+    const carObj = c.car || {}
+    const clientsList = Array.isArray(c.clients) ? c.clients : []
+    const firstClient = clientsList[0] || null
+    const clientName = firstClient
+      ? `${firstClient.lastName || ''} ${firstClient.firstName || ''}`.trim()
+      : (c.clientName || 'Client')
+
+    const startD = new Date(c.startDate)
+    const endD = new Date(c.endDate)
+
+    events.push({
+      id: c._id || c.id,
+      category: 'contrat',
+      reference: c.reference || 'CTR',
+      carId: carObj._id || carObj.id,
+      carBrandModel: carObj.brand ? `${carObj.brand} ${carObj.model || ''}`.trim() : 'Véhicule',
+      carMatricule: carObj.matricule || 'Sans Plaque',
+      clientName,
+      startDateStr: formatDateStr(startD),
+      endDateStr: formatDateStr(endD),
+      status: c.status || 'active',
+      raw: c
+    })
+  }
+
+  // Process Reservations (exclude cancelled and pending/planifiée)
+  for (const r of allReservations.value) {
+    if (!r.startDate || !r.endDate) continue
+    const status = String(r.status || 'pending').toLowerCase()
+    if (status === 'cancelled' || status === 'annulé' || status === 'pending' || status === 'planifié' || status === 'planifiee') continue
+
+    const carObj = r.car || {}
+    const clientsList = Array.isArray(r.clients) ? r.clients : []
+    const firstClient = clientsList[0] || null
+    const clientName = r.clientName || (firstClient ? `${firstClient.lastName || ''} ${firstClient.firstName || ''}`.trim() : 'Client')
+
+    const startD = new Date(r.startDate)
+    const endD = new Date(r.endDate)
+
+    events.push({
+      id: r._id || r.id,
+      category: 'reservation',
+      reference: 'RES',
+      carId: carObj._id || carObj.id,
+      carBrandModel: carObj.brand ? `${carObj.brand} ${carObj.model || ''}`.trim() : 'Non Assigné',
+      carMatricule: carObj.matricule || 'Sans Plaque',
+      clientName,
+      startDateStr: formatDateStr(startD),
+      endDateStr: formatDateStr(endD),
+      status: r.status || 'pending',
+      raw: r
+    })
+  }
+
+  return events
+})
+
+const filteredCalendarEvents = computed(() => {
+  return calendarEvents.value.filter(evt => {
+    if (calendarActionFilter.value !== 'all' && evt.category !== calendarActionFilter.value) {
+      return false
+    }
+    if (calendarCarFilter.value !== 'all') {
+      if (evt.carId !== calendarCarFilter.value) return false
+    }
+    return true
+  })
+})
+
+const getDayEvents = (dateStr: string) => {
+  return filteredCalendarEvents.value.filter(evt => {
+    return dateStr >= evt.startDateStr && dateStr <= evt.endDateStr
+  })
+}
+
+const openDayModal = (day: CalendarGridDay) => {
+  const events = getDayEvents(day.dateStr)
+  if (!events.length) return
+
+  const options: Intl.DateTimeFormatOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }
+  const formatted = day.date.toLocaleDateString('fr-FR', options)
+
+  selectedDayData.value = {
+    dateStr: day.dateStr,
+    dateFormatted: formatted.charAt(0).toUpperCase() + formatted.slice(1),
+    events
+  }
+  showDayModal.value = true
+}
+
+const navigateToEvent = (evt: any) => {
+  showDayModal.value = false
+  if (evt.category === 'contrat') {
+    router.push(`/contrats/${evt.id}`)
+  } else {
+    router.push(`/reservations?id=${evt.id}`)
+  }
+}
 
 const getPeriodRange = (): { from?: string; to?: string } => {
   const now = new Date()
@@ -562,12 +1096,30 @@ const getStatusBadgeClasses = (status: string) => {
   }
 };
 
+const loadCalendarData = async () => {
+  loadingCalendar.value = true
+  try {
+    const [contrats, reservations, cars] = await Promise.all([
+      contratApi.getAll(),
+      reservationApi.getAll(),
+      carApi.getAll()
+    ])
+    allContrats.value = contrats || []
+    allReservations.value = reservations || []
+    allCars.value = cars || []
+  } catch (err) {
+    console.error('Failed to load calendar data', err)
+  } finally {
+    loadingCalendar.value = false
+  }
+}
 
 const loadDashboardData = async () => {
   try {
     const [dashData] = await Promise.all([
       dashboardApi.getStats(getPeriodRange()),
-      fetchLiveRates()
+      fetchLiveRates(),
+      loadCalendarData()
     ])
     stats.value = dashData.kpis || {}
     alerts.value = dashData.alerts || []

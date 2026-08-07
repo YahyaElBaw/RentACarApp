@@ -272,6 +272,9 @@ onMounted(async () => {
     if (route.query.depositAmount) {
       form.depositAmount = Number(route.query.depositAmount);
     }
+    if (route.query.contractNumber) {
+      manualReference.value = (route.query.contractNumber as string).trim();
+    }
     
     // Auto-advance to last step if all critical data is provided
     if (selectedCar.value && selectedClients.value.length > 0) {
