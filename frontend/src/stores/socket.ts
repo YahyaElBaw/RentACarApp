@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { io, Socket } from 'socket.io-client';
 import { useAuthStore } from './auth';
+import { presenceApi } from '../api';
 
 export interface ActiveUser {
   socketId: string;
@@ -17,12 +18,13 @@ export const useSocketStore = defineStore('socket', () => {
   const onlineCount = ref(1);
   const onlineUsers = ref<ActiveUser[]>([]);
   const listeners = new Map<string, Set<Function>>();
+  let presenceTimer: ReturnType<typeof setInterval> | null = null;
 
   function connect() {
     if (socket.value && socket.value.connected) return;
 
     const authStore = useAuthStore();
-    const backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+    const backendUrl = import.meta.env.VITE_API_URL || 'https://rent-a-car-app-mu.vercel.app';
 
     socket.value = io(backendUrl, {
       transports: ['websocket', 'polling'],
@@ -89,6 +91,46 @@ export const useSocketStore = defineStore('socket', () => {
     };
   }
 
+  async function sendHeartbeat() {
+    try {
+      await presenceApi.heartbeat();
+    } catch (err) {
+      // ignore polling failures
+    }
+  }
+
+  async function refreshOnline() {
+    try {
+      const data = await presenceApi.online();
+      onlineCount.value = data.count || 1;
+      onlineUsers.value = (data.users || []).map((u: any) => ({
+        userId: u.userId,
+        name: u.name || '',
+        role: u.role || 'user',
+        connectedAt: u.lastSeen,
+      }));
+    } catch (err) {
+      // ignore polling failures
+    }
+  }
+
+  function startPresence() {
+    stopPresence();
+    sendHeartbeat();
+    refreshOnline();
+    presenceTimer = setInterval(() => {
+      sendHeartbeat();
+      refreshOnline();
+    }, 30_000);
+  }
+
+  function stopPresence() {
+    if (presenceTimer) {
+      clearInterval(presenceTimer);
+      presenceTimer = null;
+    }
+  }
+
   return {
     socket,
     isConnected,
@@ -98,5 +140,7 @@ export const useSocketStore = defineStore('socket', () => {
     identify,
     disconnect,
     onEvent,
+    startPresence,
+    stopPresence,
   };
 });

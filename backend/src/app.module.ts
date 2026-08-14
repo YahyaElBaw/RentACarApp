@@ -21,6 +21,7 @@ import { SettingModule } from './setting/setting.module';
 import { AgenceModule } from './agence/agence.module';
 import { LogModule } from './log/log.module';
 import { EventsModule } from './events/events.module';
+import { PresenceModule } from './presence/presence.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { EventsModule } from './events/events.module';
       }),
     }),
     EventsModule,
+    PresenceModule,
     SharedModule,
     CarModule,
     ClientModule,

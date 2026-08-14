@@ -2,7 +2,7 @@ import axios from 'axios';
 import router from '../router';
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3000',
+  baseURL: import.meta.env.VITE_API_URL || 'https://rent-a-car-app-mu.vercel.app',
 });
 
 api.interceptors.request.use((config) => {
@@ -140,10 +140,15 @@ export const agenceApi = {
   delete: (id: string, password?: string) => api.delete(`/agences/${id}`, { data: { password } }).then(res => res.data),
 };
 
+export const presenceApi = {
+  heartbeat: () => api.post('/presence/heartbeat').then(res => res.data),
+  online: () => api.get('/presence/online').then(res => res.data),
+};
+
 export const getImageUrl = (path: string) => {
   if (!path) return '';
   if (path.startsWith('http')) return path;
-  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+  const baseUrl = import.meta.env.VITE_API_URL || 'https://rent-a-car-app-mu.vercel.app';
   return `${baseUrl}${path.startsWith('/') ? '' : '/'}${path}`;
 };
 

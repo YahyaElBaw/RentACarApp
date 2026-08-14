@@ -69,6 +69,13 @@ const handleLogout = async () => {
 // Global Alerts Logic
 const alerts = ref<any[]>([])
 const showAlertsModal = ref(false)
+const showOnlineUsersModal = ref(false)
+
+const roleLabel = (r: string) => {
+  if (r === 'super_admin') return 'Super Admin'
+  if (r === 'admin') return 'Admin'
+  return 'Opérateur'
+}
 const appSettings = ref<any>(null)
 
 const fetchSettings = async () => {
@@ -147,6 +154,7 @@ onMounted(() => {
     fetchSettings()
     fetchAlerts()
     socketStore.connect()
+    socketStore.startPresence()
     alertInterval = setInterval(fetchAlerts, 60000 * 5) // Every 5 mins
   }
 })
@@ -156,6 +164,7 @@ onUnmounted(() => {
   window.removeEventListener('offline', handleOffline)
   window.removeEventListener('api-network-error', handleApiError)
   if (alertInterval) clearInterval(alertInterval)
+  socketStore.stopPresence()
   socketStore.disconnect()
 })
 
@@ -164,8 +173,10 @@ watch(isAuthenticated, (val) => {
     fetchSettings()
     fetchAlerts()
     socketStore.connect()
+    socketStore.startPresence()
     if (!alertInterval) alertInterval = setInterval(fetchAlerts, 60000 * 5)
   } else {
+    socketStore.stopPresence()
     socketStore.disconnect()
     if (alertInterval) {
       clearInterval(alertInterval)
@@ -467,16 +478,17 @@ watch(() => vidangeForm.mileageAtChange, (newVal) => {
            </div>
            
            <div class="flex items-center gap-4">
-              <!-- Active Operators Badge -->
-              <div v-if="authStore.isSuperAdmin" class="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 font-black text-[11px] shadow-sm">
-                <span class="relative flex h-2.5 w-2.5">
-                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
-                </span>
-                <span class="uppercase tracking-widest text-[9px] font-black">
-                  {{ socketStore.onlineCount }} Opérateur{{ socketStore.onlineCount > 1 ? 's' : '' }} en ligne
-                </span>
-              </div>
+               <!-- Active Operators Badge -->
+               <div v-if="authStore.isSuperAdmin" @click="showOnlineUsersModal = true"
+                 class="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 font-black text-[11px] shadow-sm cursor-pointer hover:bg-emerald-500/20 hover:scale-[1.03] active:scale-95 transition-all">
+                 <span class="relative flex h-2.5 w-2.5">
+                   <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                   <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                 </span>
+                 <span class="uppercase tracking-widest text-[9px] font-black">
+                   {{ socketStore.onlineCount }} Opérateur{{ socketStore.onlineCount > 1 ? 's' : '' }} en ligne
+                 </span>
+               </div>
 
               <!-- Global Notification Bell -->
               <button @click="showAlertsModal = true" class="relative group outline-none hover:scale-105 active:scale-95 transition-all">
@@ -557,6 +569,50 @@ watch(() => vidangeForm.mileageAtChange, (newVal) => {
           <div v-if="showAlertsModal" @click="showAlertsModal = false" class="fixed inset-0 bg-slate-900/10 backdrop-blur-[2px] z-[90]"></div>
        </transition>
     </Teleport>
+    <Dialog v-model:open="showOnlineUsersModal">
+      <DialogContent class="sm:max-w-md bg-white border-border shadow-3xl rounded-[3rem] p-0 overflow-hidden text-foreground">
+        <DialogHeader class="p-8 bg-emerald-600 text-white relative">
+          <div class="flex items-center gap-5 relative z-10">
+            <div class="w-14 h-14 bg-white/15 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-900/20">
+              <Radio class="w-7 h-7" />
+            </div>
+            <div>
+              <DialogTitle class="text-2xl font-black uppercase tracking-tighter">Opérateurs en ligne</DialogTitle>
+              <DialogDescription class="text-white/70 text-xs font-bold uppercase tracking-[0.2em] mt-1">
+                {{ socketStore.onlineCount }} connecté{{ socketStore.onlineCount > 1 ? 's' : '' }}
+              </DialogDescription>
+            </div>
+          </div>
+        </DialogHeader>
+        <div class="p-6 max-h-[60vh] overflow-y-auto no-scrollbar space-y-3">
+          <template v-if="socketStore.onlineUsers.length">
+            <div v-for="u in socketStore.onlineUsers" :key="u.userId"
+              class="flex items-center gap-4 p-4 rounded-[1.5rem] border border-slate-100 bg-slate-50/50 hover:bg-white hover:shadow-md transition-all">
+              <Avatar class="w-11 h-11 shrink-0">
+                <AvatarFallback class="bg-emerald-500/10 text-emerald-600 font-black text-sm">
+                  {{ (u.name || '?').charAt(0).toUpperCase() }}
+                </AvatarFallback>
+              </Avatar>
+              <div class="flex-1 min-w-0">
+                <p class="text-sm font-black text-slate-900 truncate">{{ u.name || 'Utilisateur' }}</p>
+                <p class="text-[10px] font-black uppercase tracking-wider mt-0.5 text-slate-400">{{ roleLabel(u.role) }}</p>
+              </div>
+              <div class="flex items-center gap-2 text-emerald-600 text-[10px] font-black uppercase tracking-wider">
+                <span class="relative flex h-2 w-2">
+                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                En ligne
+              </div>
+            </div>
+          </template>
+          <div v-else class="flex flex-col items-center justify-center py-14 opacity-30 text-center space-y-3">
+            <Radio class="w-10 h-10 text-slate-500 stroke-1" />
+            <p class="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Aucun opérateur connecté</p>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
     <Dialog v-model:open="showVidangeDialog">
       <DialogContent class="sm:max-w-xl bg-white border-none shadow-3xl rounded-[2.5rem] p-0 overflow-hidden">
         <DialogHeader class="p-8 bg-slate-900 text-white relative">
