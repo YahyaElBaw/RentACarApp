@@ -13,6 +13,7 @@ const messages = {
       settings: 'Paramètres',
       users: 'Personnel',
       accounting: 'Comptabilité',
+      logs: 'Logs',
       undefined: 'RentACar'
     },
     dashboard: {

@@ -123,6 +123,37 @@
                     </Button>
                   </div>
                </div>
+               <div class="flex justify-between items-center py-3 border-b border-slate-50 group">
+                  <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest text-sky-500">Date Départ</span>
+                  <div v-if="editingField === 'departureDate'" class="flex items-center gap-2">
+                    <Input type="date" v-model="editValue" class="h-8 bg-white border-sky-200 text-xs font-black" />
+                    <Button @click="prepareSave" size="icon" class="h-6 w-6 bg-sky-600 text-white rounded-md"><Check class="w-3 h-3" /></Button>
+                    <Button @click="cancelEdit" size="icon" variant="ghost" class="h-6 w-6 text-slate-400"><X class="w-3 h-3" /></Button>
+                  </div>
+                  <div v-else class="flex items-center gap-3">
+                    <span class="font-black text-sky-600 text-sm tabular-nums">{{ formatDate(car.departureDate) }}</span>
+                    <Button v-if="authStore.isAdmin && !car.disabled" @click="startEdit('departureDate', car.departureDate?.split('T')[0])" variant="ghost" size="icon" class="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-sky-300">
+                      <Pencil class="w-3 h-3" />
+                    </Button>
+                  </div>
+               </div>
+               <div class="flex justify-between items-center py-3 group">
+                  <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest text-slate-500">Agence</span>
+                  <div v-if="editingField === 'agence'" class="flex items-center gap-2">
+                    <select v-model="editValue" class="h-8 bg-white border-slate-200 rounded-md px-2 text-xs font-black outline-none focus:border-indigo-400">
+                      <option value="" disabled>Choisir une agence...</option>
+                      <option v-for="agence in agences" :key="agence._id" :value="agence._id">{{ agence.name }}</option>
+                    </select>
+                    <Button @click="prepareSave" size="icon" class="h-6 w-6 bg-slate-600 text-white rounded-md"><Check class="w-3 h-3" /></Button>
+                    <Button @click="cancelEdit" size="icon" variant="ghost" class="h-6 w-6 text-slate-400"><X class="w-3 h-3" /></Button>
+                  </div>
+                  <div v-else class="flex items-center gap-3">
+                    <span class="font-bold text-slate-700 text-sm uppercase tracking-widest">{{ car.agence?.name || '—' }}</span>
+                    <Button v-if="authStore.isAdmin && !car.disabled" @click="startEdit('agence', car.agence?._id || '')" variant="ghost" size="icon" class="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-slate-300">
+                      <Pencil class="w-3 h-3" />
+                    </Button>
+                  </div>
+               </div>
             </div>
           </CardContent>
         </Card>
@@ -217,27 +248,106 @@
                           <Wallet class="w-8 h-8 text-rose-500" />
                        </div>
                     </div>
-                    <DataTable :value="car.depenses" class="p-datatable-premium">
-                      <Column header="Catégorie">
-                         <template #body="{ data }">
-                            <span class="font-black text-slate-900 uppercase text-[10px] tracking-tight">{{ data.category }}</span>
-                         </template>
-                      </Column>
-                      <Column header="Montant">
-                         <template #body="{ data }">
-                            <span class="font-black text-rose-600 tabular-nums">{{ data.amount }} TND</span>
-                         </template>
-                      </Column>
-                      <Column header="Actions" v-if="authStore.isAdmin && !car.disabled">
-                         <template #body="{ data }">
-                            <Button @click="confirmDeleteDepense(data)" variant="ghost" size="icon" class="h-8 w-8 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all">
-                               <Trash2 class="w-4 h-4" />
-                            </Button>
-                         </template>
-                      </Column>
-                    </DataTable>
+                     <DataTable :value="car.depenses" class="p-datatable-premium">
+                       <Column header="Catégorie">
+                          <template #body="{ data }">
+                             <span class="font-black text-slate-900 uppercase text-[10px] tracking-tight">{{ data.category }}</span>
+                          </template>
+                       </Column>
+                       <Column header="Montant">
+                          <template #body="{ data }">
+                             <span class="font-black text-rose-600 tabular-nums">{{ data.amount }} TND</span>
+                          </template>
+                       </Column>
+                       <Column header="Actions" v-if="authStore.isAdmin && !car.disabled">
+                          <template #body="{ data }">
+                             <Button @click="confirmDeleteDepense(data)" variant="ghost" size="icon" class="h-8 w-8 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all">
+                                <Trash2 class="w-4 h-4" />
+                             </Button>
+                          </template>
+                       </Column>
+                     </DataTable>
+                   </div>
+                </TabPanel>
+
+                <TabPanel header="Documents" value="3">
+                  <div class="p-8">
+                    <div class="flex justify-between items-center mb-8 gap-4">
+                      <div class="space-y-1">
+                        <h3 class="text-xs font-black uppercase tracking-widest text-slate-400">Pièces du Véhicule</h3>
+                        <p class="text-[9px] font-bold text-slate-300 uppercase tracking-widest">Carte grise, laisser passer, assurance, vignette (A4)</p>
+                      </div>
+                      <div v-if="docDirty" class="flex items-center gap-2 shrink-0">
+                        <Button @click="cancelDocumentChanges" variant="ghost" class="h-10 px-4 rounded-xl font-black uppercase text-[9px] tracking-widest text-slate-400 hover:text-slate-600 transition-all">
+                          Annuler
+                        </Button>
+                        <Button @click="openDocPasswordDialog" :disabled="docSaving" class="h-10 px-5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase text-[9px] tracking-widest shadow-lg shadow-emerald-100 transition-all gap-2">
+                          <Check v-if="!docSaving" class="w-4 h-4" />
+                          <Loader2 v-else class="w-4 h-4 animate-spin" />
+                          Enregistrer
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                      <div v-for="docType in documentTypes" :key="docType.key">
+                        <input
+                          type="file"
+                          :id="'doc-input-' + docType.key"
+                          class="hidden"
+                          accept="image/*,application/pdf"
+                          @change="(e) => handleUploadDocument(docType.key, e)"
+                        />
+
+                        <div v-if="getDocument(docType.key)" class="border border-slate-200/50 rounded-[1.75rem] overflow-hidden bg-white/60 shadow-lg shadow-slate-100/50 group">
+                          <div class="aspect-[4/3] bg-slate-100 relative">
+                            <img
+                              v-if="!isPdf(getDocument(docType.key).url)"
+                              :src="getImageUrl(getDocument(docType.key).url)"
+                              class="absolute inset-0 w-full h-full object-contain p-4 transition-transform duration-500 group-hover:scale-105"
+                              :alt="docType.label"
+                            />
+                            <div v-else class="absolute inset-0 flex flex-col items-center justify-center gap-3 text-slate-300">
+                              <FileText class="w-12 h-12 stroke-[1.5]" />
+                              <span class="text-[9px] font-black uppercase tracking-widest">Fichier PDF</span>
+                            </div>
+                            <span class="absolute top-3 left-3 bg-white/90 backdrop-blur px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest text-slate-500 shadow-sm">{{ docType.label }}</span>
+                            <span :class="['absolute bottom-3 right-3 px-2.5 py-1 rounded-full text-[8px] font-black uppercase tracking-widest', getDocument(docType.key)._id ? 'bg-emerald-500/90 text-white' : 'bg-amber-500/90 text-white']">{{ getDocument(docType.key)._id ? 'Chargé' : 'En attente' }}</span>
+                          </div>
+                          <div class="p-4 flex items-center justify-between gap-3">
+                            <div class="min-w-0 flex-1">
+                              <p class="text-[9px] font-black text-slate-900 uppercase tracking-widest truncate">{{ getDocument(docType.key).originalName || docType.label }}</p>
+                              <p v-if="getDocument(docType.key).uploadedAt" class="text-[8px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">{{ formatDate(getDocument(docType.key).uploadedAt) }}</p>
+                              <p v-else class="text-[8px] font-bold text-amber-500 uppercase tracking-widest mt-0.5">Non enregistré — cliquez sur Enregistrer</p>
+                            </div>
+                            <div class="flex items-center gap-1.5 shrink-0">
+                              <a :href="getImageUrl(getDocument(docType.key).url)" target="_blank" rel="noopener" class="h-9 w-9 rounded-xl flex items-center justify-center bg-slate-100 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 transition-all">
+                                <ExternalLink class="w-4 h-4" />
+                              </a>
+                              <label v-if="authStore.isAdmin && !car.disabled" :for="'doc-input-' + docType.key" class="h-9 w-9 rounded-xl flex items-center justify-center bg-slate-100 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 transition-all cursor-pointer" title="Remplacer">
+                                <Upload class="w-4 h-4" />
+                              </label>
+                              <Button v-if="authStore.isAdmin && !car.disabled" @click="deleteDocument(getDocument(docType.key))" variant="ghost" size="icon" class="h-9 w-9 rounded-xl text-rose-400 hover:text-rose-600 hover:bg-rose-50 transition-all" title="Supprimer">
+                                <Trash2 class="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+
+                        <label v-else :for="'doc-input-' + docType.key" class="aspect-[4/3] border-2 border-dashed border-slate-200 rounded-[1.75rem] flex flex-col items-center justify-center gap-3 cursor-pointer hover:border-indigo-400 hover:bg-indigo-50/30 transition-all">
+                          <div :class="['w-12 h-12 rounded-2xl flex items-center justify-center transition-all', uploadingType === docType.key ? 'bg-indigo-100 text-indigo-500' : 'bg-slate-100 text-slate-400 group-hover:bg-indigo-100']">
+                            <Upload v-if="uploadingType !== docType.key" class="w-5 h-5" />
+                            <div v-else class="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+                          </div>
+                          <div class="text-center px-4">
+                            <p class="text-[10px] font-black text-slate-700 uppercase tracking-widest">{{ docType.label }}</p>
+                            <p class="text-[8px] font-bold text-slate-400 uppercase tracking-widest mt-1">{{ uploadingType === docType.key ? 'Téléversement...' : 'Cliquer pour téléverser' }}</p>
+                          </div>
+                        </label>
+                      </div>
+                    </div>
                   </div>
-               </TabPanel>
+                </TabPanel>
              </TabView>
           </CardContent>
         </Card>
@@ -301,70 +411,166 @@
 
   <!-- EDIT MODAL -->
   <Dialog v-model:open="showEditForm">
-    <DialogContent class="sm:max-w-[500px] bg-white/95 backdrop-blur-3xl border border-slate-200 shadow-[0_20px_60px_rgba(0,0,0,0.3)] rounded-[3rem] p-0 overflow-hidden text-slate-900 max-h-[90vh] flex flex-col">
-      <DialogHeader class="p-10 bg-indigo-600 text-white relative overflow-hidden">
-        <div class="absolute -top-10 -left-10 w-40 h-40 bg-white/10 rounded-full blur-3xl opacity-50"></div>
-        <div class="flex items-center gap-4 relative z-10">
+    <DialogContent hideClose class="sm:max-w-2xl bg-white border-border shadow-3xl rounded-[2.5rem] p-0 overflow-hidden text-foreground max-h-[92vh] flex flex-col">
+      <DialogHeader class="px-10 py-8 bg-gradient-to-br from-indigo-600 via-indigo-600 to-violet-600 text-white relative overflow-hidden shrink-0">
+        <div class="absolute top-0 right-0 w-40 h-40 bg-white/10 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none"></div>
+        <div class="absolute bottom-0 left-32 w-28 h-28 bg-white/5 rounded-full blur-2xl pointer-events-none"></div>
+        <button type="button" @click="showEditForm = false" class="absolute top-5 right-5 z-20 w-10 h-10 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 text-white flex items-center justify-center transition-all duration-300 hover:rotate-90 active:scale-90">
+          <X class="w-5 h-5" />
+        </button>
+        <div class="flex items-center gap-5 relative z-10">
+          <div class="w-14 h-14 rounded-2xl bg-white/15 backdrop-blur border border-white/20 flex items-center justify-center shadow-lg shadow-indigo-900/20">
+            <Pencil class="w-7 h-7" />
+          </div>
           <div>
-            <DialogTitle class="text-2xl font-black uppercase tracking-tight text-white italic">
-              Modifier <span class="text-indigo-200">Véhicule</span>
-            </DialogTitle>
-            <p class="text-white/60 text-[10px] font-black uppercase tracking-widest mt-1">Spécifications techniques</p>
+            <p class="text-[9px] font-black uppercase tracking-[0.35em] text-indigo-200">Édition</p>
+            <DialogTitle class="text-2xl font-black uppercase tracking-tighter leading-tight">Modifier le Véhicule</DialogTitle>
+            <p class="text-white/70 font-bold uppercase tracking-widest text-[9px] mt-1.5">Spécifications techniques</p>
           </div>
         </div>
       </DialogHeader>
 
-      <div class="p-10 space-y-6 overflow-y-auto max-h-[65vh] bg-transparent">
-        <div class="grid grid-cols-2 gap-8">
-          <div class="space-y-2 col-span-2">
-            <Label class="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Matricule</Label>
-            <Input v-model="carForm.matricule" class="h-14 bg-slate-50 border-slate-100 rounded-2xl font-black tabular-nums transition-all" />
+      <div class="p-10 space-y-9 overflow-y-auto flex-1 custom-scrollbar">
+        <!-- Identité du Véhicule -->
+        <div>
+          <div class="flex items-center gap-3 mb-6">
+            <div class="w-9 h-9 rounded-xl bg-indigo-600/10 text-indigo-600 flex items-center justify-center shrink-0"><Car class="w-4 h-4" /></div>
+            <h4 class="text-[10px] font-black uppercase tracking-[0.25em] text-slate-800">Identité du Véhicule</h4>
+            <div class="h-px flex-1 bg-gradient-to-r from-slate-200 to-transparent"></div>
           </div>
-          <div class="space-y-2">
-            <Label class="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Marque</Label>
-            <Input v-model="carForm.brand" class="h-14 bg-slate-50 border-slate-100 rounded-2xl font-black transition-all" />
-          </div>
-          <div class="space-y-2">
-            <Label class="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Modèle</Label>
-            <Input v-model="carForm.model" class="h-14 bg-slate-50 border-slate-100 rounded-2xl font-black transition-all" />
-          </div>
-          <div class="space-y-2">
-            <Label class="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Tarif (TND)</Label>
-            <Input type="number" v-model="carForm.dailyRate" class="h-14 bg-slate-50 border-slate-100 rounded-2xl font-black tabular-nums transition-all" />
-          </div>
-          <div class="space-y-2">
-            <Label class="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Kilométrage</Label>
-            <Input type="number" v-model="carForm.mileage" class="h-14 bg-slate-50 border-slate-100 rounded-2xl font-black tabular-nums transition-all" />
-          </div>
-          <div class="space-y-2">
-            <Label class="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Couleur</Label>
-            <Input v-model="carForm.color" class="h-14 bg-slate-50 border-slate-100 rounded-2xl font-black transition-all" />
-          </div>
-          <div class="space-y-2">
-              <Label class="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Date Départ</Label>
-              <Input type="date" v-model="carForm.departureDate" class="h-14 bg-slate-50 border-slate-100 rounded-2xl font-black transition-all" @click.stop />
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="space-y-2 md:col-span-2">
+              <Label class="form-label">Matricule</Label>
+              <Input v-model="carForm.matricule" class="form-field tabular-nums" />
             </div>
             <div class="space-y-2">
-              <Label class="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Prochaine Visite</Label>
-              <Input type="date" v-model="carForm.nextTechnicalVisitDate" class="h-14 bg-slate-50 border-slate-100 rounded-2xl font-black transition-all" @click.stop />
+              <Label class="form-label">Marque</Label>
+              <Input v-model="carForm.brand" class="form-field" />
             </div>
-          <div class="space-y-2 col-span-2">
-            <Label class="text-[10px] font-black text-rose-500 uppercase tracking-widest ml-1">Mot De Passe Admin</Label>
-            <div class="relative">
-              <Input :type="showPassword ? 'text' : 'password'" v-model="adminPassword" placeholder="Requis..." class="h-14 bg-rose-50 border-rose-100 placeholder:text-rose-300 text-rose-700 rounded-2xl font-black font-mono tracking-widest transition-all pr-12" />
-              <button type="button" @click="showPassword = !showPassword" class="absolute right-4 top-1/2 -translate-y-1/2 text-rose-400 hover:text-rose-600 transition-colors outline-none">
-                <Eye v-if="!showPassword" class="w-5 h-5" />
-                <EyeOff v-else class="w-5 h-5" />
-              </button>
+            <div class="space-y-2">
+              <Label class="form-label">Modèle</Label>
+              <Input v-model="carForm.model" class="form-field" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Tarifs & États -->
+        <div>
+          <div class="flex items-center gap-3 mb-6">
+            <div class="w-9 h-9 rounded-xl bg-indigo-600/10 text-indigo-600 flex items-center justify-center shrink-0"><Wallet class="w-4 h-4" /></div>
+            <h4 class="text-[10px] font-black uppercase tracking-[0.25em] text-slate-800">Tarifs & États</h4>
+            <div class="h-px flex-1 bg-gradient-to-r from-slate-200 to-transparent"></div>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="space-y-2">
+              <Label class="form-label">Tarif (TND)</Label>
+              <Input type="number" v-model="carForm.dailyRate" class="form-field tabular-nums" />
+            </div>
+            <div class="space-y-2">
+              <Label class="form-label">Kilométrage</Label>
+              <Input type="number" v-model="carForm.mileage" class="form-field tabular-nums" />
+            </div>
+            <div class="space-y-2">
+              <Label class="form-label">Couleur</Label>
+              <Input v-model="carForm.color" class="form-field" />
+            </div>
+            <div class="space-y-2">
+              <Label class="form-label">Agence</Label>
+              <div class="relative">
+                <select v-model="carForm.agence" class="form-field form-field-select">
+                  <option value="" disabled>Choisir une agence...</option>
+                  <option v-for="agence in agences" :key="agence._id" :value="agence._id">{{ agence.name }}</option>
+                </select>
+                <ChevronDown class="w-4 h-4 text-slate-400 pointer-events-none absolute right-4 top-1/2 -translate-y-1/2" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Dates & Entretien -->
+        <div>
+          <div class="flex items-center gap-3 mb-6">
+            <div class="w-9 h-9 rounded-xl bg-indigo-600/10 text-indigo-600 flex items-center justify-center shrink-0"><CalendarClock class="w-4 h-4" /></div>
+            <h4 class="text-[10px] font-black uppercase tracking-[0.25em] text-slate-800">Dates & Entretien</h4>
+            <div class="h-px flex-1 bg-gradient-to-r from-slate-200 to-transparent"></div>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="space-y-2">
+              <Label class="form-label">Date Départ</Label>
+              <Input type="date" v-model="carForm.departureDate" class="form-field" @click.stop />
+            </div>
+            <div class="space-y-2">
+              <Label class="form-label">Prochaine Visite</Label>
+              <Input type="date" v-model="carForm.nextTechnicalVisitDate" class="form-field" @click.stop />
             </div>
           </div>
         </div>
       </div>
 
-      <DialogFooter class="p-10 bg-slate-50/50 border-t border-slate-100 flex gap-4 shrink-0">
-        <Button variant="ghost" @click="showEditForm = false" class="flex-1 h-14 font-black uppercase tracking-widest text-[10px] rounded-2xl text-slate-400">Annuler</Button>
-        <Button @click="saveCar" :disabled="submittingAction || !adminPassword" class="flex-1 h-14 bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase tracking-widest text-[10px] rounded-2xl shadow-xl shadow-indigo-600/20 active:scale-95 transition-all">{{ submittingAction ? 'Vérification...' : 'Enregistrer' }}</Button>
+      <DialogFooter class="px-10 py-6 bg-slate-50/80 border-t border-slate-100 flex gap-4 shrink-0">
+        <Button variant="ghost" @click="showEditForm = false" class="flex-1 h-12 rounded-xl font-black uppercase text-[10px] text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors">Annuler</Button>
+        <Button @click="saveCar" :disabled="submittingAction" class="flex-[2] h-12 bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase tracking-widest text-[10px] rounded-xl shadow-lg shadow-indigo-600/20 transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0 active:scale-95 gap-2">
+          <Lock class="w-4 h-4" /> {{ submittingAction ? 'Enregistrement...' : 'Enregistrer' }}
+        </Button>
       </DialogFooter>
+    </DialogContent>
+  </Dialog>
+
+  <!-- EDIT PASSWORD POPUP -->
+  <Dialog v-model:open="showPasswordDialog">
+    <DialogContent class="sm:max-w-md bg-white border-border shadow-3xl rounded-[2.5rem] p-10 overflow-hidden text-center max-h-[90vh] overflow-y-auto">
+      <DialogHeader class="mb-8">
+        <div class="w-16 h-16 bg-gradient-to-br from-indigo-500 to-violet-600 text-white rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-indigo-600/25"><Lock class="w-8 h-8" /></div>
+        <DialogTitle class="text-2xl font-black uppercase tracking-tight">Accès Administrateur</DialogTitle>
+        <p class="text-[10px] font-black uppercase opacity-40 mt-1">Saisissez votre mot de passe pour enregistrer</p>
+      </DialogHeader>
+      <div class="space-y-6">
+        <div v-if="guard.isLocked" class="flex items-center justify-center gap-2 bg-rose-50 text-rose-600 border border-rose-200 rounded-xl px-4 py-3">
+          <Lock class="w-4 h-4" />
+          <span class="text-[10px] font-black uppercase tracking-widest">Trop de tentatives — réessayez dans {{ guard.remainingSeconds }}s</span>
+        </div>
+        <div class="relative">
+          <Input :type="showPassword ? 'text' : 'password'" v-model="adminPassword" :disabled="guard.isLocked" placeholder="••••••••" class="form-field form-field-pwd text-center pr-12" @keyup.enter="confirmEditPassword" />
+          <button type="button" @click="showPassword = !showPassword" class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-600 transition-colors outline-none">
+            <Eye v-if="!showPassword" class="w-5 h-5" />
+            <EyeOff v-else class="w-5 h-5" />
+          </button>
+        </div>
+        <p v-if="editPasswordError" class="text-[10px] font-black text-destructive uppercase italic">⚠ {{ editPasswordError }}</p>
+        <div class="flex gap-4">
+          <Button @click="showPasswordDialog = false" variant="ghost" class="flex-1 h-14 rounded-2xl font-black uppercase text-[10px]">Annuler</Button>
+          <Button @click="confirmEditPassword" :loading="submittingAction" :disabled="guard.isLocked" class="flex-1 h-14 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black uppercase text-[10px] shadow-xl shadow-indigo-600/20">Confirmer</Button>
+        </div>
+      </div>
+    </DialogContent>
+  </Dialog>
+
+  <!-- DOCUMENTS SAVE PASSWORD POPUP -->
+  <Dialog v-model:open="showDocPasswordDialog">
+    <DialogContent class="sm:max-w-md bg-white border-border shadow-3xl rounded-[2.5rem] p-10 overflow-hidden text-center max-h-[90vh] overflow-y-auto">
+      <DialogHeader class="mb-8">
+        <div class="w-16 h-16 bg-gradient-to-br from-emerald-500 to-teal-600 text-white rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-emerald-600/25"><Lock class="w-8 h-8" /></div>
+        <DialogTitle class="text-2xl font-black uppercase tracking-tight">Accès Administrateur</DialogTitle>
+        <p class="text-[10px] font-black uppercase opacity-40 mt-1">Saisissez votre mot de passe pour enregistrer les documents</p>
+      </DialogHeader>
+      <div class="space-y-6">
+        <div v-if="guard.isLocked" class="flex items-center justify-center gap-2 bg-rose-50 text-rose-600 border border-rose-200 rounded-xl px-4 py-3">
+          <Lock class="w-4 h-4" />
+          <span class="text-[10px] font-black uppercase tracking-widest">Trop de tentatives — réessayez dans {{ guard.remainingSeconds }}s</span>
+        </div>
+        <div class="relative">
+          <Input :type="showPassword ? 'text' : 'password'" v-model="adminPassword" :disabled="guard.isLocked" placeholder="••••••••" class="form-field form-field-pwd text-center pr-12" @keyup.enter="confirmDocSave" />
+          <button type="button" @click="showPassword = !showPassword" class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-600 transition-colors outline-none">
+            <Eye v-if="!showPassword" class="w-4 h-4" />
+            <EyeOff v-else class="w-4 h-4" />
+          </button>
+        </div>
+        <p v-if="docPasswordError" class="text-[10px] font-black text-destructive uppercase italic">⚠ {{ docPasswordError }}</p>
+        <div class="flex gap-4">
+          <Button @click="showDocPasswordDialog = false" variant="ghost" class="flex-1 h-14 rounded-2xl font-black uppercase text-[10px]">Annuler</Button>
+          <Button @click="confirmDocSave" :loading="docSaving" :disabled="guard.isLocked" class="flex-1 h-14 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-black uppercase text-[10px] shadow-xl shadow-emerald-600/20">Confirmer</Button>
+        </div>
+      </div>
     </DialogContent>
   </Dialog>
 
@@ -376,9 +582,13 @@
         <p class="text-[10px] font-bold text-slate-400 tracking-widest uppercase mt-1">Autorisation de suppression</p>
       </DialogHeader>
       
+      <div v-if="guard.isLocked" class="flex items-center justify-center gap-2 bg-rose-50 text-rose-600 border border-rose-200 rounded-xl px-4 py-3 mb-4">
+        <Lock class="w-4 h-4" />
+        <span class="text-[10px] font-black uppercase tracking-widest">Trop de tentatives — réessayez dans {{ guard.remainingSeconds }}s</span>
+      </div>
       <div class="space-y-4">
          <div class="relative">
-           <Input :type="showPassword ? 'text' : 'password'" v-model="adminPassword" placeholder="Mot de passe admin..." class="h-14 bg-slate-50 border-slate-100 rounded-2xl font-black font-mono tracking-widest text-center pr-12" @keyup.enter="executeDelete" />
+           <Input :type="showPassword ? 'text' : 'password'" v-model="adminPassword" :disabled="guard.isLocked" placeholder="Mot de passe admin..." class="h-14 bg-slate-50 border-slate-100 rounded-2xl font-black font-mono tracking-widest text-center pr-12" @keyup.enter="executeDelete" />
            <button type="button" @click="showPassword = !showPassword" class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors outline-none">
              <Eye v-if="!showPassword" class="w-5 h-5" />
              <EyeOff v-else class="w-5 h-5" />
@@ -388,7 +598,7 @@
       
       <DialogFooter class="mt-6 border-t border-slate-100 pt-6">
         <Button variant="ghost" @click="showSecurityModal = false" class="w-full h-12 font-black uppercase text-[10px] tracking-widest rounded-xl text-slate-400">Annuler</Button>
-        <Button @click="executeDelete" :disabled="!adminPassword || submittingAction" class="w-full h-12 bg-rose-600 hover:bg-rose-700 text-white font-black uppercase tracking-widest text-[10px] rounded-xl shadow-lg shadow-rose-200">
+        <Button @click="executeDelete" :disabled="!adminPassword || submittingAction || guard.isLocked" class="w-full h-12 bg-rose-600 hover:bg-rose-700 text-white font-black uppercase tracking-widest text-[10px] rounded-xl shadow-lg shadow-rose-200">
           {{ submittingAction ? 'Suppression...' : 'Confirmer' }}
         </Button>
       </DialogFooter>
@@ -406,9 +616,13 @@
         <p class="text-[10px] font-bold text-slate-400 tracking-widest uppercase mt-1">Saisissez votre mot de passe pour valider</p>
       </DialogHeader>
       
+      <div v-if="guard.isLocked" class="flex items-center justify-center gap-2 bg-rose-50 text-rose-600 border border-rose-200 rounded-xl px-4 py-3 mb-4">
+        <Lock class="w-4 h-4" />
+        <span class="text-[10px] font-black uppercase tracking-widest">Trop de tentatives — réessayez dans {{ guard.remainingSeconds }}s</span>
+      </div>
       <div class="space-y-4">
          <div class="relative">
-           <Input :type="showPassword ? 'text' : 'password'" v-model="adminPassword" placeholder="Mot de passe admin..." class="h-14 bg-slate-50 border-slate-100 rounded-2xl font-black font-mono tracking-widest text-center pr-12" @keyup.enter="executeInlineSave" />
+           <Input :type="showPassword ? 'text' : 'password'" v-model="adminPassword" :disabled="guard.isLocked" placeholder="Mot de passe admin..." class="h-14 bg-slate-50 border-slate-100 rounded-2xl font-black font-mono tracking-widest text-center pr-12" @keyup.enter="executeInlineSave" />
            <button type="button" @click="showPassword = !showPassword" class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors outline-none">
              <Eye v-if="!showPassword" class="w-5 h-5" />
              <EyeOff v-else class="w-5 h-5" />
@@ -418,7 +632,7 @@
       
       <DialogFooter class="mt-8 flex gap-4">
         <Button variant="ghost" @click="showConfirmDialog = false" class="flex-1 h-12 font-black uppercase text-[10px] tracking-widest rounded-xl text-slate-400">Annuler</Button>
-        <Button @click="executeInlineSave" :disabled="!adminPassword || submittingAction" class="flex-1 h-12 bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase tracking-widest text-[10px] rounded-xl shadow-lg shadow-indigo-200">
+        <Button @click="executeInlineSave" :disabled="!adminPassword || submittingAction || guard.isLocked" class="flex-1 h-12 bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase tracking-widest text-[10px] rounded-xl shadow-lg shadow-indigo-200">
           {{ submittingAction ? 'Validation...' : 'Confirmer' }}
         </Button>
       </DialogFooter>
@@ -494,12 +708,14 @@
 import { ref, reactive, onMounted, computed, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
+import { usePasswordGuard, handlePasswordError } from '@/composables/usePasswordGuard';
+import { useToast } from 'primevue/usetoast';
 import { 
-  carApi, reservationApi, contratApi, depenseApi, visiteApi, vidangeApi, authApi 
+  carApi, reservationApi, contratApi, depenseApi, visiteApi, vidangeApi, authApi, agenceApi, uploadApi, getImageUrl 
 } from '@/api';
 import { formatDate } from '@/lib/utils';
 import { 
-  ChevronLeft, ArrowRight, Wallet, Pencil, Check, X, ShieldAlert, Trash2, Eye, EyeOff
+  ChevronLeft, ArrowRight, Wallet, Pencil, Check, X, ShieldAlert, Trash2, Eye, EyeOff, Upload, FileText, ExternalLink, Lock, ChevronDown, Car, CalendarClock, Loader2
 } from 'lucide-vue-next';
 import Card from '@/components/ui/card/Card.vue';
 import CardContent from '@/components/ui/card/CardContent.vue';
@@ -516,12 +732,16 @@ import Column from 'primevue/column';
 const router = useRouter();
 const route = useRoute();
 const authStore = useAuthStore();
+const toast = useToast();
+const guard = usePasswordGuard();
 const car = ref<any>(null);
 
 const showEditForm = ref(false);
 const showSecurityModal = ref(false);
+const showPasswordDialog = ref(false);
 const adminPassword = ref('');
 const showPassword = ref(false);
+const editPasswordError = ref('');
 const submittingAction = ref(false);
 
 const editingField = ref<string | null>(null);
@@ -559,8 +779,118 @@ const openHistoryDetail = (item: any) => {
 
 const carForm = reactive({
   matricule: '', brand: '', model: '', dailyRate: 300, mileage: 0,
-  color: '', departureDate: '', nextTechnicalVisitDate: '', nextOilChangeMileage: 0, insuranceDate: ''
+  color: '', agence: '', departureDate: '', nextTechnicalVisitDate: '', nextOilChangeMileage: 0, insuranceDate: ''
 });
+
+const agences = ref<any[]>([]);
+
+const documentTypes = [
+  { key: 'carteGriseRecto', label: 'Carte Grise (Recto)' },
+  { key: 'carteGriseVerso', label: 'Carte Grise (Verso)' },
+  { key: 'laisserPasser', label: 'Laisser Passer' },
+  { key: 'assurance', label: 'Assurance' },
+  { key: 'vignette', label: 'Vignette (A4)' },
+];
+
+const uploadingType = ref<string | null>(null);
+
+const pendingAdds = ref<any[]>([]);
+const pendingDeletes = ref<string[]>([]);
+const docSaving = ref(false);
+
+const docDirty = computed(() => pendingAdds.value.length > 0 || pendingDeletes.value.length > 0);
+
+const getDocument = (type: string) => {
+  const staged = pendingAdds.value.find((d: any) => d.type === type);
+  if (staged) return staged;
+  if (!car.value) return null;
+  const serverDoc = car.value.documents?.find((d: any) => d.type === type);
+  if (serverDoc && !pendingDeletes.value.includes(serverDoc._id)) return serverDoc;
+  return null;
+};
+
+const isPdf = (url: string) => url?.split('?')[0].toLowerCase().endsWith('.pdf');
+
+const handleUploadDocument = async (type: string, event: any) => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  uploadingType.value = type;
+  try {
+    const res = await uploadApi.upload(file);
+    pendingAdds.value = pendingAdds.value.filter((d: any) => d.type !== type);
+    const existing = car.value?.documents?.find((d: any) => d.type === type);
+    if (existing && !pendingDeletes.value.includes(existing._id)) {
+      pendingDeletes.value.push(existing._id);
+    }
+    pendingAdds.value.push({ type, url: res.url, originalName: file.name });
+  } catch (err) {
+    console.error('Document upload failed', err);
+    alert("Erreur lors du téléversement du document.");
+  } finally {
+    uploadingType.value = null;
+    event.target.value = '';
+  }
+};
+
+const deleteDocument = (doc: any) => {
+  if (!doc) return;
+  if (!confirm(`Supprimer ce document (${doc.originalName || doc.type}) ?`)) return;
+  if (doc._id) {
+    if (!pendingDeletes.value.includes(doc._id)) pendingDeletes.value.push(doc._id);
+  } else {
+    pendingAdds.value = pendingAdds.value.filter((d: any) => d !== doc);
+  }
+};
+
+const showDocPasswordDialog = ref(false);
+const docPasswordError = ref('');
+
+const openDocPasswordDialog = () => {
+  adminPassword.value = '';
+  docPasswordError.value = '';
+  showDocPasswordDialog.value = true;
+};
+
+const confirmDocSave = async () => {
+  if (!adminPassword.value) {
+    docPasswordError.value = 'Le mot de passe est obligatoire.';
+    return;
+  }
+  if (guard.isLocked) return;
+  docSaving.value = true;
+  docPasswordError.value = '';
+  try {
+    for (const doc of pendingAdds.value) {
+      await carApi.addDocument(car.value._id, {
+        type: doc.type,
+        url: doc.url,
+        originalName: doc.originalName,
+        password: adminPassword.value,
+      });
+    }
+    for (const id of pendingDeletes.value) {
+      await carApi.removeDocument(car.value._id, id, adminPassword.value);
+    }
+    await refreshCarData();
+    pendingAdds.value = [];
+    pendingDeletes.value = [];
+    guard.reset();
+    showDocPasswordDialog.value = false;
+    adminPassword.value = '';
+  } catch (err: any) {
+    console.error('Failed to save document changes', err);
+    if (handlePasswordError(err, toast)) return;
+    docPasswordError.value =
+      err.response?.data?.message || "Erreur lors de l'enregistrement des modifications.";
+  } finally {
+    docSaving.value = false;
+  }
+};
+
+const cancelDocumentChanges = () => {
+  pendingAdds.value = [];
+  pendingDeletes.value = [];
+};
 
 const startEdit = (field: string, value: any) => {
   editingField.value = field;
@@ -582,15 +912,21 @@ const executeInlineSave = async () => {
   try {
     const payload = { [editingField.value!]: editValue.value, password: adminPassword.value };
     await carApi.update(car.value._id, payload);
+    guard.reset();
     
     // Update local state
-    car.value[editingField.value!] = editValue.value;
+    if (editingField.value === 'agence') {
+      car.value.agence = agences.value.find((a: any) => a._id === editValue.value) || null;
+    } else {
+      car.value[editingField.value!] = editValue.value;
+    }
     
     cancelEdit();
     showConfirmDialog.value = false;
     adminPassword.value = '';
   } catch (err: any) {
     console.error('Failed to update field', err);
+    if (handlePasswordError(err, toast)) return;
     alert(err.response?.data?.message || 'Erreur lors de la modification.');
   } finally {
     submittingAction.value = false;
@@ -605,14 +941,16 @@ const totalExpenses = computed(() => {
 onMounted(async () => {
   try {
     const id = route.params.id as string;
-    const [fetchedCar, fetchedReservations, fetchedContrats, fetchedDepenses, fetchedVisites, fetchedVidanges] = await Promise.all([
+    const [fetchedCar, fetchedReservations, fetchedContrats, fetchedDepenses, fetchedVisites, fetchedVidanges, fetchedAgences] = await Promise.all([
       carApi.getOne(id),
       reservationApi.getAll({ carId: id }),
       contratApi.getAll({ carId: id }),
       depenseApi.getAll(id),
       visiteApi.getAll({ carId: id }),
-      vidangeApi.getAll({ carId: id })
+      vidangeApi.getAll({ carId: id }),
+      agenceApi.getAll()
     ]);
+    agences.value = fetchedAgences || [];
     
     fetchedCar.reservations = fetchedReservations;
     fetchedCar.contrats = fetchedContrats;
@@ -652,19 +990,50 @@ onMounted(async () => {
   }
 });
 
+const toDateInput = (value: any): string => {
+  if (!value) return '';
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
+
 const openEditModal = () => {
   if (!car.value) return;
   Object.assign(carForm, car.value);
+  carForm.agence = car.value.agence?._id || car.value.agence || '';
+  carForm.departureDate = toDateInput(car.value.departureDate);
+  carForm.nextTechnicalVisitDate = toDateInput(car.value.nextTechnicalVisitDate);
+  carForm.insuranceDate = toDateInput(car.value.insuranceDate);
   adminPassword.value = '';
   showEditForm.value = true;
 };
 
+const openEditPasswordDialog = () => {
+  adminPassword.value = '';
+  editPasswordError.value = '';
+  showPasswordDialog.value = true;
+};
+
+const confirmEditPassword = async () => {
+  if (!adminPassword.value) {
+    editPasswordError.value = 'Le mot de passe est obligatoire.';
+    return;
+  }
+  showPasswordDialog.value = false;
+  await saveCar();
+};
+
 const saveCar = async () => {
-  if (!adminPassword.value) return;
+  if (!adminPassword.value) {
+    openEditPasswordDialog();
+    return;
+  }
   submittingAction.value = true;
   try {
-    const payload = { ...carForm, password: adminPassword.value };
+    const payload = { ...carForm, agence: carForm.agence || null, password: adminPassword.value };
     await carApi.update(car.value._id, payload);
+    guard.reset();
     
     // Refresh vehicle
     const updatedCar = await carApi.getOne(car.value._id);
@@ -710,10 +1079,25 @@ const saveCar = async () => {
     car.value = updatedCar;
     
     showEditForm.value = false;
+    toast.add({
+      severity: 'success',
+      summary: 'Véhicule modifié',
+      detail: `${carForm.brand} ${carForm.model} (${carForm.matricule}) a été mis à jour.`,
+      life: 3000
+    });
   } catch (err: any) {
     console.error('Failed to update car', err);
-    if(err.response?.status === 401) alert("Mot de passe incorrect.");
-    else alert("Erreur lors de la modification.");
+    if (handlePasswordError(err, toast)) {
+      adminPassword.value = '';
+      openEditPasswordDialog();
+      return;
+    }
+    toast.add({
+      severity: 'error',
+      summary: 'Erreur',
+      detail: err.response?.data?.message || "Erreur lors de la modification.",
+      life: 5000
+    });
   } finally {
     submittingAction.value = false;
   }
@@ -864,11 +1248,13 @@ const executeDelete = async () => {
     } else {
       // Default Car delete
       await carApi.delete(car.value._id, adminPassword.value);
+      guard.reset();
       showSecurityModal.value = false;
       router.push('/cars');
     }
   } catch (err: any) {
     console.error('Deletion failed', err);
+    if (handlePasswordError(err, toast)) return;
     alert("Échec de la suppression. Vérifiez votre mot de passe.");
   } finally {
     submittingAction.value = false;
@@ -932,6 +1318,56 @@ const executeDelete = async () => {
 
 :deep(.p-tabview-panels) {
   background: transparent !important;
+}
+
+.form-label {
+  display: block;
+  font-size: 9px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: #64748b;
+  margin-bottom: 0.5rem;
+  padding-left: 0.25rem;
+}
+
+.form-field {
+  width: 100%;
+  height: 3rem;
+  padding-left: 1rem;
+  padding-right: 1rem;
+  border-radius: 0.75rem;
+  background-color: rgb(248 250 252 / 0.8);
+  border: 1px solid #e2e8f0;
+  outline: none;
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: #1e293b;
+  transition: border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.form-field:hover {
+  border-color: #cbd5e1;
+}
+
+.form-field:focus {
+  border-color: #6366f1;
+  background-color: #ffffff;
+  box-shadow: 0 0 0 4px rgb(99 102 241 / 0.12);
+}
+
+.form-field::placeholder {
+  color: #94a3b8;
+}
+
+.form-field-select {
+  padding-right: 2.5rem;
+  appearance: none;
+  cursor: pointer;
+}
+
+.form-field-pwd {
+  padding-right: 3rem;
 }
 
 

@@ -42,6 +42,21 @@
       </div>
     </div>
 
+    <!-- Pending Changes Save Bar -->
+    <div v-if="clientDirty" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-slate-900 text-white px-6 py-4 rounded-3xl shadow-2xl animate-in slide-in-from-bottom-4 duration-500">
+      <div class="flex items-center gap-2">
+        <div class="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse"></div>
+        <span class="text-[10px] font-black uppercase tracking-widest">Modifications non enregistrées</span>
+      </div>
+      <div class="h-8 w-px bg-white/20"></div>
+      <Button @click="cancelProfileChanges" variant="ghost" class="h-10 px-4 rounded-xl text-white/70 hover:text-white hover:bg-white/10 font-black uppercase text-[9px] tracking-widest transition-all">Annuler</Button>
+      <Button @click="openProfilePasswordDialog" :disabled="saving" class="h-10 px-5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-black uppercase text-[9px] tracking-widest shadow-lg transition-all gap-2">
+        <Check v-if="!saving" class="w-4 h-4" />
+        <Loader2 v-else class="w-4 h-4 animate-spin" />
+        Enregistrer
+      </Button>
+    </div>
+
     <!-- Main Dossier Card -->
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
       <!-- Left: Profile & Contact -->
@@ -90,7 +105,7 @@
                            <button @click="cancelEditing" class="text-rose-500"><X class="w-4 h-4" /></button>
                         </div>
                         <div v-else class="flex items-center justify-between">
-                           <span class="font-black text-slate-900 tabular-nums"> {{ client.phoneCountryCode || '+216' }} {{ client.phone }}</span>
+                           <span class="font-black text-slate-900 tabular-nums"> {{ draftClient.phoneCountryCode || '+216' }} {{ draftClient.phone }}</span>
                            <button v-if="authStore.isAdmin" @click="startEditing('phone')" class="opacity-0 group-hover:opacity-100 p-1 hover:bg-slate-100 rounded transition-all">
                               <Pencil class="w-3.5 h-3.5 text-slate-400" />
                            </button>
@@ -110,7 +125,7 @@
                            <button @click="cancelEditing" class="text-rose-500"><X class="w-4 h-4" /></button>
                         </div>
                         <div v-else class="flex items-center justify-between">
-                           <span class="font-bold text-slate-600 truncate block text-xs lowercase italic">{{ client.email || 'N/A' }}</span>
+                           <span class="font-bold text-slate-600 truncate block text-xs lowercase italic">{{ draftClient.email || 'N/A' }}</span>
                            <button v-if="authStore.isAdmin" @click="startEditing('email')" class="opacity-0 group-hover:opacity-100 p-1 hover:bg-slate-100 rounded transition-all">
                               <Pencil class="w-3.5 h-3.5 text-slate-400" />
                            </button>
@@ -130,7 +145,7 @@
                            <button @click="cancelEditing" class="text-rose-500"><X class="w-4 h-4" /></button>
                         </div>
                         <div v-else class="flex items-center justify-between">
-                           <span class="font-bold text-slate-600 text-xs leading-tight block">{{ client.address || 'Non spécifiée' }}</span>
+                           <span class="font-bold text-slate-600 text-xs leading-tight block">{{ draftClient.address || 'Non spécifiée' }}</span>
                            <button v-if="authStore.isAdmin" @click="startEditing('address')" class="opacity-0 group-hover:opacity-100 p-1 hover:bg-slate-100 rounded transition-all">
                               <Pencil class="w-3.5 h-3.5 text-slate-400" />
                            </button>
@@ -150,7 +165,7 @@
                       <button @click="cancelEditing" class="text-rose-500"><X class="w-4 h-4" /></button>
                    </div>
                    <div v-else class="flex items-center gap-2">
-                      <span class="font-black text-slate-900 tabular-nums text-sm">{{ client.cin }}</span>
+                      <span class="font-black text-slate-900 tabular-nums text-sm">{{ draftClient.cin }}</span>
                       <button v-if="authStore.isAdmin" @click="startEditing('cin')" class="opacity-0 group-hover:opacity-100 p-1 hover:bg-slate-100 rounded transition-all">
                         <Pencil class="w-3 h-3 text-slate-400" />
                       </button>
@@ -161,11 +176,12 @@
                       <Calendar class="w-3 h-3" /> {{ client.idCardType === 'passport' ? 'Date de délivrance Passeport' : (client.idCardType === 'carte_sejour' ? "Date d'émission Carte de Séjour" : "Date d'exportation CIN") }}
                    </span>
                    <div v-if="editingField === 'cinDate'" class="flex items-center gap-2">
-                      <Input type="date" v-model="tempValue" class="h-8 text-xs font-black" @change="triggerSave('cinDate')" />
+                      <Input type="date" v-model="tempValue" class="h-8 text-xs font-black" @keyup.enter="triggerSave('cinDate')" />
+                      <button @click="triggerSave('cinDate')" class="text-emerald-500"><Check class="w-4 h-4" /></button>
                       <button @click="cancelEditing" class="text-rose-500"><X class="w-4 h-4" /></button>
                    </div>
                    <div v-else class="flex items-center gap-2">
-                      <span class="font-black text-slate-700 text-sm tabular-nums">{{ formatDate(client.cinDate) || 'N/A' }}</span>
+                      <span class="font-black text-slate-700 text-sm tabular-nums">{{ formatDate(draftClient.cinDate) || 'N/A' }}</span>
                       <button v-if="authStore.isAdmin" @click="startEditing('cinDate')" class="opacity-0 group-hover:opacity-100 p-1 hover:bg-slate-100 rounded transition-all">
                         <Pencil class="w-3 h-3 text-slate-400" />
                       </button>
@@ -181,7 +197,7 @@
                       <button @click="cancelEditing" class="text-rose-500"><X class="w-4 h-4" /></button>
                    </div>
                    <div v-else class="flex items-center gap-2">
-                      <span class="font-black text-slate-900 tabular-nums text-sm uppercase">{{ client.drivingLicense || 'N/A' }}</span>
+                      <span class="font-black text-slate-900 tabular-nums text-sm uppercase">{{ draftClient.drivingLicense || 'N/A' }}</span>
                       <button v-if="authStore.isAdmin" @click="startEditing('drivingLicense')" class="opacity-0 group-hover:opacity-100 p-1 hover:bg-slate-100 rounded transition-all">
                          <Pencil class="w-3 h-3 text-slate-400" />
                       </button>
@@ -197,7 +213,7 @@
                       <button @click="cancelEditing" class="text-rose-500"><X class="w-4 h-4" /></button>
                    </div>
                    <div v-else class="flex items-center gap-2">
-                      <span class="font-black text-slate-700 text-sm">{{ client.lieuPermis || 'N/A' }}</span>
+                      <span class="font-black text-slate-700 text-sm">{{ draftClient.lieuPermis || 'N/A' }}</span>
                       <button v-if="authStore.isAdmin" @click="startEditing('lieuPermis')" class="opacity-0 group-hover:opacity-100 p-1 hover:bg-slate-100 rounded transition-all">
                          <Pencil class="w-3 h-3 text-slate-400" />
                       </button>
@@ -208,11 +224,12 @@
                       <Calendar class="w-3 h-3" /> Date d'exportation Permis
                    </span>
                    <div v-if="editingField === 'licenseDate'" class="flex items-center gap-2">
-                      <Input type="date" v-model="tempValue" class="h-8 text-xs font-black" @change="triggerSave('licenseDate')" />
+                      <Input type="date" v-model="tempValue" class="h-8 text-xs font-black" @keyup.enter="triggerSave('licenseDate')" />
+                      <button @click="triggerSave('licenseDate')" class="text-emerald-500"><Check class="w-4 h-4" /></button>
                       <button @click="cancelEditing" class="text-rose-500"><X class="w-4 h-4" /></button>
                    </div>
                    <div v-else class="flex items-center gap-2">
-                      <span class="font-black text-slate-700 text-sm tabular-nums">{{ formatDate(client.licenseDate) || 'N/A' }}</span>
+                      <span class="font-black text-slate-700 text-sm tabular-nums">{{ formatDate(draftClient.licenseDate) || 'N/A' }}</span>
                       <button v-if="authStore.isAdmin" @click="startEditing('licenseDate')" class="opacity-0 group-hover:opacity-100 p-1 hover:bg-slate-100 rounded transition-all">
                         <Pencil class="w-3 h-3 text-slate-400" />
                       </button>
@@ -223,11 +240,12 @@
                       <Calendar class="w-3 h-3" /> Naissance
                    </span>
                    <div v-if="editingField === 'birthday'" class="flex items-center gap-2">
-                      <Input type="date" v-model="tempValue" class="h-8 text-xs font-black" @change="triggerSave('birthday')" />
+                      <Input type="date" v-model="tempValue" class="h-8 text-xs font-black" @keyup.enter="triggerSave('birthday')" />
+                      <button @click="triggerSave('birthday')" class="text-emerald-500"><Check class="w-4 h-4" /></button>
                       <button @click="cancelEditing" class="text-rose-500"><X class="w-4 h-4" /></button>
                    </div>
                    <div v-else class="flex items-center gap-2">
-                      <span class="font-black text-slate-700 text-sm tabular-nums">{{ formatDate(client.birthday) }}</span>
+                      <span class="font-black text-slate-700 text-sm tabular-nums">{{ formatDate(draftClient.birthday) }}</span>
                       <button v-if="authStore.isAdmin" @click="startEditing('birthday')" class="opacity-0 group-hover:opacity-100 p-1 hover:bg-slate-100 rounded transition-all">
                          <Pencil class="w-3 h-3 text-slate-400" />
                       </button>
@@ -243,7 +261,7 @@
                       <button @click="cancelEditing" class="text-rose-500"><X class="w-4 h-4" /></button>
                    </div>
                    <div v-else class="flex items-center gap-2">
-                      <span class="font-black text-slate-700 text-sm">{{ client.lieuNaissance || 'N/A' }}</span>
+                      <span class="font-black text-slate-700 text-sm">{{ draftClient.lieuNaissance || 'N/A' }}</span>
                       <button v-if="authStore.isAdmin" @click="startEditing('lieuNaissance')" class="opacity-0 group-hover:opacity-100 p-1 hover:bg-slate-100 rounded transition-all">
                          <Pencil class="w-3 h-3 text-slate-400" />
                       </button>
@@ -259,7 +277,7 @@
                       <button @click="cancelEditing" class="text-rose-500"><X class="w-4 h-4" /></button>
                    </div>
                    <div v-else class="flex items-center gap-2">
-                      <span class="font-black text-slate-700 text-sm">{{ client.nationality || 'N/A' }}</span>
+                      <span class="font-black text-slate-700 text-sm">{{ draftClient.nationality || 'N/A' }}</span>
                       <button v-if="authStore.isAdmin" @click="startEditing('nationality')" class="opacity-0 group-hover:opacity-100 p-1 hover:bg-slate-100 rounded transition-all">
                          <Pencil class="w-3 h-3 text-slate-400" />
                       </button>
@@ -273,7 +291,7 @@
                       {{ client.addedBy.firstName }} {{ client.addedBy.lastName }}
                     </Badge>
                  </div>
-                 <div v-if="client.description || editingField === 'description'" class="pt-6 border-t border-slate-100 space-y-3 group">
+                 <div v-if="draftClient.description || editingField === 'description'" class="pt-6 border-t border-slate-100 space-y-3 group">
                      <div class="flex justify-between items-center">
                         <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Notes / Description</span>
                         <button v-if="authStore.isAdmin && editingField !== 'description'" @click="startEditing('description')" class="opacity-0 group-hover:opacity-100 p-1 hover:bg-slate-100 rounded transition-all">
@@ -287,7 +305,7 @@
                            <Button size="sm" @click="triggerSave('description')" class="bg-indigo-600 text-white font-black uppercase text-[8px] tracking-widest px-4 rounded-lg">Enregistrer</Button>
                         </div>
                      </div>
-                     <p v-else class="text-xs font-bold text-slate-500 leading-relaxed italic bg-slate-50/50 p-4 rounded-2xl border border-slate-100">{{ client.description || 'Aucune note' }}</p>
+                     <p v-else class="text-xs font-bold text-slate-500 leading-relaxed italic bg-slate-50/50 p-4 rounded-2xl border border-slate-100">{{ draftClient.description || 'Aucune note' }}</p>
                  </div>
           </CardContent>
         </Card>
@@ -309,13 +327,13 @@
                 { id: 'licenseBack', label: 'Permis (Verso)' }
               ]" :key="doc.id" class="space-y-3 group relative">
                 <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest text-center block">{{ doc.label }}</span>
-                <div class="aspect-[3/2] rounded-3xl overflow-hidden border-2 border-slate-100 bg-slate-50 flex items-center justify-center relative shadow-sm hover:border-indigo-400 transition-all duration-500 cursor-zoom-in" @click="selectedImage = getImageUrl(client[doc.id])">
-                  <img v-if="client[doc.id]" :src="getImageUrl(client[doc.id])" class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
+                <div class="aspect-[3/2] rounded-3xl overflow-hidden border-2 border-slate-100 bg-slate-50 flex items-center justify-center relative shadow-sm hover:border-indigo-400 transition-all duration-500 cursor-zoom-in" @click="selectedImage = getImageUrl(draftClient[doc.id])">
+                  <img v-if="draftClient[doc.id]" :src="getImageUrl(draftClient[doc.id])" class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
                   <div v-else class="flex flex-col items-center gap-2 text-slate-300">
                     <FileWarning class="w-6 h-6 stroke-1" />
                     <span class="text-[8px] font-black uppercase tracking-tighter">Manquant</span>
                   </div>
-                  <div v-if="client[doc.id]" class="absolute inset-0 bg-indigo-600/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                  <div v-if="draftClient[doc.id]" class="absolute inset-0 bg-indigo-600/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                 </div>
                 <!-- Action Buttons overlay -->
                 <div v-if="authStore.isAdmin" class="absolute top-8 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-all z-10">
@@ -327,7 +345,7 @@
                     <Upload class="w-3.5 h-3.5 text-indigo-600" />
                   </button>
                   <button 
-                    v-if="client[doc.id]"
+                    v-if="draftClient[doc.id]"
                     @click.stop="openCropper(doc.id)"
                     class="p-2 bg-white/90 shadow-lg rounded-xl hover:bg-white hover:scale-110"
                     title="Recadrer"
@@ -335,7 +353,7 @@
                     <Pencil class="w-3.5 h-3.5 text-indigo-600" />
                   </button>
                   <button 
-                    v-if="client[doc.id]"
+                    v-if="draftClient[doc.id]"
                     @click.stop="triggerFileDeletion(doc.id)"
                     class="p-2 bg-white/90 shadow-lg rounded-xl hover:bg-white hover:scale-110 hover:text-rose-600"
                     title="Supprimer"
@@ -670,7 +688,7 @@
           </div>
 
           <div class="flex flex-col gap-2 sm:gap-3 pt-3 sm:pt-4">
-             <Button @click="updateClientProfile" :disabled="saving" class="h-11 sm:h-14 bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase tracking-widest text-[9px] sm:text-[10px] rounded-xl sm:rounded-2xl shadow-xl shadow-indigo-100 transition-all gap-2">
+             <Button @click="requestFormSave" :disabled="saving" class="h-11 sm:h-14 bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase tracking-widest text-[9px] sm:text-[10px] rounded-xl sm:rounded-2xl shadow-xl shadow-indigo-100 transition-all gap-2">
                 <Check v-if="!saving" class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 <Loader2 v-else class="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" />
                 Sauvegarder les Modifications
@@ -722,7 +740,7 @@
     </Dialog>
 
     <!-- Password Confirmation Dialog -->
-    <Dialog :open="showPasswordDialog" @update:open="showPasswordDialog = $event">
+    <Dialog :open="showPasswordDialog" @update:open="(open: boolean) => { showPasswordDialog = open; if (!open) pendingFormSave = false }">
       <DialogContent class="sm:max-w-md bg-white border-none shadow-2xl rounded-[2.5rem] p-10 overflow-hidden">
         <div class="space-y-8">
           <div class="flex items-center gap-4 border-b border-slate-100 pb-6">
@@ -736,10 +754,14 @@
           </div>
 
           <div class="space-y-4">
+            <div v-if="guard.isLocked" class="flex items-center gap-2 bg-rose-50 text-rose-600 border border-rose-200 rounded-xl px-4 py-3">
+              <Lock class="w-4 h-4" />
+              <span class="text-[10px] font-black uppercase tracking-widest">Trop de tentatives — réessayez dans {{ guard.remainingSeconds }}s</span>
+            </div>
             <div class="space-y-2">
               <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Mot de passe Administrateur</label>
               <div class="relative">
-                <Input :type="showPassword ? 'text' : 'password'" v-model="adminPassword" placeholder="••••••••" class="h-14 rounded-2xl border-slate-200 focus:ring-rose-500/20 pr-12" @keyup.enter="confirmSave" />
+                <Input :type="showPassword ? 'text' : 'password'" v-model="adminPassword" :disabled="guard.isLocked" placeholder="••••••••" class="h-14 rounded-2xl border-slate-200 focus:ring-rose-500/20 pr-12" @keyup.enter="confirmSave" />
                 <button type="button" @click="showPassword = !showPassword" class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors outline-none">
                   <Eye v-if="!showPassword" class="w-5 h-5" />
                   <EyeOff v-else class="w-5 h-5" />
@@ -749,12 +771,12 @@
           </div>
 
           <div class="flex flex-col gap-3 pt-4">
-             <Button @click="confirmSave" :disabled="saving || !adminPassword" class="h-14 bg-rose-600 hover:bg-rose-700 text-white font-black uppercase tracking-widest text-[10px] rounded-2xl shadow-xl shadow-rose-100 transition-all gap-2">
+             <Button @click="confirmSave" :disabled="saving || !adminPassword || guard.isLocked" class="h-14 bg-rose-600 hover:bg-rose-700 text-white font-black uppercase tracking-widest text-[10px] rounded-2xl shadow-xl shadow-rose-100 transition-all gap-2">
                 <Check v-if="!saving" class="w-4 h-4" />
                 <Loader2 v-else class="w-4 h-4 animate-spin" />
                 Confirmer la Modification
              </Button>
-             <Button variant="ghost" @click="showPasswordDialog = false" class="text-slate-400 font-black uppercase text-[9px] tracking-widest">Annuler</Button>
+             <Button variant="ghost" @click="showPasswordDialog = false; pendingFormSave = false" class="text-slate-400 font-black uppercase text-[9px] tracking-widest">Annuler</Button>
           </div>
         </div>
       </DialogContent>
@@ -779,13 +801,14 @@ import { ref, onMounted, computed, reactive } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { clientApi, reservationApi, contratApi, uploadApi, getImageUrl } from '@/api'
 import { useAuthStore } from '@/stores/auth'
+import { usePasswordGuard, handlePasswordError } from '@/composables/usePasswordGuard'
 import { formatDate } from '@/lib/utils'
 import { useToast } from 'primevue/usetoast'
 import { 
 ChevronLeft, Phone, Mail, MapPin, Globe,
 CreditCard, ShieldCheck, Calendar, 
 FileWarning, ExternalLink, Download, Pencil, RotateCw, Upload, Trash2,
-Car as CarIcon, History as HistoryIcon, X, AlertCircle, Check, Loader2, Eye, EyeOff
+Car as CarIcon, History as HistoryIcon, X, AlertCircle, Check, Loader2, Eye, EyeOff, Lock
 } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -806,6 +829,7 @@ import 'vue-advanced-cropper/dist/style.css'
 const route = useRoute()
 const router = useRouter()
 const toast = useToast()
+const guard = usePasswordGuard()
 const authStore = useAuthStore()
 const client = ref<any>(null)
 const reservations = ref<any[]>([])
@@ -859,7 +883,9 @@ const tempPhoneCountryCode = ref('+216')
 const showPasswordDialog = ref(false)
 const adminPassword = ref('')
 const showPassword = ref(false)
-const pendingSaveField = ref<string | null>(null)
+const draftClient = reactive<any>({})
+const clientDirty = ref(false)
+const pendingFormSave = ref(false)
 
 const pendingDelete = ref(false)
 const showCropper = ref(false)
@@ -886,6 +912,7 @@ const fetchClientData = async () => {
       contratApi.getAll({ clientId: clientId })
     ])
     client.value = clientData
+    initDraft()
     reservations.value = resData
     contracts.value = contData
 
@@ -963,10 +990,12 @@ const confirmDelete = async () => {
   saving.value = true
   try {
     await clientApi.delete(client.value._id, adminPassword.value)
+    guard.reset()
     router.push('/clients')
     toast.add({ severity: 'success', summary: 'Supprimé', detail: 'Le client a été désactivé.', life: 3000 })
   } catch (err: any) {
     console.error('Failed to delete client', err)
+    if (handlePasswordError(err, toast)) return
     const msg = err.response?.data?.message || 'Erreur lors de la suppression.'
     toast.add({ severity: 'error', summary: 'Erreur', detail: msg, life: 5000 })
   } finally {
@@ -1078,20 +1107,31 @@ const saveIncompleteInfo = async () => {
   }
 }
 
-const updateClientProfile = async () => {
-  if (!client.value) return
+const requestFormSave = () => {
+  pendingFormSave.value = true
+  adminPassword.value = ''
+  showPasswordDialog.value = true
+}
+
+const confirmFormSave = async () => {
+  if (!client.value || !adminPassword.value) return
   saving.value = true
-  
+
   try {
     const payload: any = { ...editForm }
     if (!payload.cinDate) delete payload.cinDate
     if (!payload.licenseDate) delete payload.licenseDate
     if (!payload.birthday) delete payload.birthday
+    payload.password = adminPassword.value
 
     const updatedClient = await clientApi.update(client.value._id, payload)
+    guard.reset()
     client.value = updatedClient
     await fetchClientData()
     isEditing.value = false
+    pendingFormSave.value = false
+    showPasswordDialog.value = false
+    adminPassword.value = ''
     toast.add({ 
       severity: 'success', 
       summary: 'Profil Mis à Jour', 
@@ -1100,6 +1140,7 @@ const updateClientProfile = async () => {
     })
   } catch (err: any) {
     console.error('Failed to update client profile', err)
+    if (handlePasswordError(err, toast)) return
     toast.add({ 
       severity: 'error', 
       summary: 'Erreur', 
@@ -1113,9 +1154,9 @@ const updateClientProfile = async () => {
 
 const startEditing = (field: string) => {
   editingField.value = field
-  tempValue.value = client.value[field]
+  tempValue.value = draftClient[field]
   if (field === 'phone') {
-    tempPhoneCountryCode.value = client.value.phoneCountryCode || '+216'
+    tempPhoneCountryCode.value = draftClient.phoneCountryCode || '+216'
   }
   if ((field === 'birthday' || field === 'cinDate' || field === 'licenseDate') && tempValue.value) {
     tempValue.value = new Date(tempValue.value).toISOString().split('T')[0]
@@ -1128,36 +1169,67 @@ const cancelEditing = () => {
 }
 
 const triggerSave = (field: string) => {
-  pendingSaveField.value = field
-  showPasswordDialog.value = true
-  adminPassword.value = ''
+  draftClient[field] = tempValue.value
+  if (field === 'phone') {
+    draftClient.phoneCountryCode = tempPhoneCountryCode.value
+  }
+  editingField.value = null
+  tempValue.value = null
+  clientDirty.value = true
 }
 
-const confirmSave = async () => {
-  if (pendingDelete.value) {
-    await confirmDelete()
-    return
+const initDraft = () => {
+  if (!client.value) return
+  Object.keys(draftClient).forEach((k) => delete draftClient[k])
+  Object.assign(draftClient, JSON.parse(JSON.stringify(client.value)))
+  clientDirty.value = false
+}
+
+const buildProfilePayload = () => {
+  const editable = [
+    'firstName', 'lastName', 'cin', 'drivingLicense', 'email', 'phone', 'phoneCountryCode',
+    'address', 'description', 'birthday', 'cinDate', 'licenseDate',
+    'lieuNaissance', 'lieuPermis', 'nationality',
+    'cinFront', 'cinBack', 'licenseFront', 'licenseBack'
+  ]
+  const payload: any = {}
+  for (const f of editable) {
+    if (draftClient[f] !== undefined && draftClient[f] !== null) payload[f] = draftClient[f]
   }
-  if (!pendingSaveField.value || !client.value) return
-  
+  ;['birthday', 'cinDate', 'licenseDate'].forEach((f) => {
+    if (payload[f]) payload[f] = new Date(payload[f])
+  })
+  return payload
+}
+
+const openProfilePasswordDialog = () => {
+  adminPassword.value = ''
+  showPasswordDialog.value = true
+}
+
+const cancelProfileChanges = () => {
+  editingField.value = null
+  tempValue.value = null
+  initDraft()
+}
+
+const confirmDraftSave = async () => {
+  if (!client.value || !adminPassword.value) return
   saving.value = true
   try {
-    const payload: any = {
-      [pendingSaveField.value]: tempValue.value,
-      password: adminPassword.value
-    }
-    if (pendingSaveField.value === 'phone') {
-      payload.phoneCountryCode = tempPhoneCountryCode.value
-    }
-    
+    const payload = buildProfilePayload()
+    payload.password = adminPassword.value
+
     const updatedClient = await clientApi.update(client.value._id, payload)
+    guard.reset()
     client.value = updatedClient
     await fetchClientData()
-    editingField.value = null
     showPasswordDialog.value = false
-    toast.add({ severity: 'success', summary: 'Succès', detail: 'Information mise à jour.', life: 3000 })
+    adminPassword.value = ''
+    toast.add({ severity: 'success', summary: 'Profil Mis à Jour', detail: 'Les modifications ont été enregistrées.', life: 3000 })
   } catch (err: any) {
-    console.error('Failed to save field', err)
+    console.error('Failed to save profile', err)
+    if (handlePasswordError(err, toast)) return
     const msg = err.response?.data?.message || 'Erreur lors de la mise à jour.'
     toast.add({ severity: 'error', summary: 'Erreur', detail: msg, life: 5000 })
   } finally {
@@ -1165,9 +1237,21 @@ const confirmSave = async () => {
   }
 }
 
+const confirmSave = async () => {
+  if (pendingDelete.value) {
+    await confirmDelete()
+    return
+  }
+  if (pendingFormSave.value) {
+    await confirmFormSave()
+    return
+  }
+  await confirmDraftSave()
+}
+
 const openCropper = (field: string) => {
   croppingField.value = field
-  croppingImage.value = getImageUrl(client.value[field])
+  croppingImage.value = getImageUrl(draftClient[field])
   showCropper.value = true
   rotation.value = 0
 }
@@ -1191,12 +1275,12 @@ const saveCroppedImage = async () => {
     
     const uploadRes = await uploadApi.upload(file)
     
-    // Now trigger password to confirm updating the client record with new image URL
-    tempValue.value = uploadRes.url
-    pendingSaveField.value = croppingField.value
+    // Stage the cropped image into the draft — apply via Enregistrer + password
+    draftClient[croppingField.value] = uploadRes.url
+    clientDirty.value = true
+    croppingField.value = null
     showCropper.value = false
-    showPasswordDialog.value = true
-    adminPassword.value = ''
+    toast.add({ severity: 'success', summary: 'Aperçu Mis à Jour', detail: 'Cliquez sur « Enregistrer » pour appliquer.', life: 3000 })
   } catch (err) {
     console.error('Failed to crop/upload image', err)
     toast.add({ severity: 'error', summary: 'Erreur', detail: 'Échec de l\'upload de l\'image.', life: 5000 })
@@ -1218,10 +1302,9 @@ const handleReplacementFile = async (event: Event) => {
   saving.value = true
   try {
     const uploadRes = await uploadApi.upload(file)
-    tempValue.value = uploadRes.url
-    pendingSaveField.value = targetReplacementField.value
-    showPasswordDialog.value = true
-    adminPassword.value = ''
+    draftClient[targetReplacementField.value] = uploadRes.url
+    clientDirty.value = true
+    toast.add({ severity: 'success', summary: 'Aperçu Mis à Jour', detail: 'Cliquez sur « Enregistrer » pour appliquer.', life: 3000 })
   } catch (err) {
     console.error('Failed to upload replacement file', err)
     toast.add({ severity: 'error', summary: 'Erreur', detail: 'Échec de l\'upload de l\'image.', life: 5000 })
@@ -1233,10 +1316,8 @@ const handleReplacementFile = async (event: Event) => {
 
 const triggerFileDeletion = (field: string) => {
   if (!confirm('Êtes-vous sûr de vouloir supprimer cette image ?')) return
-  tempValue.value = ''
-  pendingSaveField.value = field
-  showPasswordDialog.value = true
-  adminPassword.value = ''
+  draftClient[field] = ''
+  clientDirty.value = true
 }
 
 const downloadPdf = async () => {

@@ -51,7 +51,10 @@ export class Client {
   @Prop()
   address: string;
 
-  @Prop({ default: 'WHITE_LIST', enum: ['WHITE_LIST', 'BLACK_LIST', 'BLOCK_LIST'] })
+  @Prop({
+    default: 'WHITE_LIST',
+    enum: ['WHITE_LIST', 'BLACK_LIST', 'BLOCK_LIST'],
+  })
   status: string;
 
   @Prop()
@@ -78,7 +81,6 @@ export class Client {
 
 export type ClientDocument = Client & Document;
 export const ClientSchema = SchemaFactory.createForClass(Client);
-
 
 ClientSchema.index({ lastName: 1 });
 ClientSchema.index({ totalRents: -1 });

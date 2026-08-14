@@ -17,4 +17,3 @@ async function bootstrap() {
 if (!process.env.VERCEL) {
   bootstrap();
 }
-

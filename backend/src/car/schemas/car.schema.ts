@@ -2,6 +2,24 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 
 @Schema({ timestamps: true })
+export class CarDocumentItem {
+  @Prop({ required: true })
+  type: string; // carteGriseRecto | carteGriseVerso | laisserPasser | assurance | vignette
+
+  @Prop({ required: true })
+  url: string;
+
+  @Prop({ default: '' })
+  originalName: string;
+
+  @Prop({ default: () => new Date() })
+  uploadedAt: Date;
+}
+
+export const CarDocumentItemSchema =
+  SchemaFactory.createForClass(CarDocumentItem);
+
+@Schema({ timestamps: true })
 export class Car {
   @Prop({ required: true, unique: true })
   matricule: string;
@@ -39,6 +57,12 @@ export class Car {
   @Prop({ default: true })
   isAvailable: boolean;
 
+  @Prop({ type: Types.ObjectId, ref: 'Agence' })
+  agence: Types.ObjectId;
+
+  @Prop({ type: [CarDocumentItemSchema], default: [] })
+  documents: CarDocumentItem[];
+
   @Prop([{ type: Types.ObjectId, ref: 'Reservation' }])
   reservations: Types.ObjectId[];
 
@@ -54,7 +78,6 @@ export class Car {
 
 export type CarDocument = Car & Document;
 export const CarSchema = SchemaFactory.createForClass(Car);
-
 
 CarSchema.index({ brand: 1 });
 CarSchema.index({ isAvailable: 1 });

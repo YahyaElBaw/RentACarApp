@@ -3,12 +3,29 @@ import { ref, computed } from 'vue';
 import { authApi } from '../api';
 import router from '../router';
 
+const getStored = (key: string) => {
+  if (typeof window === 'undefined') return '';
+  return sessionStorage.getItem(key) || localStorage.getItem(key) || '';
+};
+
+const setStored = (key: string, val: string) => {
+  sessionStorage.setItem(key, val);
+  localStorage.setItem(key, val);
+};
+
+const removeStored = (key: string) => {
+  sessionStorage.removeItem(key);
+  localStorage.removeItem(key);
+};
+
 export const useAuthStore = defineStore('auth', () => {
-  const user = ref(JSON.parse(localStorage.getItem('user') || 'null'));
-  const token = ref(localStorage.getItem('token') || '');
+  const initialUser = getStored('user');
+  const user = ref(initialUser ? JSON.parse(initialUser) : null);
+  const token = ref(getStored('token'));
 
   const isAuthenticated = computed(() => !!token.value);
-  const isAdmin = computed(() => user.value?.role === 'admin');
+  const isAdmin = computed(() => user.value?.role === 'admin' || user.value?.role === 'super_admin');
+  const isSuperAdmin = computed(() => user.value?.role === 'super_admin');
 
   const clearState = () => {
     token.value = '';
@@ -25,8 +42,8 @@ export const useAuthStore = defineStore('auth', () => {
       token.value = data.access_token;
       user.value = data.user;
       
-      localStorage.setItem('token', data.access_token);
-      localStorage.setItem('user', JSON.stringify(data.user));
+      setStored('token', data.access_token);
+      setStored('user', JSON.stringify(data.user));
       
       return true;
     } catch (error) {
@@ -35,11 +52,16 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  function logout() {
+  async function logout() {
+    try {
+      await authApi.logout();
+    } catch (error) {
+      console.error('Logout API call failed:', error);
+    }
     token.value = '';
     user.value = null;
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
+    removeStored('token');
+    removeStored('user');
     router.push('/login');
   }
 
@@ -52,8 +74,8 @@ export const useAuthStore = defineStore('auth', () => {
       if (error?.response?.status === 401) {
         token.value = '';
         user.value = null;
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
+        removeStored('token');
+        removeStored('user');
       }
       return false;
     }
@@ -64,6 +86,7 @@ export const useAuthStore = defineStore('auth', () => {
     token,
     isAuthenticated,
     isAdmin,
+    isSuperAdmin,
     login,
     logout,
     fetchProfile,

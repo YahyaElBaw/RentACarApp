@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge/index'
 import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Activity, Calendar, Wallet, FileText, TrendingDown, BarChart2, Car, Filter, Download, Check, Clock, ChevronLeft, ChevronRight } from 'lucide-vue-next'
+import { Activity, Calendar, Wallet, FileText, TrendingDown, BarChart2, Car, Filter, Printer, Download, Check, Clock, ChevronLeft, ChevronRight } from 'lucide-vue-next'
 import { Line } from 'vue-chartjs'
 import { Chart as ChartJS, Title, Tooltip, Legend, LineElement, PointElement, CategoryScale, LinearScale, Filler } from 'chart.js'
 import jsPDF from 'jspdf'
@@ -25,6 +25,9 @@ const pageSize = 10
 
 const filterPeriod = ref('this_month')
 const showFilterMenu = ref(false)
+const filterHover = ref(false)
+const printHover = ref(false)
+const downloadHover = ref(false)
 const customStartDate = ref(new Date().toISOString().split('T')[0])
 const customEndDate = ref(new Date().toISOString().split('T')[0])
 
@@ -260,7 +263,7 @@ const formatDate = (dateString: string) => {
   })
 }
 
-const downloadBilanPDF = () => {
+const buildBilanPDF = () => {
   let startStr = ''
   let endStr = ''
   const now = new Date()
@@ -280,10 +283,6 @@ const downloadBilanPDF = () => {
     startStr = new Date(customStartDate.value).toLocaleDateString('fr-FR')
     endStr = new Date(customEndDate.value).toLocaleDateString('fr-FR')
   }
-
-  const safeFilenameDate = startStr && endStr 
-    ? `${startStr.replace(/\//g, '-')}_Au_${endStr.replace(/\//g, '-')}`
-    : 'Période_Complète'
 
   const doc = new jsPDF()
   const pageWidth = doc.internal.pageSize.getWidth()
@@ -455,6 +454,21 @@ const downloadBilanPDF = () => {
     doc.text(`Page ${i} / ${pageCount}`, pageWidth - margin, pageHeight - 8, { align: 'right' })
   }
 
+  const safeFilenameDate = startStr && endStr 
+    ? `${startStr.replace(/\//g, '-')}_Au_${endStr.replace(/\//g, '-')}`
+    : 'Période_Complète'
+
+  return { doc, safeFilenameDate }
+}
+
+const printBilanPDF = () => {
+  const { doc } = buildBilanPDF()
+  doc.autoPrint()
+  doc.output('dataurlnewwindow')
+}
+
+const downloadBilanPDF = () => {
+  const { doc, safeFilenameDate } = buildBilanPDF()
   doc.save(`Bilan_Financier_${safeFilenameDate}.pdf`)
 }
 </script>
@@ -485,11 +499,15 @@ const downloadBilanPDF = () => {
            <div class="relative">
               <Button 
                 @click="showFilterMenu = !showFilterMenu"
+                @mouseenter="filterHover = true"
+                @mouseleave="filterHover = false"
                 variant="outline" 
-                class="h-12 px-6 rounded-2xl font-black tracking-widest uppercase text-[10px] flex items-center gap-2 border-slate-200"
+                :class="'group relative h-12 rounded-2xl font-black tracking-widest uppercase text-[10px] overflow-hidden flex items-center justify-start border-2 border-slate-200 hover:border-indigo-400 transition-all duration-300 active:scale-95 hover:shadow-xl hover:shadow-indigo-200/50 ' + (filterHover ? 'w-44' : 'w-12')"
               >
-                <Filter class="w-4 h-4" />
-                Filtres
+                <div class="absolute inset-y-0 left-0 flex items-center pl-3.5">
+                  <Filter class="w-4 h-4 transition-transform duration-300 group-hover:rotate-[-20deg] group-hover:scale-110" />
+                </div>
+                <span :class="[filterHover ? 'opacity-100' : 'opacity-0', 'whitespace-nowrap transition-all duration-300 pl-10 pr-4 text-slate-600 group-hover:text-indigo-600']">Filtres</span>
               </Button>
               <div v-if="showFilterMenu" class="absolute right-0 top-14 w-52 bg-white border border-slate-100 rounded-3xl shadow-3xl overflow-hidden z-50 py-2">
                   <button @click="filterPeriod = 'this_month'; showFilterMenu = false" class="w-full text-left px-5 py-3 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50 hover:text-indigo-600 flex items-center justify-between">
@@ -517,11 +535,27 @@ const downloadBilanPDF = () => {
            </div>
            
            <Button 
-             @click="downloadBilanPDF"
-             class="h-12 px-6 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-black tracking-widest uppercase text-[10px] flex items-center gap-2 shadow-xl shadow-slate-900/20 ml-2"
+             @click="printBilanPDF"
+             @mouseenter="printHover = true"
+             @mouseleave="printHover = false"
+             :class="'group relative h-12 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-black tracking-widest uppercase text-[10px] overflow-hidden flex items-center justify-start shadow-xl shadow-slate-900/20 transition-all duration-300 active:scale-95 hover:scale-105 hover:-translate-y-0.5 ' + (printHover ? 'w-44' : 'w-12')"
            >
-             <Download class="w-4 h-4" />
-             Bilan
+             <div class="absolute inset-y-0 left-0 flex items-center pl-3.5">
+               <Printer class="w-4 h-4 transition-transform duration-300 group-hover:rotate-[-15deg] group-hover:scale-110" />
+             </div>
+             <span :class="[printHover ? 'opacity-100' : 'opacity-0', 'whitespace-nowrap transition-all duration-300 pl-10 pr-4']">Imprimer</span>
+           </Button>
+           <Button 
+             @click="downloadBilanPDF"
+             @mouseenter="downloadHover = true"
+             @mouseleave="downloadHover = false"
+             variant="outline"
+             :class="'group relative h-12 rounded-2xl font-black tracking-widest uppercase text-[10px] overflow-hidden flex items-center justify-start border-2 border-slate-200 hover:border-emerald-400 transition-all duration-300 active:scale-95 hover:shadow-xl hover:shadow-emerald-200/50 ' + (downloadHover ? 'w-52' : 'w-12')"
+           >
+             <div class="absolute inset-y-0 left-0 flex items-center pl-3.5">
+               <Download class="w-4 h-4 transition-transform duration-300 group-hover:translate-y-0.5 group-hover:scale-110" />
+             </div>
+             <span :class="[downloadHover ? 'opacity-100' : 'opacity-0', 'whitespace-nowrap transition-all duration-300 pl-10 pr-4 text-slate-600 group-hover:text-emerald-600']">Télécharger</span>
            </Button>
         </div>
       </div>

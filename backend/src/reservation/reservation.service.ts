@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ConflictException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Reservation, ReservationDocument } from './schemas/reservation.schema';
@@ -7,31 +12,41 @@ import { Client, ClientDocument } from '../client/schemas/client.schema';
 
 import { JourneeService } from '../journee/journee.service';
 import { BookingConflictService } from '../shared/booking-conflict.service';
+import { EventsGateway } from '../events/events.gateway';
 
 @Injectable()
 export class ReservationService {
   constructor(
-    @InjectModel(Reservation.name) private reservationModel: Model<ReservationDocument>,
+    @InjectModel(Reservation.name)
+    private reservationModel: Model<ReservationDocument>,
     @InjectModel(Car.name) private carModel: Model<CarDocument>,
     @InjectModel(Client.name) private clientModel: Model<ClientDocument>,
     private journeeService: JourneeService,
     private bookingConflictService: BookingConflictService,
+    private eventsGateway: EventsGateway,
   ) {}
 
   private async normalizeClientData(res: any): Promise<void> {
     if (!res) return;
-    
+
     // Support for both lean objects and Mongoose Documents
     const clientsField = res.clients;
     const legacyClientField = res.get ? res.get('client') : res.client;
 
-    const rawClients = (clientsField && Array.isArray(clientsField) && clientsField.length > 0) 
-      ? clientsField 
-      : (legacyClientField ? [legacyClientField] : []);
+    const rawClients =
+      clientsField && Array.isArray(clientsField) && clientsField.length > 0
+        ? clientsField
+        : legacyClientField
+          ? [legacyClientField]
+          : [];
 
     const normalizedClients = [];
     for (const c of rawClients) {
-      if (c && typeof c === 'object' && (c.lastName || (c.get && c.get('lastName')))) {
+      if (
+        c &&
+        typeof c === 'object' &&
+        (c.lastName || (c.get && c.get('lastName')))
+      ) {
         normalizedClients.push(c);
       } else if (c) {
         try {
@@ -42,11 +57,11 @@ export class ReservationService {
         }
       }
     }
-    
+
     if (res.set) {
-      // Mongoose Document: use set for virtual-like properties if needed, 
+      // Mongoose Document: use set for virtual-like properties if needed,
       // or just assign to 'any' for the response
-      (res as any).clients = normalizedClients;
+      res.clients = normalizedClients;
     } else {
       res.clients = normalizedClients;
     }
@@ -69,7 +84,7 @@ export class ReservationService {
       const conflicts = await this.bookingConflictService.findConflicts(
         createReservationDto.car,
         start,
-        end
+        end,
       );
 
       if (conflicts.hasConflicts && createReservationDto.force !== true) {
@@ -77,24 +92,28 @@ export class ReservationService {
           message: 'CAR_RESERVED_CONFLICT',
           conflicts: {
             reservations: conflicts.reservations,
-            contracts: conflicts.contracts
-          }
+            contracts: conflicts.contracts,
+          },
         });
       }
 
       if (createReservationDto.force && conflicts.reservations.length > 0) {
-        await this.reservationModel.updateMany(
-          { _id: { $in: conflicts.reservations.map(c => c._id) } },
-          { status: 'pending' }
-        ).exec();
+        await this.reservationModel
+          .updateMany(
+            { _id: { $in: conflicts.reservations.map((c) => c._id) } },
+            { status: 'pending' },
+          )
+          .exec();
       }
     }
 
-    const createdReservation = new this.reservationModel(createReservationDto) as ReservationDocument;
+    const createdReservation = new this.reservationModel(
+      createReservationDto,
+    ) as ReservationDocument;
     const savedReservation = await createdReservation.save();
 
     // Log to Journee
-    const logMessage = car 
+    const logMessage = car
       ? `Nouvelle réservation pour ${car.brand} ${car.model}`
       : `Nouvelle réservation (Véhicule non assigné)`;
 
@@ -102,8 +121,13 @@ export class ReservationService {
       'RESERVATION_PRISE',
       logMessage,
       0,
-      savedReservation._id.toString()
+      savedReservation._id.toString(),
     );
+
+    this.eventsGateway.broadcastDataChange('reservation:change', {
+      action: 'created',
+      id: savedReservation._id,
+    });
 
     return savedReservation;
   }
@@ -115,11 +139,12 @@ export class ReservationService {
     if (filters.clientId) {
       query['$or'] = [
         { clients: filters.clientId },
-        { client: filters.clientId }
+        { client: filters.clientId },
       ];
     }
 
-    const list = await this.reservationModel.find(query)
+    const list = await this.reservationModel
+      .find(query)
       .populate({ path: 'car', model: 'Car' })
       .populate({ path: 'clients', model: 'Client' })
       .populate('contrat')
@@ -128,27 +153,39 @@ export class ReservationService {
 
     for (const res of list as any[]) {
       await this.normalizeClientData(res);
-      const firstClient = res.clients?.[0] as any;
-      res.clientName = firstClient ? `${firstClient.lastName} ${firstClient.firstName}`.trim().toUpperCase() : '—';
-      res.clientPhone = firstClient ? (firstClient.phone || 'Pas de tél') : 'Pas de tél';
-      res.clientCin = firstClient ? (firstClient.cin || '—') : '—';
+      const firstClient = res.clients?.[0];
+      res.clientName = firstClient
+        ? `${firstClient.lastName} ${firstClient.firstName}`
+            .trim()
+            .toUpperCase()
+        : '—';
+      res.clientPhone = firstClient
+        ? firstClient.phone || 'Pas de tél'
+        : 'Pas de tél';
+      res.clientCin = firstClient ? firstClient.cin || '—' : '—';
     }
     return list;
   }
 
   async findOne(id: string): Promise<any> {
-    const reservation = await this.reservationModel.findById(id)
+    const reservation = await this.reservationModel
+      .findById(id)
       .populate({ path: 'car', model: 'Car' })
       .populate({ path: 'clients', model: 'Client' })
       .populate('contrat')
       .exec();
-    if (!reservation) throw new NotFoundException(`Reservation with ID ${id} not found`);
-    
+    if (!reservation)
+      throw new NotFoundException(`Reservation with ID ${id} not found`);
+
     await this.normalizeClientData(reservation);
-    const firstClient = (reservation as any).clients?.[0] as any;
-    (reservation as any).clientName = firstClient ? `${firstClient.lastName} ${firstClient.firstName}`.trim().toUpperCase() : '—';
-    (reservation as any).clientPhone = firstClient ? (firstClient.phone || 'Pas de tél') : 'Pas de tél';
-    
+    const firstClient = (reservation as any).clients?.[0];
+    (reservation as any).clientName = firstClient
+      ? `${firstClient.lastName} ${firstClient.firstName}`.trim().toUpperCase()
+      : '—';
+    (reservation as any).clientPhone = firstClient
+      ? firstClient.phone || 'Pas de tél'
+      : 'Pas de tél';
+
     return reservation;
   }
 
@@ -158,21 +195,35 @@ export class ReservationService {
       .populate({ path: 'car', model: 'Car' })
       .populate({ path: 'clients', model: 'Client' })
       .exec();
-    if (!reservation) throw new NotFoundException(`Reservation with ID ${id} not found`);
-    
+    if (!reservation)
+      throw new NotFoundException(`Reservation with ID ${id} not found`);
+
     await this.normalizeClientData(reservation);
-    const firstClient = (reservation as any).clients?.[0] as any;
-    (reservation as any).clientName = firstClient ? `${firstClient.lastName} ${firstClient.firstName}`.trim().toUpperCase() : '—';
-    (reservation as any).clientPhone = firstClient ? (firstClient.phone || 'Pas de tél') : 'Pas de tél';
+    const firstClient = (reservation as any).clients?.[0];
+    (reservation as any).clientName = firstClient
+      ? `${firstClient.lastName} ${firstClient.firstName}`.trim().toUpperCase()
+      : '—';
+    (reservation as any).clientPhone = firstClient
+      ? firstClient.phone || 'Pas de tél'
+      : 'Pas de tél';
+
+    this.eventsGateway.broadcastDataChange('reservation:change', {
+      action: 'updated',
+      id,
+    });
 
     return reservation;
   }
 
   async confirm(id: string, force = false): Promise<ReservationDocument> {
     const reservation = await this.findOne(id);
-    if (reservation.status !== 'pending') throw new BadRequestException('Only pending reservations can be confirmed');
+    if (reservation.status !== 'pending')
+      throw new BadRequestException(
+        'Only pending reservations can be confirmed',
+      );
 
-    if (!reservation.car) throw new BadRequestException('A car must be assigned before confirming');
+    if (!reservation.car)
+      throw new BadRequestException('A car must be assigned before confirming');
 
     const car = await this.carModel.findById(reservation.car).exec();
     if (!car) throw new NotFoundException('Car not found');
@@ -182,28 +233,35 @@ export class ReservationService {
       car._id.toString(),
       reservation.startDate,
       reservation.endDate,
-      reservation._id.toString()
+      reservation._id.toString(),
     );
 
     if (conflicts.hasConflicts && force !== true) {
-       throw new ConflictException({
-         message: 'CAR_RESERVED_CONFLICT',
-         conflicts: {
-           reservations: conflicts.reservations,
-           contracts: conflicts.contracts
-         }
-       });
+      throw new ConflictException({
+        message: 'CAR_RESERVED_CONFLICT',
+        conflicts: {
+          reservations: conflicts.reservations,
+          contracts: conflicts.contracts,
+        },
+      });
     }
 
     if (force && conflicts.reservations.length > 0) {
-      await this.reservationModel.updateMany(
-        { _id: { $in: conflicts.reservations.map(c => c._id) } },
-        { status: 'pending' }
-      ).exec();
+      await this.reservationModel
+        .updateMany(
+          { _id: { $in: conflicts.reservations.map((c) => c._id) } },
+          { status: 'pending' },
+        )
+        .exec();
     }
 
     reservation.status = 'confirmed';
     await reservation.save();
+
+    this.eventsGateway.broadcastDataChange('reservation:change', {
+      action: 'confirmed',
+      id,
+    });
 
     return reservation;
   }
@@ -212,6 +270,11 @@ export class ReservationService {
     const reservation = await this.findOne(id);
     reservation.status = 'cancelled';
     await reservation.save();
+
+    this.eventsGateway.broadcastDataChange('reservation:change', {
+      action: 'cancelled',
+      id,
+    });
 
     return reservation;
   }

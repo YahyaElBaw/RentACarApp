@@ -6,7 +6,7 @@ import { formatDate } from '@/lib/utils';
 import { 
   Car as CarIcon, User as UserIcon, Calendar as CalendarIcon, 
   ArrowRight, ArrowLeft, Check, Search, Eye, 
-  Clock, Hash, FileText, MapPin, ShieldCheck, FileWarning, AlertTriangle, Percent, DollarSign, Building2
+  Clock, Hash, FileText, MapPin, ShieldCheck, FileWarning, AlertTriangle, Percent, DollarSign, Building2, Zap
 } from 'lucide-vue-next';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,7 +16,9 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription
 } from '@/components/ui/dialog';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { useAuthStore } from '@/stores/auth';
 
+const authStore = useAuthStore();
 const router = useRouter();
 const route = useRoute();
 const activeStep = ref(0);
@@ -25,6 +27,7 @@ const submitting = ref(false);
 const showConflictDialog = ref(false);
 const pendingConflicts = ref<{ reservations: any[], contracts: any[] }>({ reservations: [], contracts: [] });
 const isRefModalOpen = ref(!route.query.contractNumber);
+const forceMode = ref(route.query.force === '1' || route.query.force === 'true');
 
 const steps = [
   { label: 'Véhicule', description: 'Sélectionnez un véhicule', icon: CarIcon },
@@ -43,11 +46,6 @@ const fetchAppSettings = async () => {
     ]);
     appSettings.value = data;
     availableAgencies.value = agenceRes || [];
-    
-    // Auto-select first agency if available and form.agency is empty
-    if (availableAgencies.value.length > 0 && !form.agency) {
-      form.agency = availableAgencies.value[0].name;
-    }
 
     if (data) {
       form.contractTaxValue = data.contractTaxValue || 0;
@@ -73,8 +71,12 @@ const effectiveDailyRate = computed(() => {
 });
 
 const filteredCars = computed(() => {
-  if (!carSearch.value) return availableCars.value;
-  return availableCars.value.filter(car => 
+  let cars = availableCars.value;
+  if (form.agency) {
+    cars = cars.filter(car => car.agence?.name === form.agency);
+  }
+  if (!carSearch.value) return cars;
+  return cars.filter(car => 
     car.brand.toLowerCase().includes(carSearch.value.toLowerCase()) ||
     car.model.toLowerCase().includes(carSearch.value.toLowerCase()) ||
     car.matricule.toLowerCase().includes(carSearch.value.toLowerCase())
@@ -170,10 +172,13 @@ watch(() => form.startTime, (newVal) => {
   form.endTime = newVal;
 });
 
-// Set initial kilometrageDepart when car is selected
+// Set initial kilometrageDepart and agency when car is selected
 watch(() => selectedCar.value, (car) => {
   if (car?.mileage) {
     form.kilometrageDepart = car.mileage;
+  }
+  if (car?.agence?.name) {
+    form.agency = car.agence.name;
   }
 });
 
@@ -215,7 +220,7 @@ onMounted(async () => {
   await fetchAppSettings();
   try {
     const [carsData, clientsData] = await Promise.all([
-      carApi.getAll({ available: true }),
+      forceMode.value ? carApi.getAll() : carApi.getAll({ available: true }),
       clientApi.getAll()
     ]);
     availableCars.value = carsData.filter((c: any) => !c.disabled);
@@ -332,7 +337,7 @@ const submitContrat = async (force = false) => {
       startMileage: form.kilometrageDepart,
       isPaid: true,
       reservation: route.query.reservationId || undefined,
-      force: force
+      force: forceMode.value || force
     };
     await contratApi.create(payload);
     showSuccessDialog.value = true;
@@ -383,6 +388,14 @@ watch(isRefModalOpen, (isOpen) => {
     </div>
 
     <!-- MAIN GRID LAYOUT -->
+    <div v-if="forceMode" class="flex items-center gap-4 bg-rose-50 border-2 border-rose-200 rounded-[2rem] p-5 animate-in fade-in duration-500">
+      <div class="w-11 h-11 rounded-2xl bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-lg shadow-rose-600/20"><Zap class="w-5 h-5 stroke-[3]" /></div>
+      <div class="space-y-0.5">
+        <p class="text-[10px] font-black text-rose-600 uppercase tracking-widest">Mode Création Forcée — Super Admin</p>
+        <p class="text-[10px] font-bold text-rose-400 uppercase tracking-wide">Les conflits de réservation seront ignorés et les réservations en conflit repassées en planning.</p>
+      </div>
+    </div>
+
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
       
       <!-- LEFT: FORM STEPS (8 Columns) -->
@@ -390,24 +403,24 @@ watch(isRefModalOpen, (isOpen) => {
         
         <!-- Stepper Indicator -->
         <div class="flex items-center justify-between bg-white/70 backdrop-blur-3xl border border-slate-200/50 p-6 rounded-[2rem] shadow-xl">
-          <div 
-            v-for="(step, index) in steps" 
-            :key="index"
-            class="flex items-center gap-4 group cursor-pointer transition-all"
-            @click="index < activeStep ? activeStep = index : null"
-          >
-            <div 
-              :class="[ 'w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-500 border-2', activeStep === index ? 'bg-indigo-600 border-indigo-600 text-white shadow-2xl shadow-indigo-600/20 scale-110 rotate-3' : activeStep > index ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500 ' : 'bg-slate-50 border-slate-100 text-slate-400 ' ]"
+          <template v-for="(step, index) in steps" :key="index">
+            <div
+              class="flex items-center gap-4 group cursor-pointer transition-all shrink-0"
+              @click="index < activeStep ? activeStep = index : null"
             >
-              <component :is="step.icon" class="w-5 h-5 stroke-[2.5]" />
-            </div>
-            <div class="hidden xl:block">
-              <div :class="['text-[11px] font-black uppercase tracking-[0.2em] leading-none', activeStep >= index ? 'text-slate-900 ' : 'text-slate-400 ']">
-                {{ step.label }}
+              <div
+                :class="[ 'w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-500 border-2', activeStep === index ? 'bg-indigo-600 border-indigo-600 text-white shadow-2xl shadow-indigo-600/20 scale-110 rotate-3' : activeStep > index ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500 ' : 'bg-slate-50 border-slate-100 text-slate-400 ' ]"
+              >
+                <component :is="step.icon" class="w-5 h-5 stroke-[2.5]" />
+              </div>
+              <div class="hidden xl:block">
+                <div :class="['text-[11px] font-black uppercase tracking-[0.2em] leading-none whitespace-nowrap', activeStep >= index ? 'text-slate-900 ' : 'text-slate-400 ']">
+                  {{ step.label }}
+                </div>
               </div>
             </div>
-            <div v-if="index < steps.length - 1" class="hidden md:block w-8 lg:w-16 h-px bg-slate-100 mx-4"></div>
-          </div>
+            <div v-if="index < steps.length - 1" class="hidden md:block flex-1 h-px bg-slate-100 mx-4"></div>
+          </template>
         </div>
 
         <!-- Step Content -->
@@ -481,6 +494,17 @@ watch(isRefModalOpen, (isOpen) => {
                    </div>
                  </div>
                </div>
+            </div>
+
+            <div v-if="filteredCars.length === 0" class="border-2 border-dashed border-slate-200 rounded-[2rem] py-16 flex flex-col items-center justify-center gap-4 opacity-70">
+              <div class="w-16 h-16 rounded-3xl bg-slate-100 flex items-center justify-center text-slate-400">
+                <CarIcon class="w-8 h-8 stroke-[1.5]" />
+              </div>
+              <div class="text-center">
+                <p class="font-black uppercase tracking-[0.2em] text-xs text-slate-600">Aucun véhicule disponible</p>
+                <p v-if="form.agency" class="text-[10px] font-bold uppercase tracking-widest text-slate-400 mt-1">Aucune voiture rattachée à l'agence « {{ form.agency }} »</p>
+                <p v-else class="text-[10px] font-bold uppercase tracking-widest text-slate-400 mt-1">Aucune voiture ne correspond à ce filtre</p>
+              </div>
             </div>
 
             <div class="flex justify-end pt-4">
@@ -599,10 +623,14 @@ watch(isRefModalOpen, (isOpen) => {
                 </div>
                 <div v-if="availableAgencies.length > 0" class="space-y-3">
                   <label class="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] ml-2">Agence</label>
-                  <select v-model="form.agency" class="h-14 w-full px-6 bg-slate-50/50 border border-slate-100 rounded-2xl font-black text-slate-900 outline-none focus:ring-4 focus:ring-indigo-600/5 transition-all appearance-none cursor-pointer">
-                    <option value="" disabled>Choisir une agence...</option>
-                    <option v-for="a in availableAgencies" :key="a._id || a.name" :value="a.name">{{ a.name }}</option>
-                  </select>
+                  <div class="relative">
+                    <Building2 class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-indigo-600 z-10" />
+                    <select v-model="form.agency" :disabled="!authStore.isSuperAdmin" class="h-14 w-full pl-12 pr-6 bg-slate-50/50 border border-slate-100 rounded-2xl font-black text-slate-900 outline-none focus:ring-4 focus:ring-indigo-600/5 transition-all appearance-none cursor-pointer disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500">
+                      <option value="" disabled>Choisir une agence...</option>
+                      <option value="">Aucune agence</option>
+                      <option v-for="a in availableAgencies" :key="a._id || a.name" :value="a.name">{{ a.name }}</option>
+                    </select>
+                  </div>
                 </div>
                 <div class="space-y-3">
                   <label class="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] ml-2">Lieu de Départ</label>

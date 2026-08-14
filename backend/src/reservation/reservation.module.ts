@@ -9,7 +9,9 @@ import { ClientModule } from '../client/client.module';
 
 @Module({
   imports: [
-    MongooseModule.forFeature([{ name: Reservation.name, schema: ReservationSchema }]),
+    MongooseModule.forFeature([
+      { name: Reservation.name, schema: ReservationSchema },
+    ]),
     CarModule,
     JourneeModule,
     ClientModule,

@@ -3,10 +3,11 @@ import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useSocketStore } from '@/stores/socket'
 import { 
   LayoutDashboard, Car, FileText, Users, Calendar, Wallet, 
   LogOut, ShieldCheck, X, Calculator, Bell, AlertCircle, CheckCircle2,
-  RefreshCcw, Search, Settings, WifiOff
+  RefreshCcw, Search, Settings, WifiOff, ScrollText, Radio, Building2
 } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -26,6 +27,7 @@ const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
+const socketStore = useSocketStore()
 const toast = useToast()
 
 const isAuthenticated = computed(() => authStore.isAuthenticated)
@@ -59,9 +61,9 @@ const refreshApp = () => {
   window.location.reload()
 }
 
-const handleLogout = () => {
-  authStore.logout()
-  router.push('/login')
+const handleLogout = async () => {
+  socketStore.disconnect()
+  await authStore.logout()
 }
 
 // Global Alerts Logic
@@ -144,6 +146,7 @@ onMounted(() => {
   if (isAuthenticated.value) {
     fetchSettings()
     fetchAlerts()
+    socketStore.connect()
     alertInterval = setInterval(fetchAlerts, 60000 * 5) // Every 5 mins
   }
 })
@@ -153,14 +156,17 @@ onUnmounted(() => {
   window.removeEventListener('offline', handleOffline)
   window.removeEventListener('api-network-error', handleApiError)
   if (alertInterval) clearInterval(alertInterval)
+  socketStore.disconnect()
 })
 
 watch(isAuthenticated, (val) => {
   if (val) {
     fetchSettings()
     fetchAlerts()
+    socketStore.connect()
     if (!alertInterval) alertInterval = setInterval(fetchAlerts, 60000 * 5)
   } else {
+    socketStore.disconnect()
     if (alertInterval) {
       clearInterval(alertInterval)
       alertInterval = null
@@ -384,6 +390,21 @@ watch(() => vidangeForm.mileageAtChange, (newVal) => {
 
           <router-link 
             v-if="authStore.isAdmin"
+            to="/agences" 
+            v-slot="{ isActive }"
+          >
+            <div :class="[
+              'flex items-center gap-4 px-4 py-3.5 rounded-xl font-bold transition-all duration-200 group', 
+              isActive 
+                ? 'bg-destructive text-destructive-foreground shadow-lg shadow-destructive/20 scale-[1.02]' 
+                : 'hover:bg-accent text-muted-foreground hover:text-foreground'
+            ]">
+              <Building2 :class="['w-5 h-5 transition-transform group-hover:scale-110', isActive ? 'text-white' : 'text-slate-500']" />
+              <span>Agences</span>
+            </div>
+          </router-link>
+
+          <router-link 
             to="/settings" 
             v-slot="{ isActive }"
           >
@@ -395,6 +416,22 @@ watch(() => vidangeForm.mileageAtChange, (newVal) => {
             ]">
               <Settings :class="['w-5 h-5 transition-transform group-hover:scale-110', isActive ? 'text-white' : 'text-slate-500 group-hover:text-indigo-600']" />
               <span>Paramètres</span>
+            </div>
+          </router-link>
+
+          <router-link 
+            v-if="authStore.isSuperAdmin"
+            to="/logs" 
+            v-slot="{ isActive }"
+          >
+            <div :class="[
+              'flex items-center gap-4 px-4 py-3.5 rounded-xl font-bold transition-all duration-200 group', 
+              isActive 
+                ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/20 scale-[1.02]' 
+                : 'hover:bg-accent text-muted-foreground hover:text-foreground'
+            ]">
+              <ScrollText :class="['w-5 h-5 transition-transform group-hover:scale-110', isActive ? 'text-white' : 'text-slate-500 group-hover:text-amber-500']" />
+              <span>Logs</span>
             </div>
           </router-link>
         </nav>
@@ -430,6 +467,17 @@ watch(() => vidangeForm.mileageAtChange, (newVal) => {
            </div>
            
            <div class="flex items-center gap-4">
+              <!-- Active Operators Badge -->
+              <div v-if="authStore.isSuperAdmin" class="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 font-black text-[11px] shadow-sm">
+                <span class="relative flex h-2.5 w-2.5">
+                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                </span>
+                <span class="uppercase tracking-widest text-[9px] font-black">
+                  {{ socketStore.onlineCount }} Opérateur{{ socketStore.onlineCount > 1 ? 's' : '' }} en ligne
+                </span>
+              </div>
+
               <!-- Global Notification Bell -->
               <button @click="showAlertsModal = true" class="relative group outline-none hover:scale-105 active:scale-95 transition-all">
                 <div class="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center border border-slate-100 shadow-sm group-hover:bg-primary group-hover:border-primary transition-colors duration-300">
@@ -670,7 +718,7 @@ watch(() => vidangeForm.mileageAtChange, (newVal) => {
       </div>
     </div>
 
-    <Toast />
+    <Toast position="top-center" />
   </div>
 </template>
 
@@ -709,5 +757,86 @@ body {
 .no-scrollbar {
   -ms-overflow-style: none;  /* IE and Edge */
   scrollbar-width: none;  /* Firefox */
+}
+
+/* ── Modern top-center Toast ─────────────────────────── */
+.p-toast {
+  width: min(24rem, 92vw) !important;
+  max-width: 92vw !important;
+  z-index: 9999 !important;
+}
+
+.p-toast-message {
+  border-radius: 1rem !important;
+  box-shadow: 0 12px 32px -8px rgb(2 6 23 / 0.14), 0 4px 12px -4px rgb(2 6 23 / 0.08) !important;
+}
+
+.p-toast-message-content {
+  padding: 0.875rem 1rem !important;
+  gap: 0.75rem !important;
+  align-items: flex-start !important;
+  border-radius: 1rem !important;
+  border: 1px solid rgb(226 232 240 / 0.95) !important;
+  background: rgb(255 255 255 / 0.97) !important;
+  color: #0f172a !important;
+  backdrop-filter: blur(12px);
+}
+
+.p-toast-message-success .p-toast-message-content { border-left: 4px solid #10b981 !important; }
+.p-toast-message-error .p-toast-message-content { border-left: 4px solid #f43f5e !important; }
+.p-toast-message-warn .p-toast-message-content { border-left: 4px solid #f59e0b !important; }
+.p-toast-message-info .p-toast-message-content { border-left: 4px solid #0ea5e9 !important; }
+
+.p-toast-message-icon {
+  flex-shrink: 0 !important;
+  width: 2rem !important;
+  height: 2rem !important;
+  margin-top: 0.125rem !important;
+  border-radius: 9999px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 0.9rem !important;
+}
+.p-toast-message-success .p-toast-message-icon { background: rgb(16 185 129 / 0.12); color: #059669 !important; }
+.p-toast-message-error .p-toast-message-icon { background: rgb(244 63 94 / 0.12); color: #e11d48 !important; }
+.p-toast-message-warn .p-toast-message-icon { background: rgb(245 158 11 / 0.14); color: #d97706 !important; }
+.p-toast-message-info .p-toast-message-icon { background: rgb(14 165 233 / 0.12); color: #0284c7 !important; }
+
+.p-toast-summary {
+  font-weight: 700 !important;
+  font-size: 0.875rem !important;
+  color: #0f172a !important;
+  letter-spacing: -0.01em;
+}
+
+.p-toast-detail {
+  font-size: 0.8125rem !important;
+  line-height: 1.45 !important;
+  color: #64748b !important;
+  margin-top: 0.125rem !important;
+}
+
+.p-toast-close-button {
+  align-self: flex-start !important;
+  margin-left: 0.25rem !important;
+}
+.p-toast-close-icon {
+  color: rgb(100 116 139 / 0.55) !important;
+}
+
+.p-toast-message-enter-active {
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease !important;
+}
+.p-toast-message-enter-from {
+  opacity: 0 !important;
+  transform: translateY(-16px) scale(0.96) !important;
+}
+.p-toast-message-leave-active {
+  transition: transform 0.2s ease-in, opacity 0.2s ease-in !important;
+}
+.p-toast-message-leave-to {
+  opacity: 0 !important;
+  transform: translateY(-8px) scale(0.98) !important;
 }
 </style>

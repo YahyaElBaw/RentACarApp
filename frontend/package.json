@@ -31,6 +31,7 @@
     "primeicons": "^7.0.0",
     "primevue": "^4.5.4",
     "radix-vue": "^1.9.17",
+    "socket.io-client": "^4.8.3",
     "tailwind-merge": "^3.5.0",
     "tailwindcss-animate": "^1.0.7",
     "vue": "^3.5.30",

@@ -1,0 +1,102 @@
+import { defineStore } from 'pinia';
+import { ref } from 'vue';
+import { io, Socket } from 'socket.io-client';
+import { useAuthStore } from './auth';
+
+export interface ActiveUser {
+  socketId: string;
+  userId: string;
+  name: string;
+  role: string;
+  connectedAt: string;
+}
+
+export const useSocketStore = defineStore('socket', () => {
+  const socket = ref<Socket | null>(null);
+  const isConnected = ref(false);
+  const onlineCount = ref(1);
+  const onlineUsers = ref<ActiveUser[]>([]);
+  const listeners = new Map<string, Set<Function>>();
+
+  function connect() {
+    if (socket.value && socket.value.connected) return;
+
+    const authStore = useAuthStore();
+    const backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
+    socket.value = io(backendUrl, {
+      transports: ['websocket', 'polling'],
+      reconnectionAttempts: 10,
+    });
+
+    socket.value.on('connect', () => {
+      console.log('⚡ Socket.IO connected:', socket.value?.id);
+      isConnected.value = true;
+      identify();
+    });
+
+    socket.value.on('disconnect', () => {
+      console.log('⚡ Socket.IO disconnected');
+      isConnected.value = false;
+    });
+
+    socket.value.on('users:online', (data: { count: number; users: ActiveUser[] }) => {
+      onlineCount.value = data.count || 1;
+      onlineUsers.value = data.users || [];
+    });
+
+    // Global listener dispatcher
+    const events = ['contract:change', 'car:change', 'reservation:change', 'depense:change', 'user:login'];
+    events.forEach((eventName) => {
+      socket.value?.on(eventName, (payload: any) => {
+        const callbacks = listeners.get(eventName);
+        if (callbacks) {
+          callbacks.forEach((cb) => cb(payload));
+        }
+      });
+    });
+  }
+
+  function identify() {
+    const authStore = useAuthStore();
+    if (socket.value && authStore.user) {
+      socket.value.emit('user:identify', {
+        userId: authStore.user.id || authStore.user._id,
+        name: `${authStore.user.firstName || ''} ${authStore.user.lastName || ''}`.trim() || authStore.user.cin,
+        role: authStore.user.role || 'user',
+      });
+    }
+  }
+
+  function disconnect() {
+    if (socket.value) {
+      socket.value.emit('user:logout');
+      socket.value.disconnect();
+      socket.value = null;
+      isConnected.value = false;
+    }
+  }
+
+  function onEvent(event: string, callback: Function) {
+    if (!listeners.has(event)) {
+      listeners.set(event, new Set());
+    }
+    listeners.get(event)!.add(callback);
+
+    // Return cleanup function
+    return () => {
+      listeners.get(event)?.delete(callback);
+    };
+  }
+
+  return {
+    socket,
+    isConnected,
+    onlineCount,
+    onlineUsers,
+    connect,
+    identify,
+    disconnect,
+    onEvent,
+  };
+});

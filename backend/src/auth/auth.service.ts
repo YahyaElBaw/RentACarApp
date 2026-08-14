@@ -1,6 +1,8 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
+import { LogService } from '../log/log.service';
+import { EventsGateway } from '../events/events.gateway';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
@@ -8,6 +10,8 @@ export class AuthService {
   constructor(
     private usersService: UsersService,
     private jwtService: JwtService,
+    private logService: LogService,
+    private eventsGateway: EventsGateway,
   ) {}
 
   async login(cin: string, phone: string) {
@@ -15,17 +19,49 @@ export class AuthService {
     const user = await this.usersService.findByCin(cin);
     if (!user) {
       console.log(`User not found for CIN: ${cin}`);
+      await this.logService.add({
+        action: 'LOGIN_FAILED',
+        actorName: cin,
+        role: 'unknown',
+        detail: `Tentative de connexion échouée (utilisateur introuvable) pour CIN ${cin}`,
+      });
       throw new UnauthorizedException('Invalid credentials');
     }
 
     const isMatch = await bcrypt.compare(phone, user.password);
     if (!isMatch) {
       console.log(`Password mismatch for CIN: ${cin}`);
+      await this.logService.add({
+        action: 'LOGIN_FAILED',
+        actorId: user._id.toString(),
+        actorName: `${user.firstName} ${user.lastName}`,
+        role: user.role,
+        detail: `Mot de passe incorrect pour ${user.firstName} ${user.lastName} (${cin})`,
+      });
       throw new UnauthorizedException('Invalid credentials');
     }
 
     console.log(`Login successful for CIN: ${cin}`);
-    const payload = { sub: user._id, cin: user.cin, role: user.role };
+    await this.logService.add({
+      action: 'LOGIN',
+      actorId: user._id.toString(),
+      actorName: `${user.firstName} ${user.lastName}`,
+      role: user.role,
+      detail: `Connexion réussie pour ${user.firstName} ${user.lastName} (${cin})`,
+    });
+
+    this.eventsGateway.broadcastDataChange('user:login', {
+      userId: user._id.toString(),
+      name: `${user.firstName} ${user.lastName}`,
+      role: user.role,
+    });
+
+    const payload = {
+      sub: user._id,
+      cin: user.cin,
+      role: user.role,
+      name: `${user.firstName} ${user.lastName}`,
+    };
     return {
       access_token: this.jwtService.sign(payload),
       user: {
@@ -36,4 +72,22 @@ export class AuthService {
       },
     };
   }
+
+  async logout(actor: any) {
+    if (!actor?.id) return;
+    const name = actor.name || actor.cin || 'utilisateur';
+    await this.logService.add({
+      action: 'LOGOUT',
+      actorId: actor.id,
+      actorName: actor.name,
+      role: actor.role,
+      detail: `Déconnexion de ${name}`,
+    });
+    this.eventsGateway.broadcastDataChange('user:logout', {
+      userId: actor.id,
+      name,
+      role: actor.role,
+    });
+  }
 }
+

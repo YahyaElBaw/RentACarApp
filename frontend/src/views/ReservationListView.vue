@@ -7,31 +7,47 @@
         <p class="text-slate-400 font-bold uppercase text-[10px] tracking-[0.3em] pl-1">Planification &amp; Flux Opérationnel</p>
       </div>
 
-      <div class="flex flex-wrap items-center gap-4">
-        <!-- Status filter tabs -->
-        <div class="flex items-center gap-1 bg-slate-100 rounded-2xl p-1">
-          <button
-            v-for="tab in statusTabs"
-            :key="tab.value"
-            @click="activeTab = tab.value"
-            :class="['px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all', activeTab === tab.value ? 'bg-white shadow-md text-indigo-600' : 'text-slate-400 hover:text-slate-600']"
-          >{{ tab.label }}</button>
+      <div class="flex flex-wrap items-center gap-3">
+        <!-- Status filter tabs (icon only, expand on hover) -->
+        <div class="group relative h-12 transition-all duration-300 overflow-hidden rounded-2xl bg-slate-100 border-2 border-slate-200/50 hover:border-indigo-300 flex items-center active:scale-95"
+          :class="filterOpen ? 'w-72' : 'w-12'"
+          @mouseenter="filterOpen = true"
+          @mouseleave="filterOpen = false">
+          <div class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none">
+            <Filter class="w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-colors duration-300 group-hover:rotate-[-20deg] group-hover:scale-110" />
+            <span v-if="activeTab !== 'all'" class="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-indigo-500 rounded-full"></span>
+          </div>
+          <div :class="[filterOpen ? 'opacity-100' : 'opacity-0', 'pl-11 pr-2 flex items-center gap-1 whitespace-nowrap transition-opacity duration-300']">
+            <button
+              v-for="tab in statusTabs"
+              :key="tab.value"
+              @click="activeTab = tab.value"
+              :class="['px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all', activeTab === tab.value ? 'bg-white shadow-md text-indigo-600' : 'text-slate-400 hover:text-slate-600']"
+            >{{ tab.label }}</button>
+          </div>
         </div>
 
-        <div class="relative w-full md:w-72 group">
-          <div class="absolute inset-y-0 left-4 flex items-center pointer-events-none">
-            <Search class="w-4 h-4 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
+        <div class="group relative h-12 w-12 transition-all duration-300 overflow-hidden rounded-2xl bg-white border-2 border-slate-200 hover:border-indigo-400 flex items-center cursor-text active:scale-95 hover:shadow-xl hover:shadow-indigo-200/50"
+          :class="searchOpen ? 'w-80 border-indigo-500' : 'w-12'"
+          @mouseenter="searchOpen = true"
+          @mouseleave="searchOpen = false"
+          @focusin="searchOpen = true"
+          @focusout="searchOpen = false">
+          <div class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none">
+            <Search class="w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-colors duration-300" />
           </div>
           <input
             v-model="filters.query"
             placeholder="Client ou Véhicule..."
-            class="h-12 w-full pl-12 bg-white/50 border border-slate-200 backdrop-blur-xl focus:ring-4 focus:ring-indigo-600/5 rounded-2xl font-bold transition-all text-slate-900 placeholder:text-slate-400 outline-none text-sm"
+            :class="[searchOpen ? 'opacity-100' : 'opacity-0', 'h-full w-full pl-10 pr-3 bg-transparent border-0 outline-none text-xs font-bold text-slate-900 placeholder:text-slate-400 transition-opacity duration-300']"
           />
         </div>
 
-        <Button @click="openForm" class="h-12 px-7 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-2xl shadow-2xl shadow-indigo-200 transition-all active:scale-95 flex items-center gap-3">
-          <Plus class="w-5 h-5 stroke-[3]" />
-          <span class="uppercase tracking-widest text-[10px]">Nouvelle</span>
+        <Button @click="openForm" @mouseenter="addOpen = true" @mouseleave="addOpen = false" class="group relative h-12 w-12 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-black shadow-2xl shadow-indigo-200 transition-all duration-300 overflow-hidden flex items-center justify-start active:scale-95 hover:scale-105 hover:-translate-y-0.5 hover:shadow-indigo-400/40">
+          <div class="absolute inset-y-0 left-0 flex items-center pl-3.5">
+            <Plus class="w-4 h-4 stroke-[3] transition-transform duration-300 group-hover:rotate-90 group-hover:scale-110" />
+          </div>
+          <span :class="[addOpen ? 'opacity-100' : 'opacity-0', 'whitespace-nowrap transition-all duration-300 pl-10 pr-4 uppercase tracking-widest text-[10px]']">Nouvelle</span>
         </Button>
       </div>
     </div>
@@ -631,16 +647,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, reactive, computed, watch } from 'vue';
+import { ref, onMounted, onUnmounted, reactive, computed, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
+import { useSocketStore } from '@/stores/socket';
 import { clientApi, carApi, reservationApi } from '../api';
 import {
   Search, Plus, Calendar, ArrowRight,
   Car as CarIcon, CheckCircle2, Trash2,
   FileText, X, User, StickyNote,
   CalendarX, Clock, TrendingUp, AlertTriangle,
-  ArrowLeftRight, Pencil
+  ArrowLeftRight, Pencil, Filter
 } from 'lucide-vue-next';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -655,6 +672,8 @@ import {
 const router = useRouter();
 const route = useRoute();
 const authStore = useAuthStore();
+const socketStore = useSocketStore();
+let unsubscribeSocket: Function | null = null;
 
 // ─── State ────────────────────────────────────────────────────────────────────
 const showForm = ref(false);
@@ -702,6 +721,9 @@ watch(() => form.car, (newCarId) => {
 });
 
 const filters = reactive({ query: '' });
+const filterOpen = ref(false);
+const searchOpen = ref(false);
+const addOpen = ref(false);
 
 // Dialog states for Quick Actions
 const showContractRefDialog = ref(false);
@@ -1095,6 +1117,9 @@ const handleQuickAddCar = async () => {
 
 onMounted(async () => {
   await loadReservations();
+  unsubscribeSocket = socketStore.onEvent('reservation:change', () => {
+    loadReservations();
+  });
   
   if (route.query.id) {
     const res = reservations.value.find(r => r._id === (route.query.id as string));
@@ -1121,6 +1146,10 @@ onMounted(async () => {
       form.car = route.query.carId as string;
     }
   }
+});
+
+onUnmounted(() => {
+  if (unsubscribeSocket) unsubscribeSocket();
 });
 
 watch(() => route.query.id, (newId) => {

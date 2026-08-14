@@ -18,18 +18,20 @@ export class JourneeService {
   async getOrCreateCurrent(): Promise<JourneeDocument> {
     const today = this.getTodayString();
     try {
-      const journee = await this.journeeModel.findOneAndUpdate(
-        { date: today },
-        {
-          $setOnInsert: {
-            date: today,
-            status: 'open',
-            entries: [],
-            totalDaily: 0,
-          }
-        },
-        { upsert: true, new: true, setDefaultsOnInsert: true }
-      ).exec();
+      const journee = await this.journeeModel
+        .findOneAndUpdate(
+          { date: today },
+          {
+            $setOnInsert: {
+              date: today,
+              status: 'open',
+              entries: [],
+              totalDaily: 0,
+            },
+          },
+          { upsert: true, new: true, setDefaultsOnInsert: true },
+        )
+        .exec();
       return journee;
     } catch (err) {
       this.logger.error(`Error getting or creating Journee for ${today}:`, err);
@@ -48,7 +50,7 @@ export class JourneeService {
     try {
       const journee = await this.getOrCreateCurrent();
       if (!journee) return null;
-      
+
       if (journee.status === 'closed') {
         this.logger.error(`Cannot add entry to closed Journee ${journee.date}`);
         return journee;

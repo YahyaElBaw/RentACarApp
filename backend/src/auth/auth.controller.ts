@@ -1,5 +1,13 @@
-import { Controller, Post, Body, UnauthorizedException } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  Req,
+  UseGuards,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { AuthService } from './auth.service';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
 
 @Controller('auth')
 export class AuthController {
@@ -11,5 +19,12 @@ export class AuthController {
       throw new UnauthorizedException('Please provide CIN and phone');
     }
     return this.authService.login(loginDto.cin, loginDto.phone);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('logout')
+  async logout(@Req() req: any) {
+    await this.authService.logout(req.user);
+    return { success: true };
   }
 }

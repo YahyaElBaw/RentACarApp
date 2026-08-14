@@ -88,7 +88,25 @@ const router = createRouter({
       path: '/settings',
       name: 'settings',
       component: () => import('../views/SettingsView.vue'),
-      meta: { admin: true, title: 'Paramètres' }
+      meta: { title: 'Paramètres' }
+    },
+    {
+      path: '/agences',
+      name: 'agences',
+      component: () => import('../views/AgenceView.vue'),
+      meta: { admin: true, title: 'Agences' }
+    },
+    {
+      path: '/agences/:id',
+      name: 'agence-detail',
+      component: () => import('../views/AgenceDetailView.vue'),
+      meta: { admin: true, title: 'Profil Agence' }
+    },
+    {
+      path: '/logs',
+      name: 'logs',
+      component: () => import('../views/LogsView.vue'),
+      meta: { superAdmin: true, title: 'Logs' }
     }
   ]
 });
@@ -109,6 +127,7 @@ router.beforeEach((to) => {
   } else {
     if (!isAuthenticated) return { name: 'login' };
     if (to.meta.admin && !isAdmin) return { name: 'dashboard' };
+    if (to.meta.superAdmin && !authStore.isSuperAdmin) return { name: 'dashboard' };
     return true;
   }
 });

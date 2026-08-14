@@ -9,7 +9,9 @@ import {
   Clock, CheckCircle2, 
   XCircle, AlertCircle,
   ChevronRight, ClipboardList,
-  ShieldAlert, Lock, Eye, EyeOff, Printer
+  ShieldAlert, Lock, Eye, EyeOff, Printer,
+  ChevronDown, User, MapPin, Fuel,
+  CalendarClock, Banknote, NotepadText, X
 } from 'lucide-vue-next';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -19,10 +21,14 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription
 } from '@/components/ui/dialog';
 import { useAuthStore } from '@/stores/auth';
+import { usePasswordGuard, handlePasswordError } from '@/composables/usePasswordGuard';
+import { useToast } from 'primevue/usetoast';
 
 const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
+const toast = useToast();
+const guard = usePasswordGuard();
 const contrat = ref<any>(null);
 const loading = ref(true);
 const cloturing = ref(false);
@@ -50,10 +56,12 @@ const submitDelete = async () => {
   deleteError.value = '';
   try {
     await contratApi.remove(contrat.value._id, deletePassword.value);
+    guard.reset();
     showDeleteDialog.value = false;
     router.push('/contrats');
   } catch (err: any) {
     console.error('Erreur lors de la suppression:', err);
+    if (handlePasswordError(err, toast)) return;
     deleteError.value = err.response?.data?.message || 'Une erreur est survenue.';
   } finally {
     deleting.value = false;
@@ -64,6 +72,10 @@ const submitDelete = async () => {
 const showEditDialog = ref(false);
 const editing = ref(false);
 const editError = ref('');
+const showEditPasswordDialog = ref(false);
+const editPassword = ref('');
+const showEditPwdInput = ref(false);
+const editPasswordError = ref('');
 const cars = ref<any[]>([]);
 const clients = ref<any[]>([]);
 const selectedClient1 = ref('');
@@ -92,7 +104,6 @@ const editForm = ref({
   password: '',
 });
 
-const showEditPassword = ref(false);
 const agencies = ref<string[]>([]);
 const skipCarWatch = ref(false);
 
@@ -196,12 +207,24 @@ watch(() => editForm.value.car, (newCarId) => {
   }
 });
 
-const submitEdit = async (force = false) => {
-  if (!editForm.value.password) {
-    editError.value = 'Le mot de passe est obligatoire.';
+const openEditPasswordDialog = () => {
+  editPassword.value = '';
+  showEditPwdInput.value = false;
+  editPasswordError.value = '';
+  showEditPasswordDialog.value = true;
+};
+
+const confirmEditPassword = async () => {
+  if (!editPassword.value) {
+    editPasswordError.value = 'Le mot de passe est obligatoire.';
     return;
   }
+  editForm.value.password = editPassword.value;
+  showEditPasswordDialog.value = false;
+  await submitEdit();
+};
 
+const submitEdit = async (force = false) => {
   const clientsArr = [];
   if (selectedClient1.value) clientsArr.push(selectedClient1.value);
   if (selectedClient2.value) clientsArr.push(selectedClient2.value);
@@ -209,6 +232,11 @@ const submitEdit = async (force = false) => {
 
   if (editForm.value.clients.length === 0) {
     editError.value = 'Au moins un conducteur est obligatoire.';
+    return;
+  }
+
+  if (!editForm.value.password) {
+    openEditPasswordDialog();
     return;
   }
 
@@ -224,9 +252,20 @@ const submitEdit = async (force = false) => {
     const updated = await contratApi.update(contrat.value._id, payload);
     if (updated) contrat.value = updated;
     showEditDialog.value = false;
+    toast.add({
+      severity: 'success',
+      summary: 'Contrat modifié',
+      detail: force ? 'Modification enregistrée (conflit forcé).' : 'Le contrat a été mis à jour avec succès.',
+      life: 3000
+    });
     await fetchContrat();
   } catch (err: any) {
     console.error('Erreur lors de la modification:', err);
+    if (handlePasswordError(err, toast)) {
+      editForm.value.password = '';
+      openEditPasswordDialog();
+      return;
+    }
     if (err.response?.status === 409 && err.response?.data?.message === 'CAR_RESERVED_CONFLICT') {
       const confirmForce = confirm("Il y a un conflit de réservation/contrat pour cette période. Voulez-vous forcer la modification ?");
       if (confirmForce) {
@@ -843,6 +882,13 @@ const submitCloture = async () => {
 
                      <!-- Totals Bottom -->
                      <div class="pt-8 border-t border-current/10">
+                        <div v-if="contrat.notes" :class="['mb-6 p-4 rounded-2xl flex items-start gap-3 border', contrat.status === 'active' ? 'bg-amber-400/10 border-amber-400/20' : 'bg-amber-50 border-amber-100']">
+                           <AlertCircle :class="['w-5 h-5 shrink-0 mt-0.5', contrat.status === 'active' ? 'text-amber-400' : 'text-amber-500']" />
+                           <div>
+                              <p :class="['text-[9px] font-black uppercase tracking-widest', contrat.status === 'active' ? 'text-amber-400' : 'text-amber-600']">Message / Description du contrat</p>
+                              <p :class="['text-sm font-bold italic leading-relaxed', contrat.status === 'active' ? 'text-amber-200' : 'text-amber-900']">{{ contrat.notes }}</p>
+                           </div>
+                        </div>
                         <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-6">
                            <div>
                               <p class="text-[9px] font-black opacity-40 uppercase tracking-widest mb-2">Total Dossier</p>
@@ -881,7 +927,7 @@ const submitCloture = async () => {
             </Button>
             
             <Button 
-               v-if="authStore.isAdmin && contrat.status !== 'terminé' && contrat.status !== 'clôturé'" 
+               v-if="authStore.isAdmin && (contrat.status !== 'terminé' && contrat.status !== 'clôturé' || authStore.isSuperAdmin)" 
                @click="openEditDialog" 
                class="h-16 px-8 md:w-[200px] bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black uppercase text-xs tracking-widest shadow-lg shadow-indigo-600/20 gap-3 active:scale-95"
             >
@@ -907,8 +953,12 @@ const submitCloture = async () => {
                <DialogDescription class="text-[10px] font-black uppercase opacity-40 mt-1">Saisissez votre mot de passe</DialogDescription>
             </DialogHeader>
             <div class="space-y-6">
+               <div v-if="guard.isLocked" class="flex items-center justify-center gap-2 bg-rose-50 text-rose-600 border border-rose-200 rounded-xl px-4 py-3">
+                 <Lock class="w-4 h-4" />
+                 <span class="text-[10px] font-black uppercase tracking-widest">Trop de tentatives — réessayez dans {{ guard.remainingSeconds }}s</span>
+               </div>
                <div class="relative">
-                 <input v-model="deletePassword" :type="showDeletePassword ? 'text' : 'password'" class="w-full h-14 px-6 rounded-2xl bg-muted border-2 border-border focus:border-destructive outline-none font-black text-center pr-14" placeholder="••••••••" @keyup.enter="submitDelete" />
+                 <input v-model="deletePassword" :type="showDeletePassword ? 'text' : 'password'" :disabled="guard.isLocked" class="w-full h-14 px-6 rounded-2xl bg-muted border-2 border-border focus:border-destructive outline-none font-black text-center pr-14" placeholder="••••••••" @keyup.enter="submitDelete" />
                  <button type="button" @click="showDeletePassword = !showDeletePassword" class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors outline-none">
                    <Eye v-if="!showDeletePassword" class="w-5 h-5" />
                    <EyeOff v-else class="w-5 h-5" />
@@ -917,7 +967,7 @@ const submitCloture = async () => {
                <p v-if="deleteError" class="text-[10px] font-black text-destructive uppercase italic">⚠ {{ deleteError }}</p>
                <div class="flex gap-4">
                   <Button @click="showDeleteDialog = false" variant="ghost" class="flex-1 h-14 rounded-2xl font-black uppercase text-[10px]">Annuler</Button>
-                  <Button @click="submitDelete" :loading="deleting" class="flex-1 h-14 bg-destructive hover:bg-destructive/90 text-white rounded-2xl font-black uppercase text-[10px] shadow-xl shadow-destructive/20">Confirmer</Button>
+                  <Button @click="submitDelete" :loading="deleting" :disabled="guard.isLocked" class="flex-1 h-14 bg-destructive hover:bg-destructive/90 text-white rounded-2xl font-black uppercase text-[10px] shadow-xl shadow-destructive/20">Confirmer</Button>
                </div>
             </div>
          </DialogContent>
@@ -925,182 +975,245 @@ const submitCloture = async () => {
 
       <!-- EDIT CONTRAT DIALOG -->
       <Dialog v-model:open="showEditDialog">
-         <DialogContent class="max-w-2xl bg-white border-border shadow-3xl rounded-[3rem] p-0 overflow-hidden text-foreground max-h-[90vh] flex flex-col">
-            <DialogHeader class="p-10 bg-indigo-600 text-white relative shrink-0">
-               <div class="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-3xl -mr-16 -mt-16"></div>
-               <div class="flex items-center gap-6 relative z-10">
-                  <div class="w-16 h-16 rounded-3xl bg-white/20 flex items-center justify-center shadow-lg"><ClipboardList class="w-8 h-8" /></div>
+         <DialogContent hideClose class="max-w-3xl bg-white border-border shadow-3xl rounded-[2.5rem] p-0 overflow-hidden text-foreground max-h-[92vh] flex flex-col">
+            <DialogHeader class="px-10 py-8 bg-gradient-to-br from-indigo-600 via-indigo-600 to-violet-600 text-white relative shrink-0 overflow-hidden">
+               <div class="absolute top-0 right-0 w-40 h-40 bg-white/10 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none"></div>
+               <div class="absolute bottom-0 left-32 w-28 h-28 bg-white/5 rounded-full blur-2xl pointer-events-none"></div>
+               <button type="button" @click="showEditDialog = false" class="absolute top-5 right-5 z-20 w-10 h-10 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 text-white flex items-center justify-center transition-all duration-300 hover:rotate-90 active:scale-90">
+                  <X class="w-5 h-5" />
+               </button>
+               <div class="flex items-center gap-5 relative z-10">
+                  <div class="w-14 h-14 rounded-2xl bg-white/15 backdrop-blur border border-white/20 flex items-center justify-center shadow-lg shadow-indigo-900/20">
+                     <ClipboardList class="w-7 h-7" />
+                  </div>
                   <div>
-                    <DialogTitle class="text-3xl font-black uppercase tracking-tighter">Modifier le Contrat</DialogTitle>
-                    <DialogDescription class="text-white/60 font-black uppercase tracking-widest text-[9px] mt-1 italic">Session Administrateur</DialogDescription>
+                     <p class="text-[9px] font-black uppercase tracking-[0.35em] text-indigo-200">Édition</p>
+                     <DialogTitle class="text-2xl font-black uppercase tracking-tighter leading-tight">Modifier le Contrat</DialogTitle>
+                     <DialogDescription class="text-white/70 font-bold uppercase tracking-widest text-[9px] mt-1.5">Session Administrateur</DialogDescription>
                   </div>
                </div>
             </DialogHeader>
 
-            <div class="p-10 space-y-8 overflow-y-auto flex-1 custom-scrollbar">
-               <!-- Véhicule & Conducteurs -->
-               <div class="space-y-4">
-                  <h4 class="text-[10px] font-black uppercase tracking-[0.3em] text-indigo-600 pl-2 border-l-2 border-indigo-600">Affectation</h4>
+            <!-- Form Body -->
+            <div class="p-10 space-y-9 overflow-y-auto flex-1 custom-scrollbar">
+
+               <!-- Affectation -->
+               <div>
+                  <div class="flex items-center gap-3 mb-6">
+                     <div class="w-9 h-9 rounded-xl bg-indigo-600/10 text-indigo-600 flex items-center justify-center shrink-0"><Car class="w-4 h-4" /></div>
+                     <h4 class="text-[10px] font-black uppercase tracking-[0.25em] text-slate-800">Affectation</h4>
+                     <div class="h-px flex-1 bg-gradient-to-r from-slate-200 to-transparent"></div>
+                  </div>
                   <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                      <div class="space-y-2">
-                        <label class="text-[9px] font-black uppercase pl-2 opacity-40">Véhicule</label>
-                        <select v-model="editForm.car" class="w-full h-14 px-4 rounded-2xl bg-muted border-2 border-border focus:border-primary outline-none font-bold text-sm">
-                           <option v-for="car in cars" :key="car._id" :value="car._id">
-                              {{ car.brand }} {{ car.model }} ({{ car.matricule }})
-                           </option>
-                        </select>
+                        <label class="form-label">Véhicule</label>
+                        <div class="relative">
+                           <select v-model="editForm.car" class="form-field form-field-select">
+                              <option v-for="car in cars" :key="car._id" :value="car._id">
+                                 {{ car.brand }} {{ car.model }} ({{ car.matricule }})
+                              </option>
+                           </select>
+                           <ChevronDown class="w-4 h-4 text-slate-400 pointer-events-none absolute right-4 top-1/2 -translate-y-1/2" />
+                        </div>
                      </div>
                      <div class="space-y-2">
-                        <label class="text-[9px] font-black uppercase pl-2 opacity-40">Cond. Principal</label>
-                        <select v-model="selectedClient1" class="w-full h-14 px-4 rounded-2xl bg-muted border-2 border-border focus:border-primary outline-none font-bold text-sm">
-                           <option v-for="client in clients" :key="client._id" :value="client._id">
-                              {{ client.lastName }} {{ client.firstName }} ({{ client.cin }})
-                           </option>
-                        </select>
+                        <label class="form-label">Cond. Principal</label>
+                        <div class="relative">
+                           <select v-model="selectedClient1" class="form-field form-field-select">
+                              <option v-for="client in clients" :key="client._id" :value="client._id">
+                                 {{ client.lastName }} {{ client.firstName }} ({{ client.cin }})
+                              </option>
+                           </select>
+                           <ChevronDown class="w-4 h-4 text-slate-400 pointer-events-none absolute right-4 top-1/2 -translate-y-1/2" />
+                        </div>
                      </div>
                      <div class="space-y-2">
-                        <label class="text-[9px] font-black uppercase pl-2 opacity-40">Cond. Secondaire</label>
-                        <select v-model="selectedClient2" class="w-full h-14 px-4 rounded-2xl bg-muted border-2 border-border focus:border-primary outline-none font-bold text-sm">
-                           <option value="">Aucun</option>
-                           <option v-for="client in clients" :key="client._id" :value="client._id">
-                              {{ client.lastName }} {{ client.firstName }} ({{ client.cin }})
-                           </option>
-                        </select>
+                        <label class="form-label">Cond. Secondaire</label>
+                        <div class="relative">
+                           <select v-model="selectedClient2" class="form-field form-field-select">
+                              <option value="">Aucun</option>
+                              <option v-for="client in clients" :key="client._id" :value="client._id">
+                                 {{ client.lastName }} {{ client.firstName }} ({{ client.cin }})
+                              </option>
+                           </select>
+                           <ChevronDown class="w-4 h-4 text-slate-400 pointer-events-none absolute right-4 top-1/2 -translate-y-1/2" />
+                        </div>
                      </div>
                   </div>
                </div>
 
                <!-- Planification -->
-               <div class="space-y-4">
-                  <h4 class="text-[10px] font-black uppercase tracking-[0.3em] text-indigo-600 pl-2 border-l-2 border-indigo-600">Planification</h4>
+               <div>
+                  <div class="flex items-center gap-3 mb-6">
+                     <div class="w-9 h-9 rounded-xl bg-indigo-600/10 text-indigo-600 flex items-center justify-center shrink-0"><CalendarClock class="w-4 h-4" /></div>
+                     <h4 class="text-[10px] font-black uppercase tracking-[0.25em] text-slate-800">Planification</h4>
+                     <div class="h-px flex-1 bg-gradient-to-r from-slate-200 to-transparent"></div>
+                  </div>
                   <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                      <div class="space-y-2">
-                        <label class="text-[9px] font-black uppercase pl-2 opacity-40">Date Départ</label>
-                        <div class="flex gap-2">
-                           <input type="date" v-model="editForm.startDate" class="h-14 px-4 rounded-2xl bg-muted border-2 border-border focus:border-primary outline-none font-bold text-sm" style="flex: 2;" />
-                           <input type="time" v-model="editForm.startTime" class="h-14 px-4 rounded-2xl bg-muted border-2 border-border focus:border-primary outline-none font-bold text-sm" style="flex: 1;" />
+                        <label class="form-label">Date Départ</label>
+                        <div class="flex gap-3">
+                           <input type="date" v-model="editForm.startDate" class="form-field" style="flex: 2;" />
+                           <input type="time" v-model="editForm.startTime" class="form-field" style="flex: 1;" />
                         </div>
                      </div>
                      <div class="space-y-2">
-                        <label class="text-[9px] font-black uppercase pl-2 opacity-40">Date Retour</label>
-                        <div class="flex gap-2">
-                           <input type="date" v-model="editForm.endDate" class="h-14 px-4 rounded-2xl bg-muted border-2 border-border focus:border-primary outline-none font-bold text-sm" style="flex: 2;" />
-                           <input type="time" v-model="editForm.endTime" class="h-14 px-4 rounded-2xl bg-muted border-2 border-border focus:border-primary outline-none font-bold text-sm" style="flex: 1;" />
+                        <label class="form-label">Date Retour</label>
+                        <div class="flex gap-3">
+                           <input type="date" v-model="editForm.endDate" class="form-field" style="flex: 2;" />
+                           <input type="time" v-model="editForm.endTime" class="form-field" style="flex: 1;" />
                         </div>
                      </div>
                   </div>
                </div>
 
                <!-- Tarification & Règlement -->
-               <div class="space-y-4">
-                  <h4 class="text-[10px] font-black uppercase tracking-[0.3em] text-indigo-600 pl-2 border-l-2 border-indigo-600">Tarification & Règlement</h4>
-                  <div class="grid grid-cols-2 md:grid-cols-5 gap-6">
-                     <div class="space-y-2">
-                        <label class="text-[9px] font-black uppercase pl-2 opacity-40">Tarif / Jour (TND)</label>
-                        <input type="number" v-model.number="editForm.carDailyRate" class="w-full h-14 px-4 rounded-2xl bg-muted border-2 border-border focus:border-primary outline-none font-black tabular-nums" />
-                     </div>
-                     <div class="space-y-2">
-                        <label class="text-[9px] font-black uppercase pl-2 opacity-40">Caution (TND)</label>
-                        <input type="number" v-model.number="editForm.depositAmount" class="w-full h-14 px-4 rounded-2xl bg-muted border-2 border-border focus:border-primary outline-none font-black tabular-nums" />
-                     </div>
-                     <div class="space-y-2">
-                        <label class="text-[9px] font-black uppercase pl-2 opacity-40">Total (TND)</label>
-                        <input type="number" v-model.number="editForm.totalAmount" class="w-full h-14 px-4 rounded-2xl bg-muted border-2 border-border focus:border-primary outline-none font-black tabular-nums" />
-                     </div>
-                     <div class="space-y-2">
-                        <label class="text-[9px] font-black uppercase pl-2 opacity-40">Statut</label>
-                        <select v-model="editForm.status" class="w-full h-14 px-4 rounded-2xl bg-muted border-2 border-border focus:border-primary outline-none font-bold text-sm uppercase">
-                           <option value="soon">À venir</option>
-                           <option value="active">Actif</option>
-                           <option value="terminé">Terminé</option>
-                           <option value="clôturé">Clôturé</option>
-                           <option value="cancelled">Annulé</option>
-                        </select>
-                     </div>
+               <div>
+                  <div class="flex items-center gap-3 mb-6">
+                     <div class="w-9 h-9 rounded-xl bg-indigo-600/10 text-indigo-600 flex items-center justify-center shrink-0"><Banknote class="w-4 h-4" /></div>
+                     <h4 class="text-[10px] font-black uppercase tracking-[0.25em] text-slate-800">Tarification & Règlement</h4>
+                     <div class="h-px flex-1 bg-gradient-to-r from-slate-200 to-transparent"></div>
                   </div>
-                  <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
                      <div class="space-y-2">
-                        <label class="text-[9px] font-black uppercase pl-2 opacity-40">Mode de Règlement</label>
-                        <select v-model="editForm.paymentMethod" class="w-full h-14 px-4 rounded-2xl bg-muted border-2 border-border focus:border-primary outline-none font-bold text-sm">
-                           <option value="espece">Espèce</option>
-                           <option value="cheque">Chèque</option>
-                        </select>
+                        <label class="form-label">Tarif / Jour (TND)</label>
+                        <input type="number" v-model.number="editForm.carDailyRate" class="form-field tabular-nums" />
                      </div>
                      <div class="space-y-2">
-                        <label class="text-[9px] font-black uppercase pl-2 opacity-40">Frais Agence (TND)</label>
-                        <input type="number" v-model.number="editForm.contractTaxValue" class="w-full h-14 px-4 rounded-2xl bg-muted border-2 border-border focus:border-primary outline-none font-black tabular-nums" />
+                        <label class="form-label">Caution (TND)</label>
+                        <input type="number" v-model.number="editForm.depositAmount" class="form-field tabular-nums" />
                      </div>
                      <div class="space-y-2">
-                        <label class="text-[9px] font-black uppercase pl-2 opacity-40">TVA (%)</label>
-                        <input type="number" v-model.number="editForm.tvaValue" class="w-full h-14 px-4 rounded-2xl bg-muted border-2 border-border focus:border-primary outline-none font-black tabular-nums" />
+                        <label class="form-label">Total (TND)</label>
+                        <input type="number" v-model.number="editForm.totalAmount" class="form-field tabular-nums" />
                      </div>
-                  </div>
-                   <div v-if="editForm.paymentMethod === 'cheque'" class="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in duration-300">
-                      <div class="space-y-2">
-                         <label class="text-[9px] font-black uppercase pl-2 opacity-40">Numéro Chèque</label>
-                         <input v-model="editForm.chequeNumber" class="w-full h-14 px-4 rounded-2xl bg-muted border-2 border-border focus:border-primary outline-none font-bold" />
-                      </div>
-                      <div class="space-y-2">
-                         <label class="text-[9px] font-black uppercase pl-2 opacity-40">Banque</label>
-                         <input v-model="editForm.bankName" class="w-full h-14 px-4 rounded-2xl bg-muted border-2 border-border focus:border-primary outline-none font-bold" />
-                      </div>
-                   </div>
-                   <div v-if="agencies.length > 0" class="space-y-2">
-                      <label class="text-[9px] font-black uppercase pl-2 opacity-40">Agence</label>
-                      <select v-model="editForm.agency" class="w-full h-14 px-4 rounded-2xl bg-muted border-2 border-border focus:border-primary outline-none font-bold text-sm">
-                         <option value="">Aucune</option>
-                         <option v-for="a in agencies" :key="a" :value="a">{{ a }}</option>
-                      </select>
-                   </div>
-                </div>
-
-                <!-- Lieux & Carburant -->
-                <div class="space-y-4">
-                   <h4 class="text-[10px] font-black uppercase tracking-[0.3em] text-indigo-600 pl-2 border-l-2 border-indigo-600">Lieux & Carburant</h4>
-                   <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                      <div class="space-y-2">
-                         <label class="text-[9px] font-black uppercase pl-2 opacity-40">Lieu de Départ</label>
-                         <input v-model="editForm.lieuDepart" class="w-full h-14 px-4 rounded-2xl bg-muted border-2 border-border focus:border-primary outline-none font-bold text-sm" />
-                      </div>
-                      <div class="space-y-2">
-                         <label class="text-[9px] font-black uppercase pl-2 opacity-40">Lieu de Retour</label>
-                         <input v-model="editForm.lieuRetour" class="w-full h-14 px-4 rounded-2xl bg-muted border-2 border-border focus:border-primary outline-none font-bold text-sm" />
-                      </div>
-                      <div class="space-y-2">
-                         <label class="text-[9px] font-black uppercase pl-2 opacity-40">Carburant ({{ editForm.carburantLevel }}%)</label>
-                         <input type="range" v-model.number="editForm.carburantLevel" min="0" max="100" step="5" class="w-full h-2 mt-4 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600" />
-                      </div>
-                   </div>
-                </div>
-
-               <!-- Observations & Sécurité -->
-               <div class="space-y-4">
-                  <h4 class="text-[10px] font-black uppercase tracking-[0.3em] text-indigo-600 pl-2 border-l-2 border-indigo-600">Observations & Mot de passe</h4>
-                  <div class="space-y-4">
-                     <textarea v-model="editForm.notes" rows="2" class="w-full p-4 rounded-2xl bg-muted/50 border-2 border-border focus:border-primary outline-none font-bold text-sm" placeholder="Observations générales..."></textarea>
-                     
-                     <div class="p-6 bg-slate-900 rounded-[2rem] text-white flex flex-col md:flex-row items-center gap-6 border-b-4 border-indigo-500">
-                        <div class="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center shrink-0 border border-white/10"><Lock class="w-6 h-6 text-indigo-400" /></div>
-                        <div class="flex-1 w-full space-y-1">
-                           <p class="text-[9px] font-black uppercase opacity-60">Validation Requise</p>
-                           <div class="relative">
-                             <input v-model="editForm.password" :type="showEditPassword ? 'text' : 'password'" class="w-full h-12 px-4 rounded-xl bg-white/10 border-2 border-white/20 focus:border-indigo-400 outline-none font-black text-center text-white pr-12" placeholder="Saisir le mot de passe admin" @keyup.enter="submitEdit()" />
-                             <button type="button" @click="showEditPassword = !showEditPassword" class="absolute right-3 top-1/2 -translate-y-1/2 text-indigo-300 hover:text-white transition-colors outline-none">
-                               <Eye v-if="!showEditPassword" class="w-5 h-5" />
-                               <EyeOff v-else class="w-5 h-5" />
-                             </button>
-                           </div>
+                     <div class="space-y-2">
+                        <label class="form-label">Statut</label>
+                        <div class="relative">
+                           <select v-model="editForm.status" class="form-field form-field-select uppercase">
+                              <option value="soon">À venir</option>
+                              <option value="active">Actif</option>
+                              <option value="terminé">Terminé</option>
+                              <option value="clôturé">Clôturé</option>
+                              <option value="cancelled">Annulé</option>
+                           </select>
+                           <ChevronDown class="w-4 h-4 text-slate-400 pointer-events-none absolute right-4 top-1/2 -translate-y-1/2" />
                         </div>
                      </div>
                   </div>
+                  <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
+                     <div class="space-y-2">
+                        <label class="form-label">Mode de Règlement</label>
+                        <div class="relative">
+                           <select v-model="editForm.paymentMethod" class="form-field form-field-select">
+                              <option value="espece">Espèce</option>
+                              <option value="cheque">Chèque</option>
+                           </select>
+                           <ChevronDown class="w-4 h-4 text-slate-400 pointer-events-none absolute right-4 top-1/2 -translate-y-1/2" />
+                        </div>
+                     </div>
+                     <div class="space-y-2">
+                        <label class="form-label">Frais Agence (TND)</label>
+                        <input type="number" v-model.number="editForm.contractTaxValue" class="form-field tabular-nums" />
+                     </div>
+                     <div class="space-y-2">
+                        <label class="form-label">TVA (%)</label>
+                        <input type="number" v-model.number="editForm.tvaValue" class="form-field tabular-nums" />
+                     </div>
+                  </div>
+                  <div v-if="editForm.paymentMethod === 'cheque'" class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6 animate-in fade-in duration-300">
+                     <div class="space-y-2">
+                        <label class="form-label">Numéro Chèque</label>
+                        <input v-model="editForm.chequeNumber" class="form-field" />
+                     </div>
+                     <div class="space-y-2">
+                        <label class="form-label">Banque</label>
+                        <input v-model="editForm.bankName" class="form-field" />
+                     </div>
+                  </div>
+                  <div v-if="agencies.length > 0" class="mt-6 space-y-2">
+                     <label class="form-label">Agence</label>
+                     <div class="relative">
+                        <select v-model="editForm.agency" class="form-field form-field-select">
+                           <option value="">Aucune</option>
+                           <option v-for="a in agencies" :key="a" :value="a">{{ a }}</option>
+                        </select>
+                        <ChevronDown class="w-4 h-4 text-slate-400 pointer-events-none absolute right-4 top-1/2 -translate-y-1/2" />
+                     </div>
+                  </div>
+               </div>
+
+               <!-- Lieux & Carburant -->
+               <div>
+                  <div class="flex items-center gap-3 mb-6">
+                     <div class="w-9 h-9 rounded-xl bg-indigo-600/10 text-indigo-600 flex items-center justify-center shrink-0"><MapPin class="w-4 h-4" /></div>
+                     <h4 class="text-[10px] font-black uppercase tracking-[0.25em] text-slate-800">Lieux & Carburant</h4>
+                     <div class="h-px flex-1 bg-gradient-to-r from-slate-200 to-transparent"></div>
+                  </div>
+                  <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                     <div class="space-y-2">
+                        <label class="form-label">Lieu de Départ</label>
+                        <input v-model="editForm.lieuDepart" class="form-field" />
+                     </div>
+                     <div class="space-y-2">
+                        <label class="form-label">Lieu de Retour</label>
+                        <input v-model="editForm.lieuRetour" class="form-field" />
+                     </div>
+                     <div class="space-y-2">
+                        <label class="form-label">Carburant — {{ editForm.carburantLevel }}%</label>
+                        <input type="range" v-model.number="editForm.carburantLevel" min="0" max="100" step="5" class="w-full mt-3 h-1.5 bg-slate-200 rounded-full appearance-none cursor-pointer accent-indigo-600" />
+                     </div>
+                  </div>
+               </div>
+
+               <!-- Observations -->
+               <div>
+                  <div class="flex items-center gap-3 mb-6">
+                     <div class="w-9 h-9 rounded-xl bg-indigo-600/10 text-indigo-600 flex items-center justify-center shrink-0"><NotepadText class="w-4 h-4" /></div>
+                     <h4 class="text-[10px] font-black uppercase tracking-[0.25em] text-slate-800">Observations</h4>
+                     <div class="h-px flex-1 bg-gradient-to-r from-slate-200 to-transparent"></div>
+                  </div>
+                  <textarea v-model="editForm.notes" rows="3" class="form-field resize-none py-4" placeholder="Observations générales..."></textarea>
                </div>
 
                <p v-if="editError" class="text-[10px] font-black text-destructive uppercase italic text-center">⚠ {{ editError }}</p>
             </div>
 
-            <div class="p-10 pt-0 shrink-0 flex gap-4">
-               <Button @click="showEditDialog = false" variant="ghost" class="flex-1 h-14 rounded-2xl font-black uppercase text-[10px]">Annuler</Button>
-               <Button @click="submitEdit()" :loading="editing" class="flex-[2] h-14 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black uppercase text-[10px] shadow-xl shadow-indigo-600/20">Enregistrer les modifications</Button>
+            <!-- Footer -->
+            <div class="px-10 py-6 bg-slate-50/80 border-t border-slate-100 shrink-0 flex gap-4">
+               <Button @click="showEditDialog = false" variant="ghost" class="flex-1 h-12 rounded-xl font-black uppercase text-[10px] text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors">Annuler</Button>
+               <Button @click="submitEdit()" :loading="editing" class="flex-[2] h-12 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black uppercase text-[10px] shadow-lg shadow-indigo-600/20 transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0 active:scale-95 gap-2">
+                  <Lock class="w-4 h-4" /> Enregistrer les modifications
+               </Button>
+            </div>
+         </DialogContent>
+      </Dialog>
+
+      <!-- EDIT PASSWORD POPUP -->
+      <Dialog v-model:open="showEditPasswordDialog">
+         <DialogContent class="max-w-md bg-white border-border shadow-3xl rounded-[2.5rem] p-10 overflow-hidden text-center max-h-[90vh] overflow-y-auto">
+            <DialogHeader class="mb-8">
+               <div class="w-16 h-16 bg-gradient-to-br from-indigo-500 to-violet-600 text-white rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-indigo-600/25"><Lock class="w-8 h-8" /></div>
+               <DialogTitle class="text-2xl font-black uppercase tracking-tight">Accès Administrateur</DialogTitle>
+               <DialogDescription class="text-[10px] font-black uppercase opacity-40 mt-1">Saisissez votre mot de passe pour enregistrer</DialogDescription>
+            </DialogHeader>
+            <div class="space-y-6">
+               <div v-if="guard.isLocked" class="flex items-center justify-center gap-2 bg-rose-50 text-rose-600 border border-rose-200 rounded-xl px-4 py-3">
+                  <Lock class="w-4 h-4" />
+                  <span class="text-[10px] font-black uppercase tracking-widest">Trop de tentatives — réessayez dans {{ guard.remainingSeconds }}s</span>
+               </div>
+               <div class="relative">
+                  <input v-model="editPassword" :type="showEditPwdInput ? 'text' : 'password'" :disabled="guard.isLocked" class="w-full h-14 px-6 rounded-2xl bg-slate-50 border-2 border-slate-200 focus:border-indigo-500 outline-none font-black text-center pr-14 transition-colors duration-200" placeholder="••••••••" @keyup.enter="confirmEditPassword" />
+                  <button type="button" @click="showEditPwdInput = !showEditPwdInput" class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-600 transition-colors outline-none">
+                     <Eye v-if="!showEditPwdInput" class="w-5 h-5" />
+                     <EyeOff v-else class="w-5 h-5" />
+                  </button>
+               </div>
+               <p v-if="editPasswordError" class="text-[10px] font-black text-destructive uppercase italic">⚠ {{ editPasswordError }}</p>
+               <div class="flex gap-4">
+                  <Button @click="showEditPasswordDialog = false" variant="ghost" class="flex-1 h-14 rounded-2xl font-black uppercase text-[10px]">Annuler</Button>
+                  <Button @click="confirmEditPassword" :loading="editing" :disabled="guard.isLocked" class="flex-1 h-14 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black uppercase text-[10px] shadow-xl shadow-indigo-600/20">Confirmer</Button>
+               </div>
             </div>
          </DialogContent>
       </Dialog>
@@ -1440,6 +1553,54 @@ const submitCloture = async () => {
     size: A4 !important;
     margin: 0 !important;
   }
+}
+</style>
+
+<style scoped>
+.form-label {
+  display: block;
+  font-size: 9px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: #64748b;
+  margin-bottom: 0.5rem;
+  padding-left: 0.25rem;
+}
+
+.form-field {
+  width: 100%;
+  height: 3rem;
+  padding-left: 1rem;
+  padding-right: 1rem;
+  border-radius: 0.75rem;
+  background-color: rgb(248 250 252 / 0.8);
+  border: 1px solid #e2e8f0;
+  outline: none;
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: #1e293b;
+  transition: border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.form-field:hover {
+  border-color: #cbd5e1;
+}
+
+.form-field:focus {
+  border-color: #6366f1;
+  background-color: #ffffff;
+  box-shadow: 0 0 0 4px rgb(99 102 241 / 0.12);
+}
+
+.form-field::placeholder {
+  color: #94a3b8;
+}
+
+.form-field-select {
+  padding-right: 2.5rem;
+  appearance: none;
+  cursor: pointer;
 }
 </style>
 

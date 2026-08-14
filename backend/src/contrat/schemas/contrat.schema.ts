@@ -27,7 +27,10 @@ export class Contrat {
   @Prop({ default: 0 })
   carDailyRate: number;
 
-  @Prop({ default: 'active', enum: ['soon', 'active', 'terminé', 'clôturé', 'cancelled'] })
+  @Prop({
+    default: 'active',
+    enum: ['soon', 'active', 'terminé', 'clôturé', 'cancelled'],
+  })
   status: string;
 
   @Prop({ type: Types.ObjectId, ref: 'User' })
@@ -88,7 +91,6 @@ export class Contrat {
 
 export type ContratDocument = Contrat & Document;
 export const ContratSchema = SchemaFactory.createForClass(Contrat);
-
 
 ContratSchema.index({ car: 1 });
 ContratSchema.index({ status: 1 });

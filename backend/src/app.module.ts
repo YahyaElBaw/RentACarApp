@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { CarModule } from './car/car.module';
@@ -19,15 +19,22 @@ import { JourneeModule } from './journee/journee.module';
 import { SharedModule } from './shared/shared.module';
 import { SettingModule } from './setting/setting.module';
 import { AgenceModule } from './agence/agence.module';
+import { LogModule } from './log/log.module';
+import { EventsModule } from './events/events.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
-    MongooseModule.forRoot(process.env.MONGODB_URI!, {
-      serverSelectionTimeoutMS: 10000,
-      connectTimeoutMS: 10000,
-      bufferCommands: false,
+    MongooseModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        uri:
+          config.get<string>('MONGODB_URI') || 'mongodb://127.0.0.1:27017/rentacar',
+        serverSelectionTimeoutMS: 5000,
+        connectTimeoutMS: 5000,
+      }),
     }),
+    EventsModule,
     SharedModule,
     CarModule,
     ClientModule,
@@ -43,8 +50,10 @@ import { AgenceModule } from './agence/agence.module';
     JourneeModule,
     SettingModule,
     AgenceModule,
+    LogModule,
   ],
   controllers: [AppController],
   providers: [AppService],
 })
 export class AppModule {}
+

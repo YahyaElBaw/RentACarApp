@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { ref, onMounted, reactive, watch, computed, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted, reactive, watch, computed, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { contratApi, carApi, clientApi } from '@/api'
 import { formatDate } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth'
+import { useSocketStore } from '@/stores/socket'
 import { 
-  Plus, Search, FileText, Eye, Download, ChevronLeft, ChevronRight, Filter, X
+  Plus, Search, FileText, Eye, Download, ChevronLeft, ChevronRight, Filter, X, Zap
 } from 'lucide-vue-next'
 import { 
   Table, TableHeader, TableBody, TableHead, TableRow, TableCell 
@@ -17,6 +18,7 @@ import { Card, CardContent } from '@/components/ui/card'
 
 const router = useRouter()
 const authStore = useAuthStore()
+const socketStore = useSocketStore()
 const contrats = ref<any[]>([])
 const cars = ref<any[]>([])
 const clients = ref<any[]>([])
@@ -26,6 +28,10 @@ const pageSize = 10
 const showFilters = ref(false)
 const showSearch = ref(false)
 const searchInputRef = ref<HTMLInputElement | null>(null)
+const hoverOpenFilter = ref(false)
+const hoverOpenNew = ref(false)
+const hoverOpenForce = ref(false)
+let unsubscribeSocket: Function | null = null
 
 const closeSearch = () => {
   if (!filters.reference) {
@@ -78,7 +84,15 @@ const loadFilterData = async () => {
 onMounted(() => {
   loadContrats()
   loadFilterData()
+  unsubscribeSocket = socketStore.onEvent('contract:change', () => {
+    loadContrats()
+  })
 })
+
+onUnmounted(() => {
+  if (unsubscribeSocket) unsubscribeSocket()
+})
+
 watch(() => filters.status, () => { currentPage.value = 1; loadContrats() })
 
 const filteredContrats = computed(() => {
@@ -208,8 +222,11 @@ const getStatusBadge = (contrat: any) => {
 
       <div class="flex flex-wrap items-center gap-3">
         <div class="relative">
-          <div v-if="!showSearch" @click="showSearch = true" class="h-12 w-12 flex items-center justify-center rounded-2xl bg-white border-2 border-slate-200 hover:border-indigo-300 cursor-pointer transition-all">
-            <Search class="w-4 h-4 text-slate-400" />
+          <div v-if="!showSearch" @click="showSearch = true" class="group h-12 rounded-2xl bg-white border-2 border-slate-200 hover:border-indigo-400 cursor-pointer transition-all duration-300 w-12 hover:w-60 overflow-hidden flex items-center active:scale-95 hover:shadow-xl hover:shadow-indigo-200/50 hover:-translate-y-0.5 relative">
+            <div class="absolute inset-0 flex items-center pl-3">
+              <Search class="w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-colors duration-300 group-hover:scale-110" />
+            </div>
+            <span class="opacity-0 group-hover:opacity-100 whitespace-nowrap transition-all duration-300 pl-10 pr-4 text-[10px] font-black uppercase tracking-widest text-indigo-500">Rechercher...</span>
           </div>
           <div v-else class="flex items-center gap-2 animate-in fade-in slide-in-from-left-2 duration-200">
             <div class="relative">
@@ -233,16 +250,35 @@ const getStatusBadge = (contrat: any) => {
 
         <Button 
           @click="showFilters = !showFilters" 
-          :class="'h-12 px-5 rounded-2xl font-black uppercase text-[10px] tracking-widest border-2 transition-all flex items-center gap-2 ' + (showFilters ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white border-slate-200 text-slate-600 hover:border-indigo-300')"
+          @mouseenter="hoverOpenFilter = true"
+          @mouseleave="hoverOpenFilter = false"
+          :class="'group relative h-12 rounded-2xl font-black uppercase text-[10px] tracking-widest border-2 transition-all duration-300 overflow-hidden flex items-center justify-start active:scale-95 hover:-translate-y-0.5 ' + (hoverOpenFilter ? 'w-44' : 'w-12') + ' ' + (showFilters ? 'bg-indigo-600 text-white border-indigo-600 shadow-xl shadow-indigo-600/20' : 'bg-white border-slate-200 text-slate-600 hover:border-indigo-400 hover:text-indigo-600 hover:shadow-xl hover:shadow-indigo-200/50')"
         >
-          <Filter class="w-4 h-4" />
-          <span class="hidden sm:inline">Filtres</span>
-          <span v-if="activeFilterCount > 0" class="ml-1 w-5 h-5 bg-red-500 text-white rounded-full text-[9px] flex items-center justify-center">{{ activeFilterCount }}</span>
+          <div class="absolute inset-y-0 left-0 flex items-center pl-3.5">
+            <Filter class="w-4 h-4 transition-transform duration-300 group-hover:rotate-[-20deg] group-hover:scale-110" />
+          </div>
+          <span :class="[hoverOpenFilter ? 'opacity-100' : 'opacity-0', 'whitespace-nowrap transition-all duration-300 pl-10 pr-4 flex items-center gap-2']">
+            Filtres
+            <span v-if="activeFilterCount > 0" class="w-5 h-5 bg-red-500 text-white rounded-full text-[9px] flex items-center justify-center transition-transform duration-300 group-hover:scale-110">{{ activeFilterCount }}</span>
+          </span>
         </Button>
 
-        <Button @click="router.push('/contrats/new')" class="h-12 px-6 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-2xl shadow-2xl shadow-indigo-200 transition-all active:scale-95 flex items-center gap-2">
-          <Plus class="w-4 h-4 stroke-[3]" />
-          <span class="uppercase tracking-widest text-[10px]">Nouveau Contrat</span>
+        <Button @click="router.push('/contrats/new')" @mouseenter="hoverOpenNew = true" @mouseleave="hoverOpenNew = false" :class="'group relative h-12 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-black shadow-2xl shadow-indigo-200 transition-all duration-300 overflow-hidden flex items-center justify-start active:scale-95 hover:scale-105 hover:-translate-y-0.5 hover:shadow-indigo-400/40 ' + (hoverOpenNew ? 'w-48' : 'w-12')">
+          <div class="absolute inset-y-0 left-0 flex items-center pl-3.5">
+            <Plus class="w-4 h-4 stroke-[3] transition-transform duration-300 group-hover:rotate-90 group-hover:scale-110" />
+          </div>
+          <span :class="[hoverOpenNew ? 'opacity-100' : 'opacity-0', 'whitespace-nowrap transition-all duration-300 pl-10 pr-4 uppercase tracking-widest text-[10px]']">
+            Nouveau Contrat
+          </span>
+        </Button>
+
+        <Button v-if="authStore.isSuperAdmin" @click="router.push('/contrats/new?force=1')" @mouseenter="hoverOpenForce = true" @mouseleave="hoverOpenForce = false" :class="'group relative h-12 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white font-black shadow-2xl shadow-rose-200 transition-all duration-300 overflow-hidden flex items-center justify-start active:scale-95 hover:scale-105 hover:-translate-y-0.5 hover:shadow-rose-400/40 ' + (hoverOpenForce ? 'w-52' : 'w-12')" title="Création forcée — ignore les conflits de réservation (super admin uniquement)">
+          <div class="absolute inset-y-0 left-0 flex items-center pl-3.5">
+            <Zap class="w-4 h-4 stroke-[3] transition-transform duration-300 group-hover:rotate-[-15deg] group-hover:scale-110 group-hover:fill-amber-300" />
+          </div>
+          <span :class="[hoverOpenForce ? 'opacity-100' : 'opacity-0', 'whitespace-nowrap transition-all duration-300 pl-10 pr-4 uppercase tracking-widest text-[10px]']">
+            Forcer Création
+          </span>
         </Button>
       </div>
     </div>

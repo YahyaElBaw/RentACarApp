@@ -6,7 +6,7 @@ const api = axios.create({
 });
 
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
+  const token = sessionStorage.getItem('token') || localStorage.getItem('token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -16,7 +16,9 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401 && !error.config.url.includes('/auth/login')) {
+    if (error.response?.status === 401 && !error.config.url.includes('/auth/login') && !error.config.url.includes('/auth/logout')) {
+      sessionStorage.removeItem('token');
+      sessionStorage.removeItem('user');
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       window.dispatchEvent(new CustomEvent('auth:logout'));
@@ -31,12 +33,23 @@ api.interceptors.response.use(
 
 export const authApi = {
   login: (credentials: { cin: string; phone: string }) => api.post('/auth/login', credentials).then(res => res.data),
+  logout: () => api.post('/auth/logout').then(res => res.data),
   getProfile: () => api.get('/users/profile').then(res => res.data),
 };
 
 export const userApi = {
   getAll: () => api.get('/users').then(res => res.data),
   create: (data: any) => api.post('/users', data).then(res => res.data),
+  update: (id: string, data: any) => api.patch(`/users/${id}`, data).then(res => res.data),
+  delete: (id: string) => api.delete(`/users/${id}`).then(res => res.data),
+  profile: () => api.get('/users/profile').then(res => res.data),
+  updateProfile: (data: any) => api.patch('/users/me', data).then(res => res.data),
+  changePassword: (data: any) => api.post('/users/change-password', data).then(res => res.data),
+  revealPassword: (id: string, password: string) => api.post(`/users/${id}/reveal-password`, { password }).then(res => res.data),
+};
+
+export const logApi = {
+  getAll: (params?: any) => api.get('/logs', { params }).then(res => res.data),
 };
 
 export const dashboardApi = {
@@ -51,6 +64,8 @@ export const carApi = {
   create: (data: any) => api.post('/cars', data).then(res => res.data),
   update: (id: string, data: any) => api.patch(`/cars/${id}`, data).then(res => res.data),
   delete: (id: string, password: string) => api.delete(`/cars/${id}`, { data: { password } }).then(res => res.data),
+  addDocument: (id: string, data: any) => api.post(`/cars/${id}/documents`, data).then(res => res.data),
+  removeDocument: (id: string, documentId: string, password: string) => api.delete(`/cars/${id}/documents/${documentId}`, { params: { password } }).then(res => res.data),
 };
 
 export const contratApi = {
@@ -84,6 +99,7 @@ export const clientApi = {
 export const depenseApi = {
   getAll: (carId?: string) => api.get('/depenses', { params: { carId } }).then(res => res.data),
   create: (data: any) => api.post('/depenses', data).then(res => res.data),
+  bulkCreate: (data: any[]) => api.post('/depenses/bulk', data).then(res => res.data),
   update: (id: string, data: any) => api.patch(`/depenses/${id}`, data).then(res => res.data),
   delete: (id: string) => api.delete(`/depenses/${id}`).then(res => res.data),
 };
@@ -121,7 +137,7 @@ export const agenceApi = {
   getOne: (id: string) => api.get(`/agences/${id}`).then(res => res.data),
   create: (data: any) => api.post('/agences', data).then(res => res.data),
   update: (id: string, data: any) => api.patch(`/agences/${id}`, data).then(res => res.data),
-  delete: (id: string) => api.delete(`/agences/${id}`).then(res => res.data),
+  delete: (id: string, password?: string) => api.delete(`/agences/${id}`, { data: { password } }).then(res => res.data),
 };
 
 export const getImageUrl = (path: string) => {

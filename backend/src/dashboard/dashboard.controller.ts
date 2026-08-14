@@ -8,7 +8,11 @@ export class DashboardController {
 
   @UseGuards(JwtAuthGuard)
   @Get()
-  getStats(@Req() req: any, @Query('from') from?: string, @Query('to') to?: string) {
+  getStats(
+    @Req() req: any,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
     return this.dashboardService.getStats(req.user, from, to);
   }
 }
