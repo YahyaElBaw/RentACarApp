@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import * as bcrypt from 'bcrypt';
 import { Car, CarDocument } from '../car/schemas/car.schema';
 import { Contrat, ContratDocument } from '../contrat/schemas/contrat.schema';
 import { Depense, DepenseDocument } from '../depense/schemas/depense.schema';
@@ -9,6 +10,11 @@ import {
   Reservation,
   ReservationDocument,
 } from '../reservation/schemas/reservation.schema';
+import {
+  DismissedAlert,
+  DismissedAlertDocument,
+} from './schemas/dismissed-alert.schema';
+import { UsersService } from '../users/users.service';
 
 @Injectable()
 export class DashboardService {
@@ -19,6 +25,9 @@ export class DashboardService {
     @InjectModel(Client.name) private clientModel: Model<ClientDocument>,
     @InjectModel(Reservation.name)
     private reservationModel: Model<ReservationDocument>,
+    @InjectModel(DismissedAlert.name)
+    private dismissedAlertModel: Model<DismissedAlertDocument>,
+    private usersService: UsersService,
   ) {}
 
   async getStats(user: any, from?: string, to?: string): Promise<any> {
@@ -346,6 +355,7 @@ export class DashboardService {
         const remainingKm = car.nextOilChangeMileage - car.mileage;
         if (remainingKm <= 3000) {
           alerts.push({
+            key: `vidange:${car._id}:${car.nextOilChangeMileage}`,
             code: 'VIDANGE',
             type: remainingKm <= 500 ? 'critique' : 'urgent',
             carId: car._id,
@@ -375,6 +385,7 @@ export class DashboardService {
           else alertMsg += `expire dans ${daysLeft} jours.`;
 
           alerts.push({
+            key: `visite:${car._id}:${new Date(car.nextTechnicalVisitDate).toISOString().split('T')[0]}`,
             code: 'VISITE',
             type: daysLeft <= 15 ? 'critique' : 'urgent',
             carId: car._id,
@@ -403,6 +414,7 @@ export class DashboardService {
           else alertMsg += `expire dans ${daysLeft} jours.`;
 
           alerts.push({
+            key: `assurance:${car._id}:${insuranceDate.toISOString().split('T')[0]}`,
             code: 'ASSURANCE',
             type: daysLeft <= 7 ? 'critique' : 'urgent',
             carId: car._id,
@@ -440,6 +452,7 @@ export class DashboardService {
 
     for (const client of incompleteClients) {
       alerts.push({
+        key: `incomplete:${client._id}`,
         type: 'info',
         code: 'INCOMPLETE_CLIENT',
         message: `Dossier incomplet pour ${client.firstName} ${client.lastName}.`,
@@ -447,6 +460,30 @@ export class DashboardService {
       });
     }
 
-    return alerts;
+    const dismissed = await this.dismissedAlertModel
+      .find({ key: { $in: alerts.map((a) => a.key) } })
+      .select('key')
+      .exec();
+    const dismissedKeys = new Set(dismissed.map((d) => d.key));
+    return alerts.filter((a) => !dismissedKeys.has(a.key));
+  }
+
+  async dismissAlert(actorId: string, key: string, password: string) {
+    if (!key || typeof key !== 'string') {
+      throw new UnauthorizedException('Alerte invalide.');
+    }
+    const user = await this.usersService.findById(actorId);
+    if (!user) {
+      throw new UnauthorizedException('Utilisateur introuvable.');
+    }
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      throw new UnauthorizedException('Mot de passe incorrect.');
+    }
+    await this.dismissedAlertModel.updateOne(
+      { key },
+      { $set: { key, dismissedBy: actorId } },
+      { upsert: true },
+    );
   }
 }

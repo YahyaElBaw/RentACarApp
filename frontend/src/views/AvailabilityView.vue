@@ -284,37 +284,41 @@
 
                   <div class="grid grid-cols-2 gap-6 mt-6">
                     <div class="space-y-2">
-                      <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Nom</label>
-                      <Input v-model="newClientForm.lastName" class="h-12 bg-slate-50 border-slate-100 rounded-xl" />
+                      <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Prénom <span class="text-rose-500">*</span></label>
+                      <Input v-model="newClientForm.firstName" placeholder="Ex: Ahmed" class="h-12 bg-slate-50 border-slate-100 rounded-xl" />
                     </div>
                     <div class="space-y-2">
-                      <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Prénom</label>
-                      <Input v-model="newClientForm.firstName" class="h-12 bg-slate-50 border-slate-100 rounded-xl" />
+                      <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Nom <span class="text-rose-500">*</span></label>
+                      <Input v-model="newClientForm.lastName" placeholder="Ex: Ben Ali" class="h-12 bg-slate-50 border-slate-100 rounded-xl" />
                     </div>
                     <div class="space-y-2">
-                      <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Téléphone</label>
-                      <Input v-model="newClientForm.phone" class="h-12 bg-slate-50 border-slate-100 rounded-xl" />
+                      <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Téléphone <span class="text-rose-500">*</span></label>
+                      <div class="flex gap-2">
+                        <select v-model="newClientForm.phoneCountryCode" class="h-12 w-28 bg-slate-50 border border-slate-100 rounded-xl px-2 text-sm font-bold text-slate-700 outline-none focus:border-indigo-500 cursor-pointer">
+                          <option value="+216">+216</option>
+                          <option value="+33">+33</option>
+                          <option value="+39">+39</option>
+                          <option value="+49">+49</option>
+                          <option value="+34">+34</option>
+                          <option value="+1">+1</option>
+                          <option value="+44">+44</option>
+                          <option value="+212">+212</option>
+                          <option value="+213">+213</option>
+                          <option value="+966">+966</option>
+                          <option value="+971">+971</option>
+                          <option value="+218">+218</option>
+                        </select>
+                        <Input v-model="newClientForm.phone" placeholder="20 123 456" class="h-12 bg-slate-50 border-slate-100 rounded-xl flex-1" />
+                      </div>
                     </div>
                     <div class="space-y-2">
-                      <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">CIN</label>
-                      <Input v-model="newClientForm.cin" class="h-12 bg-slate-50 border-slate-100 rounded-xl" />
-                    </div>
-                    <div class="space-y-2">
-                      <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">N° Permis</label>
-                      <Input v-model="newClientForm.drivingLicense" class="h-12 bg-slate-50 border-slate-100 rounded-xl" />
-                    </div>
-                    <div class="space-y-2">
-                      <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Date de Naissance</label>
-                      <Input type="date" v-model="newClientForm.birthday" class="h-12 bg-slate-50 border-slate-100 rounded-xl" />
-                    </div>
-                    <div class="space-y-2 col-span-2">
-                      <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Adresse</label>
-                      <Input v-model="newClientForm.address" class="h-12 bg-slate-50 border-slate-100 rounded-xl" />
+                      <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">CIN <span class="text-slate-300">(optionnel)</span></label>
+                      <Input v-model="newClientForm.cin" placeholder="Numéro CIN" class="h-12 bg-slate-50 border-slate-100 rounded-xl" />
                     </div>
                   </div>
 
                   <div class="mt-8">
-                    <Button @click="createNewClient" class="w-full h-16 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl shadow-indigo-100">
+                    <Button @click="createNewClient" :disabled="!isNewClientValid" class="w-full h-16 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl shadow-indigo-100 disabled:opacity-50">
                       Enregistrer & Sélectionner
                     </Button>
                   </div>
@@ -411,12 +415,15 @@ const isAddingNewClient = ref(false)
 const newClientForm = reactive({
   firstName: '',
   lastName: '',
+  phoneCountryCode: '+216',
   phone: '',
-  cin: '',
-  drivingLicense: '',
-  birthday: '',
-  address: ''
+  cin: ''
 })
+
+const creatingNewClient = ref(false)
+const isNewClientValid = computed(() =>
+  !!(newClientForm.firstName.trim() && newClientForm.lastName.trim() && newClientForm.phone.trim())
+)
 
 const availabilitySearch = reactive({
   startDate: new Date(Date.now() + 86400000).toISOString().split('T')[0],
@@ -590,22 +597,32 @@ watch(clientQuery, () => {
 })
 
 const createNewClient = async () => {
+  if (!isNewClientValid.value) return
+  creatingNewClient.value = true
   try {
-    const created = await clientApi.create(newClientForm)
+    const payload: any = {
+      firstName: newClientForm.firstName.trim(),
+      lastName: newClientForm.lastName.trim(),
+      phoneCountryCode: newClientForm.phoneCountryCode,
+      phone: newClientForm.phone.trim()
+    }
+    if (newClientForm.cin.trim()) payload.cin = newClientForm.cin.trim()
+    const created = await clientApi.create(payload)
     if (selectedClients.value.length < 2) {
       selectedClients.value.push(created)
     } else {
       toast.add({ severity: 'warn', summary: 'Limite Sélection', detail: 'Client créé mais non sélectionné (max 2)', life: 3000 })
     }
     isAddingNewClient.value = false
-    Object.assign(newClientForm, { 
-      firstName: '', lastName: '', phone: '', cin: '', 
-      drivingLicense: '', birthday: '', address: '' 
+    Object.assign(newClientForm, {
+      firstName: '', lastName: '', phoneCountryCode: '+216', phone: '', cin: ''
     })
     toast.add({ severity: 'success', summary: 'Succès', detail: 'Client créé', life: 3000 })
     fetchInitialClients() // Refresh the list to show the new client
   } catch (err: any) {
     toast.add({ severity: 'error', summary: 'Erreur', detail: 'Échec création client', life: 3000 })
+  } finally {
+    creatingNewClient.value = false
   }
 }
 

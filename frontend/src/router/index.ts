@@ -41,6 +41,12 @@ const router = createRouter({
       component: () => import('../views/CarDetailView.vue')
     },
     {
+      path: '/fleet-map',
+      name: 'fleet-map',
+      component: () => import('../views/FleetMapView.vue'),
+      meta: { title: 'Suivi Flotte' }
+    },
+    {
       path: '/clients',
       name: 'clients',
       component: () => import('../views/ClientListView.vue'),

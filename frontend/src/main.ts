@@ -25,6 +25,18 @@ async function bootstrap() {
     ]);
   }
 
+  // Electron close-flow: main asks to log out, then closes the app
+  const electronAPI = window.electronAPI;
+  if (electronAPI?.onConfirmQuit) {
+    electronAPI.onConfirmQuit(async () => {
+      try {
+        await authStore.logout();
+      } finally {
+        electronAPI.quitConfirmed();
+      }
+    });
+  }
+
   app.use(router);
   app.use(i18n);
   app.use(ToastService);

@@ -5,15 +5,17 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useSocketStore } from '@/stores/socket'
 import { 
-  LayoutDashboard, Car, FileText, Users, Calendar, Wallet, 
+  LayoutDashboard, Car, FileText, Users, Calendar, Wallet, MapPinned,
   LogOut, ShieldCheck, X, Calculator, Bell, AlertCircle, CheckCircle2,
-  RefreshCcw, Search, Settings, WifiOff, ScrollText, Radio, Building2
+  RefreshCcw, Search, Settings, WifiOff, ScrollText, Radio, Building2,
+  Eye as EyeIcon, EyeOff as EyeOffIcon
 } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge/index'
+import TitleBar from '@/components/TitleBar.vue'
 import Toast from 'primevue/toast'
-import { dashboardApi, vidangeApi, visiteApi, settingApi } from '@/api'
+import { dashboardApi, vidangeApi, visiteApi, settingApi, userApi } from '@/api'
 import { onMounted, onUnmounted, reactive } from 'vue'
 import { useToast } from 'primevue/usetoast'
 import { 
@@ -33,6 +35,8 @@ const toast = useToast()
 const isAuthenticated = computed(() => authStore.isAuthenticated)
 const user = computed(() => authStore.user)
 const isMobileMenuOpen = ref(false)
+const isElectron = !!(window as any).electronAPI
+const chromePad = computed(() => (isElectron ? 'pt-[38px]' : ''))
 
 // Close sidebar on route change
 watch(() => route.path, () => {
@@ -44,6 +48,7 @@ const menuItems = computed(() => {
     { label: 'menu.dashboard', to: '/', icon: LayoutDashboard },
     { label: 'menu.availability', to: '/availability', icon: Search },
     { label: 'menu.cars', to: '/cars', icon: Car },
+    { label: 'menu.fleetMap', to: '/fleet-map', icon: MapPinned },
     { label: 'menu.contracts', to: '/contrats', icon: FileText },
     { label: 'menu.clients', to: '/clients', icon: Users },
     { label: 'menu.reservations', to: '/reservations', icon: Calendar },
@@ -76,6 +81,28 @@ const roleLabel = (r: string) => {
   if (r === 'admin') return 'Admin'
   return 'Opérateur'
 }
+
+const roleRank = (r: string) => r === 'super_admin' ? 0 : r === 'admin' ? 1 : 2
+
+const allUsers = ref<any[]>([])
+const loadDirectoryUsers = async () => {
+  try {
+    allUsers.value = await userApi.getAll()
+  } catch (err) {
+    // ignore
+  }
+}
+const onlineIds = computed(() => new Set(socketStore.onlineUsers.map(u => u.userId)))
+const directoryUsers = computed(() =>
+  allUsers.value
+    .map((u: any) => ({ ...u, online: onlineIds.value.has(u._id) }))
+    .sort((a: any, b: any) => Number(b.online) - Number(a.online) || roleRank(a.role) - roleRank(b.role))
+)
+const onlineUsersCount = computed(() => directoryUsers.value.filter(u => u.online).length)
+
+watch(showOnlineUsersModal, (val) => {
+  if (val) loadDirectoryUsers()
+})
 const appSettings = ref<any>(null)
 
 const fetchSettings = async () => {
@@ -98,6 +125,47 @@ const fetchAlerts = async () => {
 }
 
 let alertInterval: any = null
+
+// Alert dismissal (admin only, password required)
+const showDismissPwd = ref(false)
+const dismissPwd = ref('')
+const dismissError = ref(false)
+const dismissServerError = ref(false)
+const dismissing = ref(false)
+const pendingDismissKey = ref<string | null>(null)
+const showDismissText = ref(false)
+
+const askDismissAlert = (alert: any) => {
+  if (!authStore.isAdmin || !alert?.key) return
+  pendingDismissKey.value = alert.key
+  dismissPwd.value = ''
+  dismissError.value = false
+  dismissServerError.value = false
+  showDismissText.value = false
+  showDismissPwd.value = true
+}
+
+const cancelDismiss = () => {
+  showDismissPwd.value = false
+  pendingDismissKey.value = null
+}
+
+const confirmDismiss = async () => {
+  if (!pendingDismissKey.value || dismissing.value) return
+  dismissing.value = true
+  try {
+    await dashboardApi.dismissAlert(pendingDismissKey.value, dismissPwd.value)
+    showDismissPwd.value = false
+    pendingDismissKey.value = null
+    toast.add({ severity: 'success', summary: 'Succès', detail: 'Notification supprimée', life: 3000 })
+    await fetchAlerts()
+  } catch (err: any) {
+    if (err?.response?.status === 401) dismissError.value = true
+    else dismissServerError.value = true
+  } finally {
+    dismissing.value = false
+  }
+}
 
 const isOffline = ref(!navigator.onLine)
 const apiErrorCount = ref(0)
@@ -330,7 +398,8 @@ watch(() => vidangeForm.mileageAtChange, (newVal) => {
   <div class="min-h-screen bg-background text-foreground font-outfit relative">
     
     <!-- Authenticated Layout -->
-    <div v-if="isAuthenticated && route.name !== 'login'" class="flex min-h-screen">
+    <div v-if="isAuthenticated && route.name !== 'login'" class="flex min-h-screen" :class="chromePad">
+      <TitleBar />
       
       <!-- Backdrop for Mobile -->
       <div 
@@ -342,7 +411,8 @@ watch(() => vidangeForm.mileageAtChange, (newVal) => {
       <!-- Premium Sidebar -->
       <aside 
         :class="[
-          'fixed inset-y-0 left-0 z-50 w-72 flex flex-col transition-all duration-500 transform border-r bg-white border-border text-muted-foreground shadow-2xl xl:translate-x-0',
+          'fixed left-0 z-50 w-72 flex flex-col transition-all duration-500 transform border-r bg-white border-border text-muted-foreground shadow-2xl xl:translate-x-0',
+          isElectron ? 'top-[38px] bottom-0' : 'inset-y-0',
           isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
         ]"
       >
@@ -470,7 +540,7 @@ watch(() => vidangeForm.mileageAtChange, (newVal) => {
       <!-- Main Content Area -->
       <main class="flex-1 flex flex-col min-w-0 bg-background transition-colors duration-400 xl:pl-72">
         <!-- Top Navigation / Header -->
-        <header class="h-20 border-b flex items-center justify-between px-8 bg-white/50 backdrop-blur-md sticky top-0 z-30">
+        <header :class="['border-b flex items-center justify-between px-8 bg-white/50 backdrop-blur-md sticky z-30', isElectron ? 'top-[38px] h-20' : 'top-0 h-20']">
            <div class="flex items-center gap-4">
               <Button variant="ghost" size="icon" class="xl:hidden" @click="isMobileMenuOpen = true">
                  <LayoutDashboard class="w-6 h-6" />
@@ -545,11 +615,14 @@ watch(() => vidangeForm.mileageAtChange, (newVal) => {
                      alert.type === 'critique' || alert.type === 'urgent' ? 'bg-destructive/5 border-destructive/10 shadow-lg shadow-destructive/5' : 'bg-muted/30 border-border shadow-sm'
                    ]">
                       <AlertCircle :class="['w-5 h-5 shrink-0 mt-0.5', alert.type === 'critique' || alert.type === 'urgent' ? 'text-destructive' : 'text-amber-500']" />
-                      <div class="space-y-1">
-                         <p class="text-xs font-black text-foreground leading-tight">{{ alert.message }}</p>
-                         <p :class="['text-[8px] font-black uppercase tracking-[0.2em] mt-1', alert.type === 'critique' || alert.type === 'urgent' ? 'text-destructive' : 'text-amber-500']">{{ alert.type || 'Avertissement' }}</p>
-                      </div>
-                   </div>
+                       <div class="space-y-1 flex-1">
+                          <p class="text-xs font-black text-foreground leading-tight">{{ alert.message }}</p>
+                          <p :class="['text-[8px] font-black uppercase tracking-[0.2em] mt-1', alert.type === 'critique' || alert.type === 'urgent' ? 'text-destructive' : 'text-amber-500']">{{ alert.type || 'Avertissement' }}</p>
+                       </div>
+                       <button v-if="authStore.isAdmin && alert.key" @click.stop="askDismissAlert(alert)" class="p-1.5 rounded-full hover:bg-white transition-colors shrink-0">
+                          <X class="w-3.5 h-3.5 text-slate-400 hover:text-destructive" />
+                       </button>
+                    </div>
                 </template>
                 <div v-else class="flex flex-col items-center justify-center py-20 opacity-30 text-center space-y-4">
                    <CheckCircle2 class="w-12 h-12 text-foreground stroke-1" />
@@ -569,6 +642,35 @@ watch(() => vidangeForm.mileageAtChange, (newVal) => {
           <div v-if="showAlertsModal" @click="showAlertsModal = false" class="fixed inset-0 bg-slate-900/10 backdrop-blur-[2px] z-[90]"></div>
        </transition>
     </Teleport>
+    <Dialog v-model:open="showDismissPwd">
+      <DialogContent class="sm:max-w-md bg-white border-border shadow-3xl rounded-[2rem] p-8 text-foreground z-[200]">
+        <DialogHeader class="space-y-1 text-left">
+          <DialogTitle class="text-xl font-black uppercase tracking-tight flex items-center gap-3">
+            <ShieldCheck class="w-5 h-5 text-indigo-600" />
+            Mot de passe requis
+          </DialogTitle>
+          <DialogDescription class="text-xs font-bold text-slate-400 uppercase tracking-widest">
+            Entrez votre mot de passe pour supprimer cette notification.
+          </DialogDescription>
+        </DialogHeader>
+        <div class="mt-4 space-y-4">
+          <div class="relative">
+            <Input v-model="dismissPwd" :type="showDismissText ? 'text' : 'password'" placeholder="Mot de passe" class="h-12 bg-slate-50 border-slate-100 rounded-xl pr-10" @keydown.enter.prevent="confirmDismiss" />
+            <button type="button" @click="showDismissText = !showDismissText" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors">
+              <component :is="showDismissText ? EyeOffIcon : EyeIcon" class="w-4 h-4" />
+            </button>
+          </div>
+          <p v-if="dismissError" class="text-[11px] font-bold text-destructive">Mot de passe incorrect.</p>
+          <p v-if="dismissServerError" class="text-[11px] font-bold text-destructive">Erreur serveur. Réessayez.</p>
+          <div class="flex gap-3 pt-2">
+            <Button variant="outline" @click="cancelDismiss" class="flex-1 h-12 rounded-xl font-black uppercase text-xs tracking-widest border-slate-200">Annuler</Button>
+            <Button :disabled="dismissing || !dismissPwd" @click="confirmDismiss" class="flex-1 h-12 rounded-xl font-black uppercase text-xs tracking-widest bg-indigo-600 hover:bg-indigo-700 text-white">
+              <LoaderIcon v-if="dismissing" class="w-4 h-4 animate-spin mr-2" /> Supprimer
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
     <Dialog v-model:open="showOnlineUsersModal">
       <DialogContent class="sm:max-w-md bg-white border-border shadow-3xl rounded-[3rem] p-0 overflow-hidden text-foreground">
         <DialogHeader class="p-8 bg-emerald-600 text-white relative">
@@ -584,31 +686,66 @@ watch(() => vidangeForm.mileageAtChange, (newVal) => {
             </div>
           </div>
         </DialogHeader>
-        <div class="p-6 max-h-[60vh] overflow-y-auto no-scrollbar space-y-3">
-          <template v-if="socketStore.onlineUsers.length">
-            <div v-for="u in socketStore.onlineUsers" :key="u.userId"
-              class="flex items-center gap-4 p-4 rounded-[1.5rem] border border-slate-100 bg-slate-50/50 hover:bg-white hover:shadow-md transition-all">
-              <Avatar class="w-11 h-11 shrink-0">
-                <AvatarFallback class="bg-emerald-500/10 text-emerald-600 font-black text-sm">
-                  {{ (u.name || '?').charAt(0).toUpperCase() }}
-                </AvatarFallback>
-              </Avatar>
-              <div class="flex-1 min-w-0">
-                <p class="text-sm font-black text-slate-900 truncate">{{ u.name || 'Utilisateur' }}</p>
-                <p class="text-[10px] font-black uppercase tracking-wider mt-0.5 text-slate-400">{{ roleLabel(u.role) }}</p>
-              </div>
-              <div class="flex items-center gap-2 text-emerald-600 text-[10px] font-black uppercase tracking-wider">
+        <div class="p-6 max-h-[60vh] overflow-y-auto no-scrollbar space-y-5">
+          <template v-if="directoryUsers.length">
+            <div>
+              <p class="text-[9px] font-black uppercase tracking-[0.25em] text-emerald-600 mb-2.5 flex items-center gap-2">
                 <span class="relative flex h-2 w-2">
                   <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                   <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                 </span>
-                En ligne
+                En ligne — {{ onlineUsersCount }}
+              </p>
+              <div class="space-y-2.5">
+                <div v-for="u in directoryUsers.filter(x => x.online)" :key="u._id"
+                  class="flex items-center gap-4 p-4 rounded-[1.5rem] border border-emerald-100 bg-emerald-50/50 hover:bg-white hover:shadow-md transition-all">
+                  <Avatar class="w-11 h-11 shrink-0">
+                    <AvatarFallback class="bg-emerald-500/10 text-emerald-600 font-black text-sm">
+                      {{ (u.firstName || u.name || '?').charAt(0).toUpperCase() }}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div class="flex-1 min-w-0">
+                    <p class="text-sm font-black text-slate-900 truncate">{{ u.firstName }} {{ u.lastName }}</p>
+                    <p class="text-[10px] font-black uppercase tracking-wider mt-0.5 text-slate-400">{{ roleLabel(u.role) }}</p>
+                  </div>
+                  <div class="flex items-center gap-2 text-emerald-600 text-[10px] font-black uppercase tracking-wider">
+                    <span class="relative flex h-2 w-2">
+                      <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                    </span>
+                    En ligne
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div>
+              <p class="text-[9px] font-black uppercase tracking-[0.25em] text-slate-400 mb-2.5 flex items-center gap-2">
+                <span class="inline-flex rounded-full h-2 w-2 bg-slate-300"></span>
+                Hors ligne — {{ directoryUsers.length - onlineUsersCount }}
+              </p>
+              <div class="space-y-2.5">
+                <div v-for="u in directoryUsers.filter(x => !x.online)" :key="u._id"
+                  class="flex items-center gap-4 p-4 rounded-[1.5rem] border border-slate-100 bg-slate-50/50 opacity-60 transition-all">
+                  <Avatar class="w-11 h-11 shrink-0">
+                    <AvatarFallback class="bg-slate-200 text-slate-500 font-black text-sm">
+                      {{ (u.firstName || u.name || '?').charAt(0).toUpperCase() }}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div class="flex-1 min-w-0">
+                    <p class="text-sm font-black text-slate-500 truncate">{{ u.firstName }} {{ u.lastName }}</p>
+                    <p class="text-[10px] font-black uppercase tracking-wider mt-0.5 text-slate-400">{{ roleLabel(u.role) }}</p>
+                  </div>
+                  <div class="flex items-center gap-2 text-slate-400 text-[10px] font-black uppercase tracking-wider">
+                    <span class="inline-flex rounded-full h-2 w-2 bg-slate-300"></span>
+                    Hors ligne
+                  </div>
+                </div>
               </div>
             </div>
           </template>
           <div v-else class="flex flex-col items-center justify-center py-14 opacity-30 text-center space-y-3">
             <Radio class="w-10 h-10 text-slate-500 stroke-1" />
-            <p class="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Aucun opérateur connecté</p>
+            <p class="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Aucun utilisateur trouvé</p>
           </div>
         </div>
       </DialogContent>

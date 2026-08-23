@@ -302,7 +302,10 @@ export class ContratService implements OnModuleInit {
 
     return this.contratModel
       .find(query)
-      .populate('car')
+      .populate({
+        path: 'car',
+        populate: { path: 'agence', model: 'Agence', select: 'name' },
+      })
       .populate({ path: 'clients', model: 'Client' })
       .populate('createdBy', 'firstName lastName')
       .sort({ createdAt: -1 })
@@ -312,7 +315,10 @@ export class ContratService implements OnModuleInit {
   async findOne(id: string): Promise<ContratDocument> {
     const contrat = await this.contratModel
       .findById(id)
-      .populate('car')
+      .populate({
+        path: 'car',
+        populate: { path: 'agence', model: 'Agence', select: 'name' },
+      })
       .populate({ path: 'clients', model: 'Client' })
       .populate('createdBy', 'firstName lastName')
       .exec();

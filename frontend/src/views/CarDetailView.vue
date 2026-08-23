@@ -147,13 +147,47 @@
                     <Button @click="prepareSave" size="icon" class="h-6 w-6 bg-slate-600 text-white rounded-md"><Check class="w-3 h-3" /></Button>
                     <Button @click="cancelEdit" size="icon" variant="ghost" class="h-6 w-6 text-slate-400"><X class="w-3 h-3" /></Button>
                   </div>
-                  <div v-else class="flex items-center gap-3">
-                    <span class="font-bold text-slate-700 text-sm uppercase tracking-widest">{{ car.agence?.name || '—' }}</span>
-                    <Button v-if="authStore.isAdmin && !car.disabled" @click="startEdit('agence', car.agence?._id || '')" variant="ghost" size="icon" class="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-slate-300">
-                      <Pencil class="w-3 h-3" />
-                    </Button>
-                  </div>
-               </div>
+                   <div v-else class="flex items-center gap-3">
+                     <span class="font-bold text-slate-700 text-sm uppercase tracking-widest">{{ car.agence?.name || '—' }}</span>
+                     <Button v-if="authStore.isAdmin && !car.disabled" @click="startEdit('agence', car.agence?._id || '')" variant="ghost" size="icon" class="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-slate-300">
+                       <Pencil class="w-3 h-3" />
+                     </Button>
+                   </div>
+                </div>
+                <div class="flex justify-between items-center py-3 border-b border-slate-50 group">
+                   <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest text-emerald-600">IMEI GPS</span>
+                   <div v-if="editingField === 'gpsImei'" class="flex items-center gap-2">
+                     <Input v-model="editValue" placeholder="15 chiffres" class="h-8 bg-white border-emerald-200 text-xs font-black tabular-nums w-40" />
+                     <Button @click="prepareSave" size="icon" class="h-6 w-6 bg-emerald-600 text-white rounded-md"><Check class="w-3 h-3" /></Button>
+                     <Button @click="cancelEdit" size="icon" variant="ghost" class="h-6 w-6 text-slate-400"><X class="w-3 h-3" /></Button>
+                   </div>
+                   <div v-else class="flex items-center gap-3">
+                     <span class="font-bold text-slate-700 text-sm tabular-nums">{{ car.gpsImei || '—' }}</span>
+                     <Button v-if="authStore.isAdmin && !car.disabled" @click="startEdit('gpsImei', car.gpsImei || '')" variant="ghost" size="icon" class="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-emerald-400">
+                       <Pencil class="w-3 h-3" />
+                     </Button>
+                   </div>
+                </div>
+                <div class="flex justify-between items-center py-3 group">
+                   <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest text-emerald-600">Fournisseur GPS</span>
+                   <div v-if="editingField === 'gpsProvider'" class="flex items-center gap-2">
+                     <select v-model="editValue" class="h-8 bg-white border-emerald-200 rounded-md px-2 text-xs font-black outline-none focus:border-indigo-400">
+                       <option value="">Aucun</option>
+                       <option value="traci">Traci.tn</option>
+                       <option value="winnou">Winnou.tn</option>
+                       <option value="autre">Autre</option>
+                     </select>
+                     <Button @click="prepareSave" size="icon" class="h-6 w-6 bg-emerald-600 text-white rounded-md"><Check class="w-3 h-3" /></Button>
+                     <Button @click="cancelEdit" size="icon" variant="ghost" class="h-6 w-6 text-slate-400"><X class="w-3 h-3" /></Button>
+                   </div>
+                   <div v-else class="flex items-center gap-3">
+                     <Badge v-if="car.gpsProvider" variant="outline" class="font-black uppercase text-[9px] px-3 border-emerald-200 text-emerald-700">{{ gpsProviderLabel(car.gpsProvider) }}</Badge>
+                     <span v-else class="font-bold text-slate-300 text-sm">—</span>
+                     <Button v-if="authStore.isAdmin && !car.disabled" @click="startEdit('gpsProvider', car.gpsProvider || '')" variant="ghost" size="icon" class="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-emerald-400">
+                       <Pencil class="w-3 h-3" />
+                     </Button>
+                   </div>
+                </div>
             </div>
           </CardContent>
         </Card>
@@ -896,6 +930,9 @@ const startEdit = (field: string, value: any) => {
   editingField.value = field;
   editValue.value = value;
 };
+
+const gpsProviderLabel = (p: string) =>
+  p === 'traci' ? 'Traci.tn' : p === 'winnou' ? 'Winnou.tn' : p === 'autre' ? 'Autre' : p;
 
 const cancelEdit = () => {
   editingField.value = null;

@@ -36,6 +36,22 @@ export class ClientService implements OnModuleInit {
           { $set: { nationality: '' } },
         )
         .exec();
+
+      const collection = this.clientModel.collection;
+      for (const field of ['cin', 'drivingLicense']) {
+        try {
+          const indexes = await collection.indexes();
+          const legacy = indexes.find(
+            (i) => i.name === `${field}_1` && !i.sparse,
+          );
+          if (legacy) {
+            await collection.dropIndex(`${field}_1`);
+          }
+          await collection.createIndex({ [field]: 1 }, { unique: true, sparse: true });
+        } catch (idxErr) {
+          console.error(`Error migrating ${field} index:`, idxErr);
+        }
+      }
     } catch (err) {
       console.error('Error auto-migrating client fields on module init:', err);
     }
@@ -46,6 +62,17 @@ export class ClientService implements OnModuleInit {
     ['birthday', 'cinDate', 'licenseDate'].forEach((dateKey) => {
       if (sanitized[dateKey] === '' || sanitized[dateKey] === null) {
         delete sanitized[dateKey];
+      }
+    });
+    ['cin', 'drivingLicense'].forEach((key) => {
+      if (
+        sanitized[key] === undefined ||
+        sanitized[key] === null ||
+        String(sanitized[key]).trim() === ''
+      ) {
+        delete sanitized[key];
+      } else {
+        sanitized[key] = String(sanitized[key]).trim();
       }
     });
     if (

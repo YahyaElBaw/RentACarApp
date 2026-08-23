@@ -89,5 +89,13 @@ export class AuthService {
       role: actor.role,
     });
   }
+
+  async verifyPassword(actor: any, password: string) {
+    if (!password) return { valid: false };
+    const user = await this.usersService.findById(actor?.id);
+    if (!user) return { valid: false };
+    const isMatch = await bcrypt.compare(password, user.password);
+    return { valid: isMatch };
+  }
 }
 

@@ -171,6 +171,8 @@ const saveClient = async () => {
     if (!payload.cinDate) delete payload.cinDate
     if (!payload.licenseDate) delete payload.licenseDate
     if (!payload.birthday) delete payload.birthday
+    if (!payload.cin?.trim()) delete payload.cin
+    if (!payload.drivingLicense?.trim()) delete payload.drivingLicense
 
     await api.post('/clients', payload)
     showForm.value = false
@@ -332,9 +334,6 @@ const paginatedClients = computed(() => {
 const isStepValid = computed(() => {
   if (currentStep.value === 1) {
     return !!(clientForm.firstName && clientForm.lastName && clientForm.phone);
-  }
-  if (currentStep.value === 2) {
-    return !!(clientForm.cin && clientForm.drivingLicense);
   }
   return true;
 });

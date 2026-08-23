@@ -429,17 +429,16 @@ onMounted(async () => {
 
 const openPrintModal = () => {
   if (!contrat.value) return;
-  // Match agency by contract agency name
-  const match = fullAgenciesList.value.find(
+  // Prefer the agency attached to the car, then the legacy text field
+  const carAgencyId = contrat.value.car?.agence?._id;
+  const matchById = carAgencyId
+    ? fullAgenciesList.value.find((a: any) => String(a._id) === String(carAgencyId))
+    : null;
+  const matchByName = fullAgenciesList.value.find(
     (a: any) => a.name?.toLowerCase() === contrat.value.agency?.toLowerCase()
   );
-  if (match) {
-    selectedAgenceForPrint.value = match;
-  } else if (fullAgenciesList.value.length > 0) {
-    selectedAgenceForPrint.value = fullAgenciesList.value[0];
-  } else {
-    selectedAgenceForPrint.value = null;
-  }
+  selectedAgenceForPrint.value =
+    matchById || matchByName || fullAgenciesList.value[0] || null;
   showPrintModal.value = true;
 };
 
@@ -453,7 +452,7 @@ const getPrintFieldValue = (fieldKey: string, customVal = '') => {
 
   switch (fieldKey) {
     case 'reference': return c.reference || '';
-    case 'agency': return c.agency || selectedAgenceForPrint.value?.name || '';
+    case 'agency': return c.car?.agence?.name || c.agency || selectedAgenceForPrint.value?.name || '';
     case 'startDate': return c.startDate ? formatDate(c.startDate) : '';
     case 'startTime': return c.startDate ? new Date(c.startDate).toTimeString().substring(0, 5) : '';
     case 'endDate': return c.endDate ? formatDate(c.endDate) : '';
@@ -890,12 +889,12 @@ const submitCloture = async () => {
                            </div>
                         </div>
                         <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-6">
-                           <div>
-                              <p class="text-[9px] font-black opacity-40 uppercase tracking-widest mb-2">Total Dossier</p>
-                              <div class="text-5xl lg:text-6xl font-black tabular-nums tracking-tighter leading-none">
-                                 {{ (contrat.totalAmount || 0).toFixed(0) }}<span :class="['text-xl ml-2 font-black uppercase text-current/50']">TND</span>
-                              </div>
-                           </div>
+                            <div>
+                               <p class="text-[9px] font-black opacity-40 uppercase tracking-widest mb-2">Total Dossier</p>
+                               <div :class="['text-5xl lg:text-6xl font-black tabular-nums tracking-tighter leading-none', (contrat.status === 'cancelled' || contrat.status === 'annulé') ? 'text-slate-300 line-through' : '']">
+                                  {{ (contrat.totalAmount || 0).toFixed(0) }}<span :class="['text-xl ml-2 font-black uppercase', (contrat.status === 'cancelled' || contrat.status === 'annulé') ? 'text-slate-300' : 'text-current/50']">TND</span>
+                               </div>
+                            </div>
                            <div v-if="contrat.status === 'active' && !contrat.isPaid" :class="['p-4 rounded-2xl border text-right', 'bg-white/5 border-white/10']">
                                <p class="text-[9px] font-black opacity-60 uppercase tracking-widest mb-1">Montant à Régler</p>
                                <p class="text-2xl font-black text-emerald-400 tabular-nums italic">{{ (contrat.totalAmount || 0).toFixed(0) }} TND</p>
@@ -1471,8 +1470,10 @@ const submitCloture = async () => {
                 <label class="text-[10px] font-black text-slate-400 uppercase">Modèle Agence:</label>
                 <select 
                   :value="selectedAgenceForPrint?._id"
+                  :disabled="!authStore.isSuperAdmin"
+                  :title="authStore.isSuperAdmin ? '' : 'Seul le super admin peut changer le modèle'"
                   @change="(e: Event) => { selectedAgenceForPrint = fullAgenciesList.find((a: any) => a._id === (e.target as HTMLSelectElement).value) }"
-                  class="h-10 px-3 rounded-xl bg-white border border-slate-200 text-xs font-bold text-slate-900 outline-none"
+                  class="h-10 px-3 rounded-xl bg-white border border-slate-200 text-xs font-bold text-slate-900 outline-none disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   <option v-for="a in fullAgenciesList" :key="a._id" :value="a._id">{{ a.name }}</option>
                 </select>

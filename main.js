@@ -1,4 +1,4 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 
@@ -22,25 +22,53 @@ function startBackend() {
 }
 
 function createWindow() {
+  Menu.setApplicationMenu(null);
+
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
+    frame: false,
+    backgroundColor: '#f8fafc',
     webPreferences: {
       nodeIntegration: false,
-      contextIsolation: true,
-      preload: path.join(__dirname, 'preload.js')
-    },
-    titleBarStyle: 'hiddenInset'
+      contextIsolation: true
+    }
   });
 
   // URL for Vite dev server
   const startUrl = process.env.ELECTRON_START_URL || 'http://localhost:5173';
   mainWindow.loadURL(startUrl);
 
+  const sendMaximized = () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('window:maximized-changed', mainWindow.isMaximized());
+    }
+  };
+  mainWindow.on('maximize', sendMaximized);
+  mainWindow.on('unmaximize', sendMaximized);
+
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
 }
+
+ipcMain.on('window:minimize', () => {
+  if (mainWindow) mainWindow.minimize();
+});
+
+ipcMain.on('window:toggle-maximize', () => {
+  if (!mainWindow) return;
+  if (mainWindow.isMaximized()) mainWindow.unmaximize();
+  else mainWindow.maximize();
+});
+
+ipcMain.on('window:close', () => {
+  if (mainWindow) mainWindow.close();
+});
+
+ipcMain.handle('window:is-maximized', () => {
+  return mainWindow ? mainWindow.isMaximized() : false;
+});
 
 app.on('ready', () => {
   startBackend();

@@ -1,4 +1,13 @@
-import { Controller, Get, UseGuards, Req, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Post,
+  Query,
+  Req,
+  UnauthorizedException,
+  UseGuards,
+} from '@nestjs/common';
 import { DashboardService } from './dashboard.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
@@ -14,5 +23,18 @@ export class DashboardController {
     @Query('to') to?: string,
   ) {
     return this.dashboardService.getStats(req.user, from, to);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('alerts/dismiss')
+  dismissAlert(@Req() req: any, @Body() body: any) {
+    if (!body?.password) {
+      throw new UnauthorizedException('Mot de passe requis.');
+    }
+    return this.dashboardService.dismissAlert(
+      req.user.id,
+      String(body.key || ''),
+      String(body.password),
+    );
   }
 }

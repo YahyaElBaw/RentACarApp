@@ -84,6 +84,8 @@ export class PdfService {
       contrat.status === 'terminé';
     const drivenDistance =
       (contrat.returnMileage || 0) - (contrat.startMileage || 0);
+    const agenceName =
+      contrat.car?.agence?.name || contrat.agency || 'RENT CAR STUDIO';
 
     const docDefinition: any = {
       pageSize: 'A4',
@@ -94,7 +96,7 @@ export class PdfService {
           columns: [
             {
               stack: [
-                { text: 'RENT CAR STUDIO', style: 'brand' },
+                { text: agenceName.toUpperCase(), style: 'brand' },
                 { text: 'Agence de Location de Voitures', style: 'brandSub' },
               ],
             },
@@ -235,7 +237,7 @@ export class PdfService {
                 { text: contrat.lieuDepart || 'Djerba', style: 'tdValue' },
                 { text: contrat.lieuRetour || 'Djerba', style: 'tdValue' },
                 { text: `${contrat.carburantLevel ?? 50}%`, style: 'tdValue' },
-                { text: contrat.agency || 'N/A', style: 'tdValue' },
+                { text: contrat.car?.agence?.name || contrat.agency || 'N/A', style: 'tdValue' },
               ],
             ],
           },

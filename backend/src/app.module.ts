@@ -11,6 +11,7 @@ import { VisiteModule } from './visite/visite.module';
 import { VidangeModule } from './vidange/vidange.module';
 import { DepenseModule } from './depense/depense.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { GpsModule } from './gps/gps.module';
 
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
@@ -46,6 +47,7 @@ import { PresenceModule } from './presence/presence.module';
     VidangeModule,
     DepenseModule,
     DashboardModule,
+    GpsModule,
     AuthModule,
     UsersModule,
     UploadModule,

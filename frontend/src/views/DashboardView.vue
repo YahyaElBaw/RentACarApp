@@ -35,14 +35,15 @@
             <div :class="['p-4 rounded-2xl transition-all duration-500 group-hover:scale-110 group-hover:rotate-6 shadow-xl border border-white ', kpi.bg]">
               <component :is="kpi.icon" :class="['w-6 h-6', kpi.color]" />
             </div>
-            <div v-if="isPeriodKpi(kpi.label) && authStore.isAdmin" class="revenue-period-menu relative">
-              <button
-                @click.stop="revenueMenuOwner = revenueMenuOwner === kpi.label ? null : kpi.label"
-                class="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-50 text-slate-400 text-[10px] font-black uppercase tracking-widest shadow-sm border border-slate-100 hover:text-indigo-600 hover:bg-indigo-50 hover:border-indigo-100 transition-all outline-none"
-                :title="revenuePeriodLabel"
-              >
-                <CalendarRange class="w-3.5 h-3.5" />
-              </button>
+            <div class="flex items-center gap-2">
+              <div v-if="isPeriodKpi(kpi.label) && authStore.isAdmin" class="revenue-period-menu relative">
+                <button
+                  @click.stop="revenueMenuOwner = revenueMenuOwner === kpi.label ? null : kpi.label"
+                  class="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-50 text-slate-400 text-[10px] font-black uppercase tracking-widest shadow-sm border border-slate-100 hover:text-indigo-600 hover:bg-indigo-50 hover:border-indigo-100 transition-all outline-none"
+                  :title="revenuePeriodLabel"
+                >
+                  <CalendarRange class="w-3.5 h-3.5" />
+                </button>
               <div v-if="revenueMenuOwner === kpi.label" class="absolute right-0 top-10 w-60 bg-white border border-slate-100 shadow-2xl rounded-2xl p-2 space-y-1 z-50 animate-in fade-in zoom-in-95 duration-150">
                 <button
                   @click="selectRevenuePeriod('month')"
@@ -83,20 +84,30 @@
                   </Button>
                 </div>
               </div>
-            </div>
-            <div v-else-if="kpi.trend" class="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-600 text-[10px] font-black uppercase tracking-widest shadow-sm border border-emerald-100">
-              <TrendingUp class="w-3.5 h-3.5" />
-              {{ kpi.trend }}
+              </div>
+              <div v-else-if="kpi.trend" class="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-600 text-[10px] font-black uppercase tracking-widest shadow-sm border border-emerald-100">
+                <TrendingUp class="w-3.5 h-3.5" />
+                {{ kpi.trend }}
+              </div>
+              <button
+                v-if="kpi.sensitive"
+                @click.stop="requestProfitReveal"
+                class="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-50 text-slate-400 text-[10px] font-black uppercase tracking-widest shadow-sm border border-slate-100 hover:text-indigo-600 hover:bg-indigo-50 hover:border-indigo-100 transition-all outline-none"
+                :title="profitVisible ? 'Masquer' : 'Afficher'"
+              >
+                <EyeOff v-if="!profitVisible" class="w-3.5 h-3.5" />
+                <Eye v-else class="w-3.5 h-3.5" />
+              </button>
             </div>
           </div>
           
           <div class="space-y-1">
             <p class="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-1 pl-0.5">{{ t(kpi.label) }}</p>
             <div class="flex items-baseline gap-2">
-              <h3 class="text-4xl font-black text-slate-900 tracking-tighter tabular-nums italic">
+              <h3 class="text-4xl font-black tracking-tighter tabular-nums italic" :class="kpi.sensitive && !profitVisible ? 'text-slate-300' : 'text-slate-900'">
                 <template v-if="kpi.type === 'currency'">
-                   {{ formatBaseCurrency(kpi.value) }}
-                  <span class="text-xs font-black text-indigo-400 ml-1">TND</span>
+                   <template v-if="kpi.sensitive && !profitVisible">••••••••</template>
+                   <template v-else>{{ formatBaseCurrency(kpi.value) }}<span class="text-xs font-black text-indigo-400 ml-1">TND</span></template>
                 </template>
                 <template v-else>
                   {{ (kpi.label.includes('total') ? displayStats.totalCars : displayStats.availableCars) || kpi.value }}
@@ -279,6 +290,7 @@
                     <span>Contrat</span>
                   </button>
                 </div>
+
               </div>
             </div>
 
@@ -328,21 +340,21 @@
                   <div class="flex-1 flex flex-col gap-1 overflow-hidden">
                     <div
                       v-for="evt in getDayEvents(day.dateStr).slice(0, 3)"
-                      :key="evt.id + evt.category"
+                      :key="evt.id + evt.dayType"
                       @click.stop="navigateToEvent(evt)"
                       :class="[
                         'px-2 py-1 rounded-lg border text-[9px] font-black uppercase tracking-tight flex items-center gap-1.5 transition-all duration-200 truncate cursor-pointer shadow-2xs hover:scale-[1.02]',
-                        evt.category === 'reservation'
-                          ? 'bg-amber-400/20 border-amber-300 text-amber-950 hover:bg-amber-400/40'
-                          : 'bg-emerald-500/20 border-emerald-300 text-emerald-950 hover:bg-emerald-500/40'
+                        evt.dayType === 'depart' ? 'bg-rose-500/20 border-rose-300 text-rose-950 hover:bg-rose-500/40'
+                          : evt.dayType === 'retour' ? 'bg-emerald-500/20 border-emerald-300 text-emerald-950 hover:bg-emerald-500/40'
+                          : 'bg-amber-400/20 border-amber-300 text-amber-950 hover:bg-amber-400/40'
                       ]"
-                      :title="`${evt.category === 'contrat' ? 'Contrat' : 'Réservation'}: ${evt.carBrandModel} (${evt.carMatricule}) - ${evt.clientName}`"
+                      :title="`${evt.dayType === 'depart' ? 'Départ' : evt.dayType === 'retour' ? 'Retour' : 'Réservation'}: ${evt.carBrandModel} (${evt.carMatricule}) - ${evt.clientName}`"
                     >
-                      <!-- Color Indicator Dot: Yellow for Reservation, Green for Contrat -->
+                      <!-- Color Indicator Dot -->
                       <span
                         :class="[
                           'w-2 h-2 rounded-full shrink-0 shadow-2xs',
-                          evt.category === 'reservation' ? 'bg-amber-500' : 'bg-emerald-600'
+                          evt.dayType === 'depart' ? 'bg-rose-500' : evt.dayType === 'retour' ? 'bg-emerald-600' : 'bg-amber-500'
                         ]"
                       ></span>
 
@@ -353,11 +365,11 @@
                         </span>
                       </span>
 
-                      <!-- Start/End Badge -->
-                      <span v-if="evt.startDateStr === day.dateStr" class="ml-auto text-[7px] font-black opacity-75 shrink-0 px-1 rounded bg-black/10">
+                      <!-- Day Type Badge -->
+                      <span v-if="evt.dayType === 'depart'" class="ml-auto text-[7px] font-black opacity-75 shrink-0 px-1 rounded bg-rose-200 text-rose-700">
                         DEP
                       </span>
-                      <span v-else-if="evt.endDateStr === day.dateStr" class="ml-auto text-[7px] font-black opacity-75 shrink-0 px-1 rounded bg-black/10">
+                      <span v-else-if="evt.dayType === 'retour'" class="ml-auto text-[7px] font-black opacity-75 shrink-0 px-1 rounded bg-emerald-200 text-emerald-700">
                         RET
                       </span>
                     </div>
@@ -464,23 +476,25 @@
           <div class="space-y-3">
             <div
               v-for="evt in selectedDayData.events"
-              :key="evt.id + evt.category"
+              :key="evt.id + evt.dayType"
               @click="navigateToEvent(evt)"
               :class="[
                 'p-4 rounded-2xl border-2 transition-all cursor-pointer flex items-center justify-between gap-4 group hover:shadow-lg',
-                evt.category === 'reservation'
-                  ? 'border-amber-200 bg-amber-50/40 hover:border-amber-400'
-                  : 'border-emerald-200 bg-emerald-50/40 hover:border-emerald-400'
+                evt.dayType === 'depart' ? 'border-rose-200 bg-rose-50/40 hover:border-rose-400'
+                  : evt.dayType === 'retour' ? 'border-emerald-200 bg-emerald-50/40 hover:border-emerald-400'
+                  : 'border-amber-200 bg-amber-50/40 hover:border-amber-400'
               ]"
             >
               <div class="flex items-center gap-4">
                 <div
                   :class="[
                     'w-12 h-12 rounded-xl flex items-center justify-center font-black text-xs shadow-md shrink-0 uppercase',
-                    evt.category === 'reservation' ? 'bg-amber-400 text-amber-950' : 'bg-emerald-600 text-white'
+                    evt.dayType === 'depart' ? 'bg-rose-600 text-white'
+                      : evt.dayType === 'retour' ? 'bg-emerald-600 text-white'
+                      : 'bg-amber-400 text-amber-950'
                   ]"
                 >
-                  {{ evt.category === 'reservation' ? 'RES' : 'CTR' }}
+                  {{ evt.dayType === 'depart' ? 'DEP' : evt.dayType === 'retour' ? 'RET' : 'RES' }}
                 </div>
 
                 <div class="flex flex-col">
@@ -506,24 +520,24 @@
               </div>
 
               <div class="flex items-center gap-2">
-                <!-- Action Type: Départ / Retour / En cours -->
+                <!-- Action Type: Départ / Retour -->
                 <Badge
-                  v-if="selectedDayData.dateStr === evt.startDateStr"
-                  class="text-[8px] font-black uppercase px-3 py-1 rounded-full bg-indigo-600 text-white border border-indigo-500 shadow-xs"
+                  v-if="evt.dayType === 'depart'"
+                  class="text-[8px] font-black uppercase px-3 py-1 rounded-full bg-rose-600 text-white border border-rose-500 shadow-xs"
                 >
                   DÉPART
                 </Badge>
                 <Badge
-                  v-else-if="selectedDayData.dateStr === evt.endDateStr"
-                  class="text-[8px] font-black uppercase px-3 py-1 rounded-full bg-rose-600 text-white border border-rose-500 shadow-xs"
+                  v-else-if="evt.dayType === 'retour'"
+                  class="text-[8px] font-black uppercase px-3 py-1 rounded-full bg-emerald-600 text-white border border-emerald-500 shadow-xs"
                 >
                   RETOUR
                 </Badge>
                 <Badge
                   v-else
-                  class="text-[8px] font-black uppercase px-3 py-1 rounded-full bg-slate-100 text-slate-600 border border-slate-200"
+                  class="text-[8px] font-black uppercase px-3 py-1 rounded-full bg-amber-400 text-amber-950 border border-amber-500 shadow-xs"
                 >
-                  EN COURS
+                  RÉSERVATION
                 </Badge>
 
                 <!-- Category: Contrat / Réservation -->
@@ -532,7 +546,7 @@
                     'text-[8px] font-black uppercase px-3 py-1 rounded-full border',
                     evt.category === 'reservation'
                       ? 'bg-amber-100 text-amber-800 border-amber-300'
-                      : 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                      : 'bg-slate-100 text-slate-600 border-slate-300'
                   ]"
                 >
                   {{ evt.category === 'reservation' ? 'RÉSERVATION' : 'CONTRAT' }}
@@ -605,6 +619,35 @@
         </div>
       </DialogContent>
     </Dialog>
+
+    <!-- Sensitive KPI Password Dialog -->
+    <Dialog :open="showProfitPwdModal" @update:open="(val: boolean) => { if (!val) showProfitPwdModal = false }">
+      <DialogContent class="sm:max-w-md bg-white border-none shadow-2xl rounded-[2rem] p-8">
+        <DialogTitle class="text-lg font-black text-slate-900 uppercase tracking-tight flex items-center gap-2">
+          <EyeOff class="w-5 h-5 text-indigo-600" />
+          Mot de passe requis
+        </DialogTitle>
+        <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Pour afficher les données financières</p>
+        <div class="mt-4 space-y-3">
+          <Input
+            type="password"
+            v-model="profitPwd"
+            placeholder="Mot de passe"
+            class="h-12 bg-slate-50 border-slate-100 rounded-xl font-bold"
+            @keyup.enter="confirmProfitReveal"
+          />
+          <p v-if="profitPwdError" class="text-[10px] font-black text-rose-500 uppercase tracking-widest">Mot de passe incorrect</p>
+          <div class="flex justify-end gap-2 pt-2">
+            <Button variant="secondary" @click="showProfitPwdModal = false" class="rounded-xl h-10 px-5 text-[10px] font-black uppercase tracking-widest">
+              Annuler
+            </Button>
+            <Button :loading="verifyingProfitPwd" @click="confirmProfitReveal" class="rounded-xl h-10 px-5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase tracking-widest shadow-lg shadow-indigo-600/20">
+              Valider
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   </div>
 </template>
 
@@ -612,14 +655,15 @@
 import { ref, onMounted, onUnmounted, computed, reactive } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { dashboardApi, contratApi, reservationApi, carApi, getImageUrl } from '@/api'
+import { dashboardApi, contratApi, reservationApi, carApi, getImageUrl, authApi } from '@/api'
 import { useAuthStore } from '@/stores/auth'
-import { 
-  Car as CarIcon, FileText, Users, Calendar, Wallet, 
-  TrendingUp, CheckCircle2, 
+import {
+  Car as CarIcon, FileText, Users, Calendar, Wallet,
+  TrendingUp, CheckCircle2,
   DollarSign, Calculator, CalendarRange, Check,
   Search, Loader2, ShieldAlert, Bell,
-  ChevronLeft, ChevronRight, List, ArrowRight
+  ChevronLeft, ChevronRight, List, ArrowRight,
+  Eye, EyeOff
 } from 'lucide-vue-next'
 import { 
   Table, TableHeader, TableBody, TableHead, TableRow, TableCell 
@@ -852,9 +896,22 @@ const filteredCalendarEvents = computed(() => {
 })
 
 const getDayEvents = (dateStr: string) => {
-  return filteredCalendarEvents.value.filter(evt => {
-    return dateStr >= evt.startDateStr && dateStr <= evt.endDateStr
-  })
+  return filteredCalendarEvents.value.reduce<any[]>((acc, evt) => {
+    if (dateStr < evt.startDateStr || dateStr > evt.endDateStr) return acc
+
+    const isStart = dateStr === evt.startDateStr
+    const isEnd = dateStr === evt.endDateStr
+
+    if (evt.category === 'reservation') {
+      acc.push({ ...evt, dayType: 'reservation' })
+    } else if (isStart) {
+      acc.push({ ...evt, dayType: 'depart' })
+    } else if (isEnd) {
+      acc.push({ ...evt, dayType: 'retour' })
+    }
+
+    return acc
+  }, [])
 }
 
 const openDayModal = (day: CalendarGridDay) => {
@@ -1042,12 +1099,45 @@ const kpis = computed(() => {
   ]
   if (authStore.isAdmin) {
     base.push(
-      { label: 'dashboard.revenue', value: stats.value.totalRevenue || 0, icon: DollarSign, color: 'text-indigo-600', bg: 'bg-indigo-50  border-indigo-100 ', type: 'currency', path: generateSparklinePath(history.value.map(h => h.revenue)) },
-      { label: 'dashboard.profit', value: stats.value.netProfit || 0, icon: Wallet, color: 'text-rose-600', bg: 'bg-rose-50  border-rose-100 ', type: 'currency', path: generateSparklinePath(history.value.map(h => h.profit)) }
+      { label: 'dashboard.revenue', value: stats.value.totalRevenue || 0, icon: DollarSign, color: 'text-indigo-600', bg: 'bg-indigo-50  border-indigo-100 ', type: 'currency', sensitive: true, path: generateSparklinePath(history.value.map(h => h.revenue)) },
+      { label: 'dashboard.profit', value: stats.value.netProfit || 0, icon: Wallet, color: 'text-rose-600', bg: 'bg-rose-50  border-rose-100 ', type: 'currency', sensitive: true, path: generateSparklinePath(history.value.map(h => h.profit)) }
     )
   }
   return base
 })
+
+const profitVisible = ref(false)
+const showProfitPwdModal = ref(false)
+const profitPwd = ref('')
+const profitPwdError = ref(false)
+const verifyingProfitPwd = ref(false)
+
+const requestProfitReveal = () => {
+  if (profitVisible.value) {
+    profitVisible.value = false
+    return
+  }
+  profitPwd.value = ''
+  profitPwdError.value = false
+  showProfitPwdModal.value = true
+}
+
+const confirmProfitReveal = async () => {
+  verifyingProfitPwd.value = true
+  try {
+    const res = await authApi.verifyPassword(profitPwd.value)
+    if (res?.valid) {
+      profitVisible.value = true
+      showProfitPwdModal.value = false
+    } else {
+      profitPwdError.value = true
+    }
+  } catch {
+    profitPwdError.value = true
+  } finally {
+    verifyingProfitPwd.value = false
+  }
+}
 
 const quickActions = computed(() => {
   const actions = [
@@ -1133,6 +1223,8 @@ const loadDashboardData = async () => {
     console.error('Failed to load dashboard data', err)
   }
 }
+
+// Live fleet tracking moved to FleetMapView.vue
 
 onMounted(async () => {
   loading.value = true

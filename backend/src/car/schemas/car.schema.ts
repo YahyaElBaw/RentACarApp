@@ -48,6 +48,12 @@ export class Car {
   @Prop({ default: false })
   disabled: boolean;
 
+  @Prop({ default: '' })
+  gpsImei: string;
+
+  @Prop({ default: '' })
+  gpsProvider: string;
+
   @Prop({ required: true })
   dailyRate: number;
 

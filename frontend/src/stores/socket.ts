@@ -24,7 +24,7 @@ export const useSocketStore = defineStore('socket', () => {
     if (socket.value && socket.value.connected) return;
 
     const authStore = useAuthStore();
-    const backendUrl = import.meta.env.VITE_API_URL || 'https://rent-a-car-app-mu.vercel.app';
+    const backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
     socket.value = io(backendUrl, {
       transports: ['websocket', 'polling'],

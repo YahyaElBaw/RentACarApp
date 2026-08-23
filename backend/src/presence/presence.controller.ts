@@ -15,6 +15,13 @@ export class PresenceController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Post('logout')
+  async logout(@Req() req: any) {
+    await this.presenceService.remove(req.user.id);
+    return { ok: true };
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Get('online')
   async online() {
     return this.presenceService.getOnline();

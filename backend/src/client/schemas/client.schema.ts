@@ -21,10 +21,10 @@ export class Client {
   @Prop({ default: 'cin', enum: ['cin', 'passport', 'carte_sejour'] })
   idCardType: string;
 
-  @Prop({ required: true, unique: true })
+  @Prop({ unique: true, sparse: true })
   cin: string;
 
-  @Prop({ required: true, unique: true })
+  @Prop({ unique: true, sparse: true })
   drivingLicense: string;
 
   @Prop()

@@ -2,7 +2,7 @@ import axios from 'axios';
 import router from '../router';
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'https://rent-a-car-app-mu.vercel.app',
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3000',
 });
 
 api.interceptors.request.use((config) => {
@@ -35,6 +35,7 @@ export const authApi = {
   login: (credentials: { cin: string; phone: string }) => api.post('/auth/login', credentials).then(res => res.data),
   logout: () => api.post('/auth/logout').then(res => res.data),
   getProfile: () => api.get('/users/profile').then(res => res.data),
+  verifyPassword: (password: string) => api.post('/auth/verify-password', { password }).then(res => res.data),
 };
 
 export const userApi = {
@@ -55,6 +56,11 @@ export const logApi = {
 export const dashboardApi = {
   getStats: (params?: any) => api.get('/dashboard', { params }).then(res => res.data),
   getAppVersion: () => api.get('/version').then(res => res.data),
+  dismissAlert: (key: string, password: string) => api.post('/dashboard/alerts/dismiss', { key, password }).then(res => res.data),
+};
+
+export const gpsApi = {
+  getPositions: () => api.get('/gps/positions').then(res => res.data),
 };
 
 export const carApi = {
@@ -143,12 +149,13 @@ export const agenceApi = {
 export const presenceApi = {
   heartbeat: () => api.post('/presence/heartbeat').then(res => res.data),
   online: () => api.get('/presence/online').then(res => res.data),
+  logout: () => api.post('/presence/logout').then(res => res.data),
 };
 
 export const getImageUrl = (path: string) => {
   if (!path) return '';
   if (path.startsWith('http')) return path;
-  const baseUrl = import.meta.env.VITE_API_URL || 'https://rent-a-car-app-mu.vercel.app';
+  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
   return `${baseUrl}${path.startsWith('/') ? '' : '/'}${path}`;
 };
 

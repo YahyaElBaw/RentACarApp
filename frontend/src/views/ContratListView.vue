@@ -432,8 +432,10 @@ const getStatusBadge = (contrat: any) => {
                   </div>
                 </TableCell>
 
-                <TableCell class="text-center font-black text-slate-900 text-lg tracking-tighter tabular-nums italic">
-                  {{ contrat.totalAmount }} <span class="text-[10px] text-slate-400 uppercase font-bold ml-0.5 tracking-widest">TND</span>
+                <TableCell class="text-center font-black text-lg tracking-tighter tabular-nums italic">
+                  <span :class="['inline-flex items-baseline', (contrat.status === 'cancelled' || contrat.status === 'annulé') ? 'text-slate-300 line-through' : 'text-slate-900']">
+                    {{ contrat.totalAmount }} <span class="text-[10px] uppercase font-bold ml-0.5 tracking-widest" :class="(contrat.status === 'cancelled' || contrat.status === 'annulé') ? 'text-slate-300' : 'text-slate-400'">TND</span>
+                  </span>
                 </TableCell>
 
                 <TableCell v-if="authStore.isAdmin" class="pr-10 text-right">

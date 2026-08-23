@@ -29,6 +29,10 @@ export class PresenceService {
     return { count: users.length, users };
   }
 
+  async remove(userId: string): Promise<void> {
+    await this.presenceModel.deleteOne({ userId });
+  }
+
   async cleanup(): Promise<void> {
     const since = new Date(Date.now() - ONLINE_THRESHOLD_MS);
     await this.presenceModel.deleteMany({ lastSeen: { $lt: since } });

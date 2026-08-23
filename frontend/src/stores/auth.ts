@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import { authApi } from '../api';
+import { authApi, presenceApi } from '../api';
 import router from '../router';
 
 const getStored = (key: string) => {
@@ -53,6 +53,11 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function logout() {
+    try {
+      await presenceApi.logout();
+    } catch (error) {
+      console.error('Presence logout failed:', error);
+    }
     try {
       await authApi.logout();
     } catch (error) {

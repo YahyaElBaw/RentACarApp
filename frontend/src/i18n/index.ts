@@ -5,6 +5,7 @@ const messages = {
     menu: {
       dashboard: 'Tableau de bord',
       cars: 'Voitures',
+      fleetMap: 'Suivi Flotte',
       clients: 'Clients',
       contracts: 'Contrats',
       reservations: 'Réservations',
