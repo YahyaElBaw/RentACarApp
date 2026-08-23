@@ -69,6 +69,7 @@ export const carApi = {
   getAvailableSearch: (startDate: string, endDate: string) => api.get('/cars/available-search', { params: { startDate, endDate } }).then(res => res.data),
   create: (data: any) => api.post('/cars', data).then(res => res.data),
   update: (id: string, data: any) => api.patch(`/cars/${id}`, data).then(res => res.data),
+  updateStatus: (id: string, isAvailable: boolean) => api.patch(`/cars/${id}/status`, { isAvailable }).then(res => res.data),
   delete: (id: string, password: string) => api.delete(`/cars/${id}`, { data: { password } }).then(res => res.data),
   addDocument: (id: string, data: any) => api.post(`/cars/${id}/documents`, data).then(res => res.data),
   removeDocument: (id: string, documentId: string, password: string) => api.delete(`/cars/${id}/documents/${documentId}`, { params: { password } }).then(res => res.data),

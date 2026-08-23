@@ -15,7 +15,7 @@ export interface ActiveUser {
 export const useSocketStore = defineStore('socket', () => {
   const socket = ref<Socket | null>(null);
   const isConnected = ref(false);
-  const onlineCount = ref(1);
+  const onlineCount = ref(0);
   const onlineUsers = ref<ActiveUser[]>([]);
   const listeners = new Map<string, Set<Function>>();
   let presenceTimer: ReturnType<typeof setInterval> | null = null;
@@ -42,9 +42,9 @@ export const useSocketStore = defineStore('socket', () => {
       isConnected.value = false;
     });
 
-    socket.value.on('users:online', (data: { count: number; users: ActiveUser[] }) => {
-      onlineCount.value = data.count || 1;
-      onlineUsers.value = data.users || [];
+    socket.value.on('users:online', () => {
+      // Socket pushes are just a trigger; REST presence (DB) is the single source of truth
+      void refreshOnline();
     });
 
     // Global listener dispatcher
@@ -102,8 +102,9 @@ export const useSocketStore = defineStore('socket', () => {
   async function refreshOnline() {
     try {
       const data = await presenceApi.online();
-      onlineCount.value = data.count || 1;
+      onlineCount.value = data.count || 0;
       onlineUsers.value = (data.users || []).map((u: any) => ({
+        socketId: u.socketId || '',
         userId: u.userId,
         name: u.name || '',
         role: u.role || 'user',

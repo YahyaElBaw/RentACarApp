@@ -1,5 +1,5 @@
 <template>
-  <div :class="['flex flex-col bg-gradient-to-br from-slate-50 via-indigo-50/30 to-slate-100 overflow-hidden', isElectron ? 'h-[calc(100vh-7.375rem)]' : 'h-[calc(100vh-5rem)]']">
+  <div ref="pageRoot" :class="['flex flex-col bg-gradient-to-br from-slate-50 via-indigo-50/30 to-slate-100 overflow-hidden', isFullScreen ? 'h-screen' : (isElectron ? 'h-[calc(100vh-7.375rem)]' : 'h-[calc(100vh-5rem)]')]">
     <!-- Header (page-level controls) -->
     <header class="shrink-0 px-4 md:px-10 pt-5 pb-4 flex items-center gap-4 flex-wrap">
       <div class="min-w-0">
@@ -49,6 +49,12 @@
           <CarIcon :class="['w-4 h-4', showList ? 'text-emerald-400' : 'text-indigo-600']" />
           Flotte
           <span class="min-w-[20px] h-5 px-1 rounded-lg bg-emerald-500 text-white text-[9px] font-black flex items-center justify-center">{{ gpsPositions.length }}</span>
+        </button>
+
+        <!-- Fullscreen -->
+        <button @click="toggleFullScreen" :title="isFullScreen ? 'Quitter le plein écran' : 'Plein écran'"
+          class="w-11 h-11 rounded-2xl bg-white shadow-lg border border-slate-200 flex items-center justify-center hover:bg-slate-50 active:scale-95 transition-all shrink-0">
+          <component :is="isFullScreen ? Minimize2 : Maximize2" class="w-4 h-4 text-slate-600" />
         </button>
 
         <!-- Refresh -->
@@ -148,6 +154,21 @@
             <span class="px-3 py-1.5 rounded-xl text-[8px] font-black uppercase tracking-widest border" :class="statusClass(selectedCar)">
               {{ statusLabel(selectedCar) }}
             </span>
+          </div>
+
+          <!-- Statut du véhicule (super admin uniquement) -->
+          <div v-if="authStore.isSuperAdmin" class="rounded-2xl border border-slate-100 bg-slate-50/60 p-3 flex items-center justify-between gap-3">
+            <div>
+              <p class="text-[8px] font-black uppercase tracking-widest text-slate-400">Statut du véhicule</p>
+              <p class="text-[10px] font-black mt-0.5" :class="selectedCar.isAvailable ? 'text-emerald-600' : 'text-rose-600'">
+                {{ selectedCar.isAvailable ? 'Disponible' : 'Louée' }}
+              </p>
+            </div>
+            <button @click="setCarStatus" :disabled="statusSaving"
+              :class="['h-9 px-4 rounded-xl text-[8px] font-black uppercase tracking-widest text-white transition-all active:scale-95 disabled:opacity-60 shrink-0',
+                selectedCar.isAvailable ? 'bg-rose-500 hover:bg-rose-600 shadow-lg shadow-rose-200' : 'bg-emerald-500 hover:bg-emerald-600 shadow-lg shadow-emerald-200']">
+              {{ statusSaving ? '...' : (selectedCar.isAvailable ? 'Marquer louée' : 'Marquer disponible') }}
+            </button>
           </div>
 
           <div class="grid grid-cols-2 gap-x-3 gap-y-2 pt-1">
@@ -281,13 +302,31 @@ import 'leaflet/dist/leaflet.css'
 import {
   RefreshCw, Loader2 as LoaderIcon, MapPin,
   X, LocateFixed, PauseCircle, Satellite, Map as MapIcon,
-  FileText, Car as CarIcon, Users, ChevronRight
+  FileText, Car as CarIcon, Users, ChevronRight,
+  Maximize2, Minimize2
 } from 'lucide-vue-next'
-import { gpsApi } from '@/api'
+import { gpsApi, carApi } from '@/api'
+import { useAuthStore } from '@/stores/auth'
 import { resolveCarColor } from '@/utils/carColor'
 
 const router = useRouter()
+const authStore = useAuthStore()
 const isElectron = !!(window as any).electronAPI
+const pageRoot = ref<HTMLElement | null>(null)
+const isFullScreen = ref(false)
+
+const syncFullScreen = () => {
+  isFullScreen.value = !!document.fullscreenElement
+  requestAnimationFrame(() => leafletMap?.invalidateSize())
+}
+const toggleFullScreen = async () => {
+  try {
+    if (!document.fullscreenElement) await pageRoot.value?.requestFullscreen()
+    else await document.exitFullscreen()
+  } catch {
+    /* fullscreen denied */
+  }
+}
 
 const REFRESH_MS = 1000
 
@@ -396,7 +435,23 @@ const goClient = (id?: string) => {
 
 const closeDetails = () => {
   selectedCarId.value = ''
-  if (followingId.value) stopFollowing()
+}
+
+const statusSaving = ref(false)
+const setCarStatus = async () => {
+  const car = selectedCar.value
+  if (!car || statusSaving.value) return
+  statusSaving.value = true
+  try {
+    await carApi.updateStatus(String(car.carId), !car.isAvailable)
+    selectedCarId.value = String(car.carId)
+    await fetchGpsPositions()
+  } catch (err) {
+    console.error('Failed to update car status', err)
+    alert('Impossible de changer le statut du véhicule.')
+  } finally {
+    statusSaving.value = false
+  }
 }
 
 const toggleList = () => {
@@ -527,11 +582,13 @@ onMounted(async () => {
     })
     setTimeout(() => leafletMap?.invalidateSize(), 150)
   }
+  document.addEventListener('fullscreenchange', syncFullScreen)
   await fetchGpsPositions()
   gpsTimer = setInterval(() => fetchGpsPositions(), REFRESH_MS)
 })
 
 onUnmounted(() => {
+  document.removeEventListener('fullscreenchange', syncFullScreen)
   if (gpsTimer) clearInterval(gpsTimer)
   if (leafletMap) {
     leafletMap.remove()

@@ -9,6 +9,7 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { Injectable, Logger } from '@nestjs/common';
+import { PresenceService } from '../presence/presence.service';
 
 export interface ActiveUser {
   socketId: string;
@@ -29,7 +30,8 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   server: Server;
 
   private readonly logger = new Logger(EventsGateway.name);
-  private activeUsers = new Map<string, ActiveUser>();
+
+  constructor(private readonly presenceService: PresenceService) {}
 
   handleConnection(client: Socket) {
     this.logger.log(`Client connected: ${client.id}`);
@@ -37,10 +39,7 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   handleDisconnect(client: Socket) {
     this.logger.log(`Client disconnected: ${client.id}`);
-    if (this.activeUsers.has(client.id)) {
-      this.activeUsers.delete(client.id);
-      this.broadcastOnlineUsers();
-    }
+    this.broadcastOnlineUsers();
   }
 
   @SubscribeMessage('user:identify')
@@ -49,36 +48,28 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @MessageBody() payload: { userId: string; name: string; role: string },
   ) {
     if (payload && payload.userId) {
-      this.activeUsers.set(client.id, {
-        socketId: client.id,
-        userId: payload.userId,
-        name: payload.name,
-        role: payload.role,
-        connectedAt: new Date(),
-      });
       this.logger.log(`User identified: ${payload.name} (${payload.role}) on socket ${client.id}`);
-      this.broadcastOnlineUsers();
+      void this.presenceService.heartbeat(payload.userId, payload.name, payload.role).then(() => {
+        this.broadcastOnlineUsers();
+      });
     }
   }
 
   @SubscribeMessage('user:logout')
   handleUserLogout(@ConnectedSocket() client: Socket) {
-    if (this.activeUsers.has(client.id)) {
-      this.activeUsers.delete(client.id);
+    void this.presenceService.cleanup().then(() => {
       this.broadcastOnlineUsers();
-    }
+    });
   }
 
   broadcastOnlineUsers() {
-    const onlineList = Array.from(this.activeUsers.values());
-    const uniqueUsersMap = new Map<string, ActiveUser>();
-    onlineList.forEach((u) => uniqueUsersMap.set(u.userId, u));
-    const uniqueUsers = Array.from(uniqueUsersMap.values());
-
-    this.server.emit('users:online', {
-      count: uniqueUsers.length,
-      users: uniqueUsers,
-    });
+    if (!this.server) return;
+    this.presenceService
+      .getOnline()
+      .then((data) => {
+        this.server.emit('users:online', data);
+      })
+      .catch((err) => this.logger.error(`Failed to broadcast online users: ${err?.message}`));
   }
 
   broadcastDataChange(event: string, data?: any) {

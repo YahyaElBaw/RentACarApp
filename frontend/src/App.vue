@@ -556,7 +556,7 @@ watch(() => vidangeForm.mileageAtChange, (newVal) => {
                    <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
                  </span>
                  <span class="uppercase tracking-widest text-[9px] font-black">
-                   {{ socketStore.onlineCount }} Opérateur{{ socketStore.onlineCount > 1 ? 's' : '' }} en ligne
+                    {{ socketStore.onlineCount }} Opérateur{{ socketStore.onlineCount !== 1 ? 's' : '' }} en ligne
                  </span>
                </div>
 
@@ -681,7 +681,7 @@ watch(() => vidangeForm.mileageAtChange, (newVal) => {
             <div>
               <DialogTitle class="text-2xl font-black uppercase tracking-tighter">Opérateurs en ligne</DialogTitle>
               <DialogDescription class="text-white/70 text-xs font-bold uppercase tracking-[0.2em] mt-1">
-                {{ socketStore.onlineCount }} connecté{{ socketStore.onlineCount > 1 ? 's' : '' }}
+                {{ socketStore.onlineCount }} connecté{{ socketStore.onlineCount !== 1 ? 's' : '' }}
               </DialogDescription>
             </div>
           </div>

@@ -75,6 +75,19 @@ export class CarController {
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('super_admin')
+  @Patch(':id/status')
+  async updateStatus(
+    @Param('id') id: string,
+    @Body('isAvailable') isAvailable: boolean,
+  ) {
+    if (typeof isAvailable !== 'boolean') {
+      throw new BadRequestException('isAvailable (boolean) is required');
+    }
+    return this.carService.update(id, { isAvailable });
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
   @Patch(':id')
   async update(

@@ -15,6 +15,11 @@
               <Badge v-else :class="['text-[9px] font-black tracking-widest px-3 py-1 rounded-full border-2', car.isAvailable ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-rose-50 text-rose-600 border-rose-100']">
                  {{ car.isAvailable ? 'DISPONIBLE' : 'LOUÉ' }}
               </Badge>
+              <button v-if="authStore.isSuperAdmin && !car.disabled" @click="toggleStatus" :disabled="statusSaving"
+                :class="['h-6 px-3 rounded-full text-[8px] font-black uppercase tracking-widest text-white transition-all active:scale-95 disabled:opacity-60',
+                  car.isAvailable ? 'bg-rose-500 hover:bg-rose-600' : 'bg-emerald-500 hover:bg-emerald-600']">
+                {{ statusSaving ? '...' : (car.isAvailable ? 'Marquer louée' : 'Marquer disponible') }}
+              </button>
           </div>
           <p class="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] pl-0.5">Identifiant Technique: {{ car.matricule }}</p>
         </div>
@@ -769,6 +774,21 @@ const authStore = useAuthStore();
 const toast = useToast();
 const guard = usePasswordGuard();
 const car = ref<any>(null);
+
+const statusSaving = ref(false);
+const toggleStatus = async () => {
+  if (!car.value || statusSaving.value) return;
+  statusSaving.value = true;
+  try {
+    const updated = await carApi.updateStatus(car.value._id, !car.value.isAvailable);
+    car.value.isAvailable = typeof updated.isAvailable === 'boolean' ? updated.isAvailable : !car.value.isAvailable;
+    toast.add({ severity: 'success', summary: 'Statut mis à jour', detail: car.value.isAvailable ? 'Véhicule marqué disponible' : 'Véhicule marqué louée', life: 3000 });
+  } catch (err) {
+    toast.add({ severity: 'error', summary: 'Erreur', detail: "Impossible de changer le statut du véhicule.", life: 4000 });
+  } finally {
+    statusSaving.value = false;
+  }
+};
 
 const showEditForm = ref(false);
 const showSecurityModal = ref(false);
