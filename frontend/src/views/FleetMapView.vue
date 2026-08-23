@@ -79,6 +79,71 @@
           <p class="text-[9px] font-bold uppercase tracking-widest text-slate-300">Vérifiez l'IMEI ou la plaque des véhicules</p>
         </div>
 
+        <!-- ── Online / En mouvement — bottom-left widget ─────────────────── -->
+        <div v-if="movingCars.length" class="absolute left-4 bottom-4 z-[450] w-[230px] flex flex-col gap-2 items-stretch">
+          <button v-for="p in movingCarsPreview" :key="p.carId" @click="selectOnlineCar(p)"
+            class="group bg-white/95 backdrop-blur-md rounded-2xl pl-2.5 pr-3 py-2 shadow-xl shadow-slate-900/10 border border-slate-100 flex items-center gap-2.5 text-left transition-all hover:border-emerald-300 hover:shadow-2xl active:scale-[0.97]">
+            <span class="w-8 h-8 rounded-xl flex items-center justify-center shrink-0" :style="{ background: colorFor(p) }">
+              <span v-html="carIconSvg(colorFor(p))"></span>
+            </span>
+            <span class="min-w-0 flex-1">
+              <span class="block text-[10px] font-black text-slate-900 uppercase tracking-wider leading-none truncate">{{ p.matricule }}</span>
+              <span class="flex items-center gap-1.5 mt-1">
+                <span class="text-[9px] font-black tabular-nums text-slate-900">{{ Math.round(p.speed || 0) }} km/h</span>
+              </span>
+            </span>
+            <span class="relative flex h-2 w-2 shrink-0">
+              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+          </button>
+
+          <button v-if="movingCars.length > 3" @click="showMovingSheet = true"
+            class="bg-slate-900/90 backdrop-blur-md text-white rounded-2xl px-3.5 py-2.5 shadow-xl flex items-center justify-center gap-2 text-[9px] font-black uppercase tracking-widest transition-all hover:bg-slate-900 active:scale-[0.97]">
+            Voir tout · {{ movingCars.length }}
+            <ChevronUp class="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        <!-- ── Bottom slider (all moving cars) ────────────────────────────── -->
+        <transition enter-active-class="transition-transform duration-300 ease-out" enter-from-class="translate-y-full" enter-to-class="translate-y-0"
+          leave-active-class="transition-transform duration-250 ease-in" leave-from-class="translate-y-0" leave-to-class="translate-y-full">
+          <div v-if="showMovingSheet" class="absolute inset-x-0 bottom-0 z-[550] bg-white rounded-t-[2rem] shadow-2xl border-t border-slate-200 flex flex-col max-h-[62%]">
+            <div class="shrink-0 pt-3 pb-2 flex justify-center">
+              <span class="w-10 h-1.5 rounded-full bg-slate-200"></span>
+            </div>
+            <div class="shrink-0 px-6 pb-3 flex items-center gap-3">
+              <div class="min-w-0">
+                <p class="text-sm font-black uppercase italic tracking-tighter text-slate-900 leading-tight">
+                  En <span class="text-emerald-500">Mouvement</span>
+                </p>
+                <p class="text-[8px] font-black uppercase tracking-widest text-slate-400 mt-0.5">{{ movingCars.length }} véhicule(s) actif(s)</p>
+              </div>
+              <button @click="showMovingSheet = false" class="ml-auto w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 transition-colors flex items-center justify-center shrink-0">
+                <X class="w-4 h-4 text-slate-500" />
+              </button>
+            </div>
+            <div class="flex-1 overflow-y-auto no-scrollbar px-4 pb-5 pt-1 space-y-2">
+              <button v-for="p in movingCars" :key="p.carId" @click="selectOnlineCar(p)"
+                :class="['w-full flex items-center gap-3 pl-3 pr-4 py-2.5 rounded-2xl border transition-all active:scale-[0.98]',
+                  String(selectedCar?._id) === String(p.carId) ? 'border-indigo-400 bg-indigo-50' : 'border-slate-100 hover:border-emerald-200 hover:bg-slate-50']">
+                <span class="w-8 h-8 rounded-xl flex items-center justify-center shrink-0" :style="{ background: colorFor(p) }">
+                  <span v-html="carIconSvg(colorFor(p))"></span>
+                </span>
+                <span class="text-left min-w-0 flex-1">
+                  <span class="block text-[11px] font-black text-slate-900 uppercase tracking-wider leading-none truncate">{{ p.matricule }}</span>
+                  <span class="block text-[8px] font-bold text-slate-400 mt-1 truncate">{{ p.brand }} {{ p.model }}</span>
+                </span>
+                <span class="text-[10px] font-black tabular-nums text-slate-900 shrink-0">{{ Math.round(p.speed || 0) }} km/h</span>
+                <span class="relative flex h-2 w-2 shrink-0">
+                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+              </button>
+            </div>
+          </div>
+        </transition>
+
       </div>
     </main>
 
@@ -105,8 +170,9 @@
             </span>
             <span class="text-left min-w-0 flex-1">
               <span class="block text-[11px] font-black text-slate-900 uppercase tracking-wider leading-none truncate">{{ p.matricule }}</span>
-              <span class="block text-[8px] font-black uppercase tracking-widest mt-1" :style="{ color: colorFor(p) }">
-                {{ Math.round(p.speed || 0) }} km/h · {{ statusLabel(p) }}
+              <span class="flex items-center gap-2 mt-1">
+                <span class="text-[10px] font-black tabular-nums text-slate-900">{{ Math.round(p.speed || 0) }} km/h</span>
+                <span :class="['text-[7px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-md border', statusClass(p)]">{{ statusLabel(p) }}</span>
               </span>
             </span>
             <span v-if="p.rental" class="w-2 h-2 rounded-full bg-indigo-500 shrink-0" title="Loué"></span>
@@ -147,7 +213,7 @@
           <div class="flex items-end justify-between gap-3">
             <div>
               <p class="text-[8px] font-black uppercase tracking-widest text-slate-400">Vitesse</p>
-              <p class="text-3xl font-black leading-none mt-1" :style="{ color: colorFor(selectedCar) }">
+              <p class="text-3xl font-black leading-none mt-1 text-slate-900">
                 {{ Math.round(selectedCar.speed || 0) }}<span class="text-xs font-black text-slate-400 ml-1">km/h</span>
               </p>
             </div>
@@ -164,10 +230,9 @@
                 {{ selectedCar.isAvailable ? 'Disponible' : 'Louée' }}
               </p>
             </div>
-            <button @click="setCarStatus" :disabled="statusSaving"
-              :class="['h-9 px-4 rounded-xl text-[8px] font-black uppercase tracking-widest text-white transition-all active:scale-95 disabled:opacity-60 shrink-0',
-                selectedCar.isAvailable ? 'bg-rose-500 hover:bg-rose-600 shadow-lg shadow-rose-200' : 'bg-emerald-500 hover:bg-emerald-600 shadow-lg shadow-emerald-200']">
-              {{ statusSaving ? '...' : (selectedCar.isAvailable ? 'Marquer louée' : 'Marquer disponible') }}
+            <button v-if="selectedCar.isAvailable" @click="setCarStatus" :disabled="statusSaving"
+              class="h-9 px-4 rounded-xl text-[8px] font-black uppercase tracking-widest text-white bg-rose-500 hover:bg-rose-600 shadow-lg shadow-rose-200 transition-all active:scale-95 disabled:opacity-60 shrink-0">
+              {{ statusSaving ? '...' : 'Marquer louée' }}
             </button>
           </div>
 
@@ -302,7 +367,7 @@ import 'leaflet/dist/leaflet.css'
 import {
   RefreshCw, Loader2 as LoaderIcon, MapPin,
   X, LocateFixed, PauseCircle, Satellite, Map as MapIcon,
-  FileText, Car as CarIcon, Users, ChevronRight,
+  FileText, Car as CarIcon, Users, ChevronRight, ChevronUp,
   Maximize2, Minimize2
 } from 'lucide-vue-next'
 import { gpsApi, carApi } from '@/api'
@@ -406,6 +471,21 @@ const statusClass = (p: any) =>
 const sortedPositions = computed(() =>
   [...gpsPositions.value].sort((a, b) => String(a.matricule).localeCompare(String(b.matricule)))
 )
+
+// ─── Online (en mouvement) — bottom-left widget + bottom sheet ──────────────
+const showMovingSheet = ref(false)
+const isMoving = (p: any) => !isStale(p) && (p.speed || 0) > 2
+const movingCars = computed(() =>
+  gpsPositions.value.filter(isMoving).sort((a, b) => (b.speed || 0) - (a.speed || 0))
+)
+const movingCarsPreview = computed(() => movingCars.value.slice(0, 3))
+watch(movingCars, (list) => {
+  if (!list.length) showMovingSheet.value = false
+})
+const selectOnlineCar = (p: any) => {
+  followCar(p)
+  showMovingSheet.value = false
+}
 const selectedCar = computed(
   () => gpsPositions.value.find((p) => String(p.carId) === selectedCarId.value) ?? null
 )
@@ -440,10 +520,10 @@ const closeDetails = () => {
 const statusSaving = ref(false)
 const setCarStatus = async () => {
   const car = selectedCar.value
-  if (!car || statusSaving.value) return
+  if (!car || statusSaving.value || !car.isAvailable) return
   statusSaving.value = true
   try {
-    await carApi.updateStatus(String(car.carId), !car.isAvailable)
+    await carApi.updateStatus(String(car.carId), false)
     selectedCarId.value = String(car.carId)
     await fetchGpsPositions()
   } catch (err) {
@@ -525,6 +605,12 @@ const renderGpsMarkers = () => {
       `${Math.round(p.speed || 0)} km/h · vu à ${timeLabel(p)}` +
       (isStale(p) ? ' (inactif)' : '')
     )
+    marker.bindTooltip(String(p.matricule || ''), {
+      direction: 'top',
+      offset: [0, -46],
+      opacity: 1,
+      className: 'car-plate-tip'
+    })
     ;(marker as any).__carKey = key
     marker.addTo(markersGroup)
   }
@@ -560,18 +646,18 @@ onMounted(async () => {
     leafletMap = L.map(mapEl.value, {
       attributionControl: false,
       zoomControl: false,
-      maxZoom: 22
+      maxZoom: 30
     }).setView([36.8, 10.18], 8)
     tileLayers = {
       satellite: [
-        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxNativeZoom: 19, maxZoom: 22 }),
-        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}', { maxNativeZoom: 19, maxZoom: 22 }),
-        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', { maxNativeZoom: 19, maxZoom: 22 })
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxNativeZoom: 19, maxZoom: 30 }),
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}', { maxNativeZoom: 19, maxZoom: 30 }),
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', { maxNativeZoom: 19, maxZoom: 30 })
       ],
       plan: L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
         subdomains: 'abcd',
         maxNativeZoom: 19,
-        maxZoom: 22
+        maxZoom: 30
       })
     }
     applyMapStyle()
@@ -596,3 +682,21 @@ onUnmounted(() => {
   }
 })
 </script>
+
+<style>
+.car-plate-tip {
+  background: rgba(15, 23, 42, 0.92);
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  padding: 6px 12px;
+  font-weight: 900;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+.car-plate-tip::before {
+  border-top-color: rgba(15, 23, 42, 0.92);
+}
+</style>

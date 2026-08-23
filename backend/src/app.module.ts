@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { APP_INTERCEPTOR } from '@nestjs/core';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AppController } from './app.controller';
@@ -23,6 +24,7 @@ import { AgenceModule } from './agence/agence.module';
 import { LogModule } from './log/log.module';
 import { EventsModule } from './events/events.module';
 import { PresenceModule } from './presence/presence.module';
+import { PresenceInterceptor } from './presence/presence.interceptor';
 
 @Module({
   imports: [
@@ -57,7 +59,10 @@ import { PresenceModule } from './presence/presence.module';
     LogModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    { provide: APP_INTERCEPTOR, useClass: PresenceInterceptor },
+  ],
 })
 export class AppModule {}
 

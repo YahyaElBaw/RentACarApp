@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   Get,
   Post,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -47,5 +48,11 @@ export class GpsController {
   @Get('positions')
   getPositions() {
     return this.gpsService.getPositions();
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('speed-alerts')
+  getSpeedAlerts(@Query('limit') limit?: string) {
+    return this.gpsService.getSpeedAlerts(Number(limit) || 50);
   }
 }

@@ -6,24 +6,67 @@ import {
   CarPosition,
   CarPositionDocument,
 } from './schemas/car-position.schema';
+import {
+  SpeedAlert,
+  SpeedAlertDocument,
+} from './schemas/speed-alert.schema';
 import { Contrat, ContratDocument } from '../contrat/schemas/contrat.schema';
+import { Setting, SettingDocument } from '../setting/schemas/setting.schema';
+import { EventsGateway } from '../events/events.gateway';
 
 const normalizePlate = (plate: string) =>
   String(plate || '')
     .toUpperCase()
     .replace(/[\s\-_.]/g, '');
 
+// Default speed alert threshold (can be changed from Settings)
+export const SPEED_ALERT_THRESHOLD_KMH = 130;
+const SPEED_ALERT_COOLDOWN_MS = 5 * 60 * 1000; // one alert per car per 5 minutes
+const SPEED_LIMIT_CACHE_TTL_MS = 30 * 1000;
+
 @Injectable()
 export class GpsService {
   private readonly logger = new Logger(GpsService.name);
+  private speedLimitCache: { value: number; loadedAt: number } = {
+    value: SPEED_ALERT_THRESHOLD_KMH,
+    loadedAt: 0,
+  };
 
   constructor(
     @InjectModel(Car.name) private carModel: Model<CarDocument>,
     @InjectModel(CarPosition.name)
     private carPositionModel: Model<CarPositionDocument>,
+    @InjectModel(SpeedAlert.name)
+    private speedAlertModel: Model<SpeedAlertDocument>,
     @InjectModel(Contrat.name)
     private contratModel: Model<ContratDocument>,
+    @InjectModel(Setting.name)
+    private settingModel: Model<SettingDocument>,
+    private eventsGateway: EventsGateway,
   ) {}
+
+  /** Configurable alert threshold (floating number) with a short cache */
+  private async getSpeedAlertLimit(): Promise<number> {
+    if (Date.now() - this.speedLimitCache.loadedAt < SPEED_LIMIT_CACHE_TTL_MS) {
+      return this.speedLimitCache.value;
+    }
+    try {
+      const settings = await this.settingModel
+        .findOne()
+        .select('speedAlertLimit')
+        .lean()
+        .exec();
+      const value = Number((settings as any)?.speedAlertLimit);
+      if (Number.isFinite(value) && value > 0) {
+        this.speedLimitCache.value = value;
+      }
+      this.speedLimitCache.loadedAt = Date.now();
+    } catch (err) {
+      this.logger.warn(`Failed to load speed limit setting: ${String(err)}`);
+      this.speedLimitCache.loadedAt = Date.now();
+    }
+    return this.speedLimitCache.value;
+  }
 
   async ingest(dto: {
     imei?: string;
@@ -66,7 +109,74 @@ export class GpsService {
       },
       { upsert: true },
     );
+
+    if ((dto.speed ?? 0) >= (await this.getSpeedAlertLimit())) {
+      void this.recordSpeedAlert(car, dto, positionAt);
+    }
+
     return { accepted: true };
+  }
+
+  private async recordSpeedAlert(
+    car: CarDocument,
+    dto: { lat: number; lng: number; speed?: number; provider?: string },
+    positionAt: Date,
+  ): Promise<void> {
+    try {
+      const limit = await this.getSpeedAlertLimit();
+      const lastAlert = await this.speedAlertModel
+        .findOne({ carId: car._id })
+        .sort({ alertAt: -1 })
+        .exec();
+
+      if (
+        lastAlert &&
+        positionAt.getTime() - new Date(lastAlert.alertAt).getTime() <
+          SPEED_ALERT_COOLDOWN_MS
+      ) {
+        return;
+      }
+
+      const alert = await this.speedAlertModel.create({
+        carId: car._id,
+        matricule: car.matricule || '',
+        brand: car.brand || '',
+        model: car.model || '',
+        speed: dto.speed ?? 0,
+        lat: dto.lat,
+        lng: dto.lng,
+        provider: dto.provider || '',
+        alertAt: positionAt,
+      });
+
+      this.logger.warn(
+        `SPEED ALERT: ${car.brand} ${car.model} (${car.matricule}) at ${dto.speed} km/h (limit ${limit})`,
+      );
+
+      this.eventsGateway.broadcastDataChange('gps:speed-alert', {
+        _id: String(alert._id),
+        carId: String(car._id),
+        matricule: car.matricule || '',
+        brand: car.brand || '',
+        model: car.model || '',
+        speed: dto.speed ?? 0,
+        limit,
+        lat: dto.lat,
+        lng: dto.lng,
+        provider: dto.provider || '',
+        alertAt: positionAt.toISOString(),
+      });
+    } catch (err) {
+      this.logger.error(`Failed to record speed alert: ${String(err)}`);
+    }
+  }
+
+  async getSpeedAlerts(limit = 50): Promise<SpeedAlertDocument[]> {
+    return this.speedAlertModel
+      .find()
+      .sort({ alertAt: -1 })
+      .limit(Math.min(Math.max(limit, 1), 200))
+      .exec();
   }
 
   async getPositions() {

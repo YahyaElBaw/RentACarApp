@@ -24,6 +24,9 @@ export class Setting {
   @Prop({ default: 6 })
   visiteLimit: number;
 
+  @Prop({ default: 130 })
+  speedAlertLimit: number;
+
   @Prop({ type: [String], default: [] })
   agencies: string[];
 }

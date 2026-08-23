@@ -44,11 +44,12 @@
                     <span class="text-[9px] font-black text-indigo-400 uppercase tracking-widest block mb-1">Tarif Journalier</span>
                     <div v-if="editingField === 'dailyRate'" class="flex items-center gap-2">
                       <Input type="number" v-model="editValue" class="h-10 bg-white border-indigo-200 font-black text-indigo-700" />
-                      <Button @click="prepareSave" size="icon" class="h-8 w-8 bg-indigo-600 text-white rounded-lg"><Check class="w-4 h-4" /></Button>
+                      <Button @click="stageEdit" size="icon" class="h-8 w-8 bg-indigo-600 text-white rounded-lg"><Check class="w-4 h-4" /></Button>
                       <Button @click="cancelEdit" size="icon" variant="ghost" class="h-8 w-8 text-slate-400"><X class="w-4 h-4" /></Button>
                     </div>
                     <div v-else class="flex items-center justify-between">
                       <span class="text-3xl font-black text-indigo-700 tabular-nums">{{ car.dailyRate }} <span class="text-xs text-indigo-400 ml-1">TND</span></span>
+                      <span v-if="isStaged('dailyRate')" class="text-[7px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-600 border border-amber-200">Modifié</span>
                       <Button v-if="authStore.isAdmin && !car.disabled" @click="startEdit('dailyRate', car.dailyRate)" variant="ghost" size="icon" class="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity text-indigo-400 hover:text-indigo-600">
                         <Pencil class="w-4 h-4" />
                       </Button>
@@ -58,11 +59,12 @@
                     <span class="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">Kilométrage Actuel</span>
                     <div v-if="editingField === 'mileage'" class="flex items-center gap-2">
                       <Input type="number" v-model="editValue" class="h-10 bg-white border-slate-200 font-black text-slate-700" />
-                      <Button @click="prepareSave" size="icon" class="h-8 w-8 bg-slate-600 text-white rounded-lg"><Check class="w-4 h-4" /></Button>
+                      <Button @click="stageEdit" size="icon" class="h-8 w-8 bg-slate-600 text-white rounded-lg"><Check class="w-4 h-4" /></Button>
                       <Button @click="cancelEdit" size="icon" variant="ghost" class="h-8 w-8 text-slate-400"><X class="w-4 h-4" /></Button>
                     </div>
                     <div v-else class="flex items-center justify-between">
                       <span class="text-2xl font-black text-slate-700 tabular-nums">{{ car.mileage }} <span class="text-xs text-slate-400 ml-1 font-mono">KM</span></span>
+                      <span v-if="isStaged('mileage')" class="text-[7px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-600 border border-amber-200">Modifié</span>
                       <Button v-if="authStore.isAdmin && !car.disabled" @click="startEdit('mileage', car.mileage)" variant="ghost" size="icon" class="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-slate-600">
                         <Pencil class="w-4 h-4" />
                       </Button>
@@ -76,11 +78,12 @@
                   <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Couleur Extérieure</span>
                   <div v-if="editingField === 'color'" class="flex items-center gap-2">
                     <Input v-model="editValue" class="h-8 bg-white border-slate-200 text-xs font-black" />
-                    <Button @click="prepareSave" size="icon" class="h-6 w-6 bg-slate-600 text-white rounded-md"><Check class="w-3 h-3" /></Button>
+                    <Button @click="stageEdit" size="icon" class="h-6 w-6 bg-slate-600 text-white rounded-md"><Check class="w-3 h-3" /></Button>
                     <Button @click="cancelEdit" size="icon" variant="ghost" class="h-6 w-6 text-slate-400"><X class="w-3 h-3" /></Button>
                   </div>
                   <div v-else class="flex items-center gap-3">
                     <Badge variant="outline" class="font-black uppercase text-[9px] px-3 border-slate-200 text-slate-900">{{ car.color || 'N/A' }}</Badge>
+                    <span v-if="isStaged('color')" class="text-[7px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-600 border border-amber-200">Modifié</span>
                     <Button v-if="authStore.isAdmin && !car.disabled" @click="startEdit('color', car.color)" variant="ghost" size="icon" class="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-slate-300">
                       <Pencil class="w-3 h-3" />
                     </Button>
@@ -90,11 +93,12 @@
                   <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest text-indigo-500">Prochaine Assurance</span>
                   <div v-if="editingField === 'insuranceDate'" class="flex items-center gap-2">
                     <Input type="date" v-model="editValue" class="h-8 bg-white border-indigo-200 text-xs font-black" />
-                    <Button @click="prepareSave" size="icon" class="h-6 w-6 bg-indigo-600 text-white rounded-md"><Check class="w-3 h-3" /></Button>
+                    <Button @click="stageEdit" size="icon" class="h-6 w-6 bg-indigo-600 text-white rounded-md"><Check class="w-3 h-3" /></Button>
                     <Button @click="cancelEdit" size="icon" variant="ghost" class="h-6 w-6 text-slate-400"><X class="w-3 h-3" /></Button>
                   </div>
                   <div v-else class="flex items-center gap-3">
                     <span class="font-bold text-indigo-600 text-sm tabular-nums">{{ formatDate(car.insuranceDate) }}</span>
+                    <span v-if="isStaged('insuranceDate')" class="text-[7px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-600 border border-amber-200">Modifié</span>
                     <Button v-if="authStore.isAdmin && !car.disabled" @click="startEdit('insuranceDate', car.insuranceDate?.split('T')[0])" variant="ghost" size="icon" class="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-indigo-300">
                       <Pencil class="w-3 h-3" />
                     </Button>
@@ -104,11 +108,12 @@
                   <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest text-rose-500">Prochaine Visite</span>
                   <div v-if="editingField === 'nextTechnicalVisitDate'" class="flex items-center gap-2">
                     <Input type="date" v-model="editValue" class="h-8 bg-white border-rose-200 text-xs font-black" />
-                    <Button @click="prepareSave" size="icon" class="h-6 w-6 bg-rose-600 text-white rounded-md"><Check class="w-3 h-3" /></Button>
+                    <Button @click="stageEdit" size="icon" class="h-6 w-6 bg-rose-600 text-white rounded-md"><Check class="w-3 h-3" /></Button>
                     <Button @click="cancelEdit" size="icon" variant="ghost" class="h-6 w-6 text-slate-400"><X class="w-3 h-3" /></Button>
                   </div>
                   <div v-else class="flex items-center gap-3">
                     <span class="font-black text-rose-600 text-sm tabular-nums">{{ formatDate(car.nextTechnicalVisitDate) }}</span>
+                    <span v-if="isStaged('nextTechnicalVisitDate')" class="text-[7px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-600 border border-amber-200">Modifié</span>
                     <Button v-if="authStore.isAdmin && !car.disabled" @click="startEdit('nextTechnicalVisitDate', car.nextTechnicalVisitDate?.split('T')[0])" variant="ghost" size="icon" class="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-rose-300">
                       <Pencil class="w-3 h-3" />
                     </Button>
@@ -118,11 +123,12 @@
                   <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest text-amber-500">Prochain Vidange</span>
                   <div v-if="editingField === 'nextOilChangeMileage'" class="flex items-center gap-2">
                     <Input type="number" v-model="editValue" class="h-8 bg-white border-amber-200 text-xs font-black" />
-                    <Button @click="prepareSave" size="icon" class="h-6 w-6 bg-amber-600 text-white rounded-md"><Check class="w-3 h-3" /></Button>
+                    <Button @click="stageEdit" size="icon" class="h-6 w-6 bg-amber-600 text-white rounded-md"><Check class="w-3 h-3" /></Button>
                     <Button @click="cancelEdit" size="icon" variant="ghost" class="h-6 w-6 text-slate-400"><X class="w-3 h-3" /></Button>
                   </div>
                   <div v-else class="flex items-center gap-3">
                     <span class="font-black text-amber-600 text-sm tabular-nums">{{ car.nextOilChangeMileage || 'N/A' }} <span class="text-[8px]">KM</span></span>
+                    <span v-if="isStaged('nextOilChangeMileage')" class="text-[7px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-600 border border-amber-200">Modifié</span>
                     <Button v-if="authStore.isAdmin && !car.disabled" @click="startEdit('nextOilChangeMileage', car.nextOilChangeMileage)" variant="ghost" size="icon" class="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-amber-300">
                       <Pencil class="w-3 h-3" />
                     </Button>
@@ -132,11 +138,12 @@
                   <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest text-sky-500">Date Départ</span>
                   <div v-if="editingField === 'departureDate'" class="flex items-center gap-2">
                     <Input type="date" v-model="editValue" class="h-8 bg-white border-sky-200 text-xs font-black" />
-                    <Button @click="prepareSave" size="icon" class="h-6 w-6 bg-sky-600 text-white rounded-md"><Check class="w-3 h-3" /></Button>
+                    <Button @click="stageEdit" size="icon" class="h-6 w-6 bg-sky-600 text-white rounded-md"><Check class="w-3 h-3" /></Button>
                     <Button @click="cancelEdit" size="icon" variant="ghost" class="h-6 w-6 text-slate-400"><X class="w-3 h-3" /></Button>
                   </div>
                   <div v-else class="flex items-center gap-3">
                     <span class="font-black text-sky-600 text-sm tabular-nums">{{ formatDate(car.departureDate) }}</span>
+                    <span v-if="isStaged('departureDate')" class="text-[7px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-600 border border-amber-200">Modifié</span>
                     <Button v-if="authStore.isAdmin && !car.disabled" @click="startEdit('departureDate', car.departureDate?.split('T')[0])" variant="ghost" size="icon" class="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-sky-300">
                       <Pencil class="w-3 h-3" />
                     </Button>
@@ -149,50 +156,64 @@
                       <option value="" disabled>Choisir une agence...</option>
                       <option v-for="agence in agences" :key="agence._id" :value="agence._id">{{ agence.name }}</option>
                     </select>
-                    <Button @click="prepareSave" size="icon" class="h-6 w-6 bg-slate-600 text-white rounded-md"><Check class="w-3 h-3" /></Button>
+                    <Button @click="stageEdit" size="icon" class="h-6 w-6 bg-slate-600 text-white rounded-md"><Check class="w-3 h-3" /></Button>
                     <Button @click="cancelEdit" size="icon" variant="ghost" class="h-6 w-6 text-slate-400"><X class="w-3 h-3" /></Button>
                   </div>
                    <div v-else class="flex items-center gap-3">
                      <span class="font-bold text-slate-700 text-sm uppercase tracking-widest">{{ car.agence?.name || '—' }}</span>
+                     <span v-if="isStaged('agence')" class="text-[7px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-600 border border-amber-200">Modifié</span>
                      <Button v-if="authStore.isAdmin && !car.disabled" @click="startEdit('agence', car.agence?._id || '')" variant="ghost" size="icon" class="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-slate-300">
                        <Pencil class="w-3 h-3" />
                      </Button>
                    </div>
                 </div>
-                <div class="flex justify-between items-center py-3 border-b border-slate-50 group">
-                   <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest text-emerald-600">IMEI GPS</span>
-                   <div v-if="editingField === 'gpsImei'" class="flex items-center gap-2">
-                     <Input v-model="editValue" placeholder="15 chiffres" class="h-8 bg-white border-emerald-200 text-xs font-black tabular-nums w-40" />
-                     <Button @click="prepareSave" size="icon" class="h-6 w-6 bg-emerald-600 text-white rounded-md"><Check class="w-3 h-3" /></Button>
-                     <Button @click="cancelEdit" size="icon" variant="ghost" class="h-6 w-6 text-slate-400"><X class="w-3 h-3" /></Button>
-                   </div>
-                   <div v-else class="flex items-center gap-3">
-                     <span class="font-bold text-slate-700 text-sm tabular-nums">{{ car.gpsImei || '—' }}</span>
-                     <Button v-if="authStore.isAdmin && !car.disabled" @click="startEdit('gpsImei', car.gpsImei || '')" variant="ghost" size="icon" class="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-emerald-400">
-                       <Pencil class="w-3 h-3" />
-                     </Button>
-                   </div>
-                </div>
-                <div class="flex justify-between items-center py-3 group">
-                   <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest text-emerald-600">Fournisseur GPS</span>
-                   <div v-if="editingField === 'gpsProvider'" class="flex items-center gap-2">
-                     <select v-model="editValue" class="h-8 bg-white border-emerald-200 rounded-md px-2 text-xs font-black outline-none focus:border-indigo-400">
-                       <option value="">Aucun</option>
-                       <option value="traci">Traci.tn</option>
-                       <option value="winnou">Winnou.tn</option>
-                       <option value="autre">Autre</option>
-                     </select>
-                     <Button @click="prepareSave" size="icon" class="h-6 w-6 bg-emerald-600 text-white rounded-md"><Check class="w-3 h-3" /></Button>
-                     <Button @click="cancelEdit" size="icon" variant="ghost" class="h-6 w-6 text-slate-400"><X class="w-3 h-3" /></Button>
-                   </div>
-                   <div v-else class="flex items-center gap-3">
-                     <Badge v-if="car.gpsProvider" variant="outline" class="font-black uppercase text-[9px] px-3 border-emerald-200 text-emerald-700">{{ gpsProviderLabel(car.gpsProvider) }}</Badge>
-                     <span v-else class="font-bold text-slate-300 text-sm">—</span>
-                     <Button v-if="authStore.isAdmin && !car.disabled" @click="startEdit('gpsProvider', car.gpsProvider || '')" variant="ghost" size="icon" class="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-emerald-400">
-                       <Pencil class="w-3 h-3" />
-                     </Button>
-                   </div>
-                </div>
+                 <div v-if="authStore.isAdmin" class="flex justify-between items-center py-3 border-b border-slate-50 group">
+                    <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest text-emerald-600">IMEI GPS</span>
+                    <div v-if="editingField === 'gpsImei'" class="flex items-center gap-2">
+                      <Input v-model="editValue" placeholder="15 chiffres" class="h-8 bg-white border-emerald-200 text-xs font-black tabular-nums w-40" />
+                      <Button @click="stageEdit" size="icon" class="h-6 w-6 bg-emerald-600 text-white rounded-md"><Check class="w-3 h-3" /></Button>
+                      <Button @click="cancelEdit" size="icon" variant="ghost" class="h-6 w-6 text-slate-400"><X class="w-3 h-3" /></Button>
+                    </div>
+                    <div v-else class="flex items-center gap-3">
+                      <span v-if="revealedGps.imei" class="font-bold text-slate-700 text-sm tabular-nums">{{ car.gpsImei || '—' }}</span>
+                      <span v-else-if="car.gpsImei" class="font-bold text-slate-400 text-sm tracking-[0.3em] select-none">••••••••</span>
+                      <span v-else class="font-bold text-slate-300 text-sm">—</span>
+                      <span v-if="isStaged('gpsImei')" class="text-[7px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-600 border border-amber-200">Modifié</span>
+                      <button v-if="car.gpsImei" type="button" @click="toggleGpsReveal('imei')" class="text-slate-300 hover:text-emerald-600 transition-colors outline-none" :title="revealedGps.imei ? 'Masquer' : 'Afficher (mot de passe requis)'">
+                        <EyeOff v-if="revealedGps.imei" class="w-3.5 h-3.5" />
+                        <Eye v-else class="w-3.5 h-3.5" />
+                      </button>
+                      <Button v-if="authStore.isAdmin && !car.disabled && revealedGps.imei" @click="startEdit('gpsImei', car.gpsImei || '')" variant="ghost" size="icon" class="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-emerald-400">
+                        <Pencil class="w-3 h-3" />
+                      </Button>
+                    </div>
+                 </div>
+                 <div v-if="authStore.isAdmin" class="flex justify-between items-center py-3 group">
+                    <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest text-emerald-600">Fournisseur GPS</span>
+                    <div v-if="editingField === 'gpsProvider'" class="flex items-center gap-2">
+                      <select v-model="editValue" class="h-8 bg-white border-emerald-200 rounded-md px-2 text-xs font-black outline-none focus:border-indigo-400">
+                        <option value="">Aucun</option>
+                        <option value="traci">Traci.tn</option>
+                        <option value="winnou">Winnou.tn</option>
+                        <option value="autre">Autre</option>
+                      </select>
+                      <Button @click="stageEdit" size="icon" class="h-6 w-6 bg-emerald-600 text-white rounded-md"><Check class="w-3 h-3" /></Button>
+                      <Button @click="cancelEdit" size="icon" variant="ghost" class="h-6 w-6 text-slate-400"><X class="w-3 h-3" /></Button>
+                    </div>
+                    <div v-else class="flex items-center gap-3">
+                      <Badge v-if="car.gpsProvider && revealedGps.provider" variant="outline" class="font-black uppercase text-[9px] px-3 border-emerald-200 text-emerald-700">{{ gpsProviderLabel(car.gpsProvider) }}</Badge>
+                      <span v-else-if="car.gpsProvider" class="font-bold text-slate-400 text-sm tracking-[0.3em] select-none">•••••</span>
+                      <span v-else class="font-bold text-slate-300 text-sm">—</span>
+                      <span v-if="isStaged('gpsProvider')" class="text-[7px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-600 border border-amber-200">Modifié</span>
+                      <button v-if="car.gpsProvider" type="button" @click="toggleGpsReveal('provider')" class="text-slate-300 hover:text-emerald-600 transition-colors outline-none" :title="revealedGps.provider ? 'Masquer' : 'Afficher (mot de passe requis)'">
+                        <EyeOff v-if="revealedGps.provider" class="w-3.5 h-3.5" />
+                        <Eye v-else class="w-3.5 h-3.5" />
+                      </button>
+                      <Button v-if="authStore.isAdmin && !car.disabled && revealedGps.provider" @click="startEdit('gpsProvider', car.gpsProvider || '')" variant="ghost" size="icon" class="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-emerald-400">
+                        <Pencil class="w-3 h-3" />
+                      </Button>
+                    </div>
+                 </div>
             </div>
           </CardContent>
         </Card>
@@ -386,13 +407,40 @@
                       </div>
                     </div>
                   </div>
-                </TabPanel>
-             </TabView>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  </div>
+                 </TabPanel>
+              </TabView>
+           </CardContent>
+         </Card>
+       </div>
+     </div>
+
+      <!-- Side Calendar Button -->
+      <button
+        v-if="car"
+        @click="showCarCalendar = true"
+        class="fixed right-0 top-1/2 -translate-y-1/2 z-40 bg-indigo-600 hover:bg-indigo-700 text-white shadow-2xl shadow-indigo-900/30 rounded-l-2xl px-2.5 py-6 flex flex-col items-center gap-3 transition-all duration-300 hover:pr-4 group border border-indigo-500/50 border-r-0"
+        title="Agenda Mensuel du véhicule"
+      >
+        <CalendarDays class="w-5 h-5 group-hover:scale-110 transition-transform" />
+        <span class="text-[9px] font-black uppercase tracking-[0.25em] [writing-mode:vertical-rl] rotate-180">Agenda</span>
+      </button>
+
+      <!-- Calendar Slider Drawer -->
+      <Drawer v-model:visible="showCarCalendar" position="right" :modal="true" class="!w-full sm:!w-[900px] !bg-slate-50">
+        <template #header>
+          <div class="flex items-center gap-3">
+            <div class="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center shadow-md shadow-indigo-200">
+              <CalendarDays class="w-4.5 h-4.5 text-white" />
+            </div>
+            <div>
+              <p class="text-sm font-black text-slate-900 uppercase tracking-tight italic">Agenda Mensuel</p>
+              <p v-if="car" class="text-[9px] font-bold text-slate-400 uppercase tracking-widest font-mono">{{ (car as any).matricule || '' }}</p>
+            </div>
+          </div>
+        </template>
+        <CarMonthlyCalendar v-if="showCarCalendar && car" :car-id="(car as any)._id" />
+      </Drawer>
+   </div>
   <div v-else class="flex flex-col items-center justify-center p-20 space-y-6">
     <div class="relative flex items-center justify-center">
        <div class="w-16 h-16 border-[6px] border-indigo-100 rounded-full"></div>
@@ -613,6 +661,35 @@
     </DialogContent>
   </Dialog>
 
+  <!-- GPS REVEAL PASSWORD POPUP -->
+  <Dialog v-model:open="showGpsPwdDialog">
+    <DialogContent class="sm:max-w-md bg-white border-border shadow-3xl rounded-[2.5rem] p-10 overflow-hidden text-center max-h-[90vh] overflow-y-auto">
+      <DialogHeader class="mb-8">
+        <div class="w-16 h-16 bg-gradient-to-br from-emerald-500 to-teal-600 text-white rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-emerald-600/25"><Lock class="w-8 h-8" /></div>
+        <DialogTitle class="text-2xl font-black uppercase tracking-tight">Information Sensible</DialogTitle>
+        <p class="text-[10px] font-black uppercase opacity-40 mt-1">Saisissez votre mot de passe pour afficher {{ pendingGpsField === 'provider' ? 'le fournisseur GPS' : "l'IMEI GPS" }}</p>
+      </DialogHeader>
+      <div class="space-y-6">
+        <div v-if="guard.isLocked" class="flex items-center justify-center gap-2 bg-rose-50 text-rose-600 border border-rose-200 rounded-xl px-4 py-3">
+          <Lock class="w-4 h-4" />
+          <span class="text-[10px] font-black uppercase tracking-widest">Trop de tentatives — réessayez dans {{ guard.remainingSeconds }}s</span>
+        </div>
+        <div class="relative">
+          <Input :type="showPassword ? 'text' : 'password'" v-model="adminPassword" :disabled="guard.isLocked" placeholder="••••••••" class="form-field form-field-pwd text-center pr-12" @keyup.enter="confirmGpsReveal" />
+          <button type="button" @click="showPassword = !showPassword" class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-emerald-600 transition-colors outline-none">
+            <Eye v-if="!showPassword" class="w-4 h-4" />
+            <EyeOff v-else class="w-4 h-4" />
+          </button>
+        </div>
+        <p v-if="gpsPasswordError" class="text-[10px] font-black text-destructive uppercase italic">⚠ {{ gpsPasswordError }}</p>
+        <div class="flex gap-4">
+          <Button @click="showGpsPwdDialog = false" variant="ghost" class="flex-1 h-14 rounded-2xl font-black uppercase text-[10px]">Annuler</Button>
+          <Button @click="confirmGpsReveal" :disabled="!adminPassword || guard.isLocked" class="flex-1 h-14 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-black uppercase text-[10px] shadow-xl shadow-emerald-600/20">Afficher</Button>
+        </div>
+      </div>
+    </DialogContent>
+  </Dialog>
+
   <!-- DELETE MODAL -->
   <Dialog v-model:open="showSecurityModal">
     <DialogContent class="sm:max-w-md bg-white border-none shadow-[0_20px_60px_rgba(0,0,0,0.3)] rounded-[2.5rem] p-8 max-h-[90vh] overflow-y-auto no-scrollbar">
@@ -644,6 +721,34 @@
     </DialogContent>
   </Dialog>
 
+  <!-- STICKY BATCH SAVE BAR -->
+  <transition enter-active-class="transition duration-300 ease-out" enter-from-class="opacity-0 translate-y-6" enter-to-class="opacity-100 translate-y-0"
+    leave-active-class="transition duration-200 ease-in" leave-from-class="opacity-100" leave-to-class="opacity-0 translate-y-6">
+    <div v-if="pendingCount > 0" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-40">
+      <div class="bg-slate-900 text-white rounded-[1.75rem] shadow-2xl shadow-slate-900/30 pl-5 pr-2 py-2 flex items-center gap-4 border border-slate-700/60">
+        <div class="flex items-center gap-3 min-w-0">
+          <span class="relative flex h-2 w-2 shrink-0">
+            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+            <span class="relative inline-flex rounded-full h-2 w-2 bg-amber-400"></span>
+          </span>
+          <div class="min-w-0">
+            <p class="text-[10px] font-black uppercase tracking-widest whitespace-nowrap leading-tight">{{ pendingCount }} modification(s) en attente</p>
+            <p class="hidden md:block text-[8px] font-bold text-slate-400 truncate max-w-[260px]">{{ pendingFieldNames }}</p>
+          </div>
+        </div>
+        <button @click="cancelAllPending" title="Tout annuler"
+          class="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 transition-all active:scale-90 flex items-center justify-center shrink-0">
+          <X class="w-4 h-4" />
+        </button>
+        <button @click="prepareSave"
+          class="h-11 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-black uppercase tracking-widest text-[10px] flex items-center gap-2 shadow-lg shadow-indigo-900/40 transition-all active:scale-95 shrink-0">
+          <Check class="w-4 h-4" />
+          Enregistrer tout
+        </button>
+      </div>
+    </div>
+  </transition>
+
   <!-- INLINE EDIT PASSWORD CONFIRM -->
   <Dialog v-model:open="showConfirmDialog">
     <DialogContent class="sm:max-w-md bg-white border-none shadow-3xl rounded-[2.5rem] p-8">
@@ -652,7 +757,7 @@
           <ShieldAlert class="w-8 h-8" />
         </div>
         <DialogTitle class="text-xl font-black text-slate-900 uppercase italic tracking-tighter">Confirmation <span class="text-indigo-600">Admin</span></DialogTitle>
-        <p class="text-[10px] font-bold text-slate-400 tracking-widest uppercase mt-1">Saisissez votre mot de passe pour valider</p>
+        <p class="text-[10px] font-bold text-slate-400 tracking-widest uppercase mt-1">Mot de passe requis pour {{ pendingCount }} modification(s)</p>
       </DialogHeader>
       
       <div v-if="guard.isLocked" class="flex items-center justify-center gap-2 bg-rose-50 text-rose-600 border border-rose-200 rounded-xl px-4 py-3 mb-4">
@@ -754,7 +859,7 @@ import {
 } from '@/api';
 import { formatDate } from '@/lib/utils';
 import { 
-  ChevronLeft, ArrowRight, Wallet, Pencil, Check, X, ShieldAlert, Trash2, Eye, EyeOff, Upload, FileText, ExternalLink, Lock, ChevronDown, Car, CalendarClock, Loader2
+  ChevronLeft, ArrowRight, Wallet, Pencil, Check, X, ShieldAlert, Trash2, Eye, EyeOff, Upload, FileText, ExternalLink, Lock, ChevronDown, Car, CalendarClock, CalendarDays, Loader2
 } from 'lucide-vue-next';
 import Card from '@/components/ui/card/Card.vue';
 import CardContent from '@/components/ui/card/CardContent.vue';
@@ -765,14 +870,17 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import TabView from 'primevue/tabview';
 import TabPanel from 'primevue/tabpanel';
+import Drawer from 'primevue/drawer';
 import DataTable from 'primevue/datatable';
 import Column from 'primevue/column';
+import CarMonthlyCalendar from '@/components/CarMonthlyCalendar.vue';
 
 const router = useRouter();
 const route = useRoute();
 const authStore = useAuthStore();
 const toast = useToast();
 const guard = usePasswordGuard();
+const showCarCalendar = ref(false);
 const car = ref<any>(null);
 
 const statusSaving = ref(false);
@@ -801,6 +909,27 @@ const submittingAction = ref(false);
 const editingField = ref<string | null>(null);
 const editValue = ref<any>(null);
 const showConfirmDialog = ref(false);
+
+// Batch inline edits: fields are staged locally, then saved in ONE request
+// with a SINGLE password prompt via the sticky "Enregistrer tout" bar.
+const pendingChanges = ref<Record<string, any>>({});
+const FIELD_LABELS: Record<string, string> = {
+  dailyRate: 'Tarif',
+  mileage: 'Kilométrage',
+  color: 'Couleur',
+  insuranceDate: 'Assurance',
+  nextTechnicalVisitDate: 'Visite Technique',
+  nextOilChangeMileage: 'Vidange',
+  departureDate: 'Date Départ',
+  agence: 'Agence',
+  gpsImei: 'IMEI GPS',
+  gpsProvider: 'Fournisseur GPS'
+};
+const pendingCount = computed(() => Object.keys(pendingChanges.value).length);
+const pendingFieldNames = computed(() =>
+  Object.keys(pendingChanges.value).map((f) => FIELD_LABELS[f] || f).join(' · ')
+);
+const isStaged = (field: string) => pendingChanges.value[field] !== undefined;
 
 const selectedHistoryItem = ref<any>(null);
 const showHistoryDetail = ref(false);
@@ -948,11 +1077,66 @@ const cancelDocumentChanges = () => {
 
 const startEdit = (field: string, value: any) => {
   editingField.value = field;
-  editValue.value = value;
+  editValue.value = field in pendingChanges.value ? pendingChanges.value[field] : value;
+};
+
+// Stage the edit locally — nothing is sent until "Enregistrer tout" (one password for all)
+const stageEdit = () => {
+  if (!editingField.value) return;
+  const val = typeof editValue.value === 'string' ? editValue.value.trim() : editValue.value;
+  pendingChanges.value[editingField.value] = val;
+  cancelEdit();
+};
+
+const cancelAllPending = () => {
+  pendingChanges.value = {};
+  cancelEdit();
 };
 
 const gpsProviderLabel = (p: string) =>
   p === 'traci' ? 'Traci.tn' : p === 'winnou' ? 'Winnou.tn' : p === 'autre' ? 'Autre' : p;
+
+const revealedGps = ref<Record<string, boolean>>({ imei: false, provider: false });
+const showGpsPwdDialog = ref(false);
+const gpsPasswordError = ref('');
+const pendingGpsField = ref<'imei' | 'provider' | null>(null);
+
+const toggleGpsReveal = (field: 'imei' | 'provider') => {
+  if (!authStore.isAdmin) return;
+  if (revealedGps.value[field]) {
+    revealedGps.value[field] = false;
+    return;
+  }
+  pendingGpsField.value = field;
+  adminPassword.value = '';
+  gpsPasswordError.value = '';
+  showGpsPwdDialog.value = true;
+};
+
+const confirmGpsReveal = async () => {
+  if (!adminPassword.value) {
+    gpsPasswordError.value = 'Le mot de passe est obligatoire.';
+    return;
+  }
+  if (guard.isLocked || !pendingGpsField.value) return;
+  try {
+    const res: any = await authApi.verifyPassword(adminPassword.value);
+    if (!res?.valid && res?.valid !== undefined) {
+      guard.registerFailure();
+      gpsPasswordError.value = 'Mot de passe incorrect.';
+      return;
+    }
+    revealedGps.value[pendingGpsField.value] = true;
+    guard.reset();
+    showGpsPwdDialog.value = false;
+    adminPassword.value = '';
+    toast.add({ severity: 'success', summary: 'Succès', detail: 'Information GPS affichée', life: 2000 });
+  } catch (err: any) {
+    if (handlePasswordError(err, toast)) return;
+    guard.registerFailure();
+    gpsPasswordError.value = err.response?.data?.message || 'Mot de passe incorrect.';
+  }
+};
 
 const cancelEdit = () => {
   editingField.value = null;
@@ -960,29 +1144,41 @@ const cancelEdit = () => {
 };
 
 const prepareSave = () => {
+  if (!pendingCount.value) return;
+  adminPassword.value = '';
   showConfirmDialog.value = true;
 };
 
 const executeInlineSave = async () => {
-  if (!adminPassword.value) return;
+  if (!adminPassword.value || !pendingCount.value) return;
   submittingAction.value = true;
   try {
-    const payload = { [editingField.value!]: editValue.value, password: adminPassword.value };
+    const payload: any = { ...pendingChanges.value, password: adminPassword.value };
+    if ('agence' in payload && !payload.agence) payload.agence = null;
     await carApi.update(car.value._id, payload);
     guard.reset();
-    
+
     // Update local state
-    if (editingField.value === 'agence') {
-      car.value.agence = agences.value.find((a: any) => a._id === editValue.value) || null;
-    } else {
-      car.value[editingField.value!] = editValue.value;
+    for (const [field, value] of Object.entries(pendingChanges.value)) {
+      if (field === 'agence') {
+        car.value.agence = agences.value.find((a: any) => a._id === value) || null;
+      } else {
+        car.value[field] = value;
+      }
     }
-    
-    cancelEdit();
+
+    toast.add({
+      severity: 'success',
+      summary: 'Modifications Enregistrées',
+      detail: `${pendingCount.value} champ(s) mis à jour avec succès.`,
+      life: 3000
+    });
+
+    cancelAllPending();
     showConfirmDialog.value = false;
     adminPassword.value = '';
   } catch (err: any) {
-    console.error('Failed to update field', err);
+    console.error('Failed to update fields', err);
     if (handlePasswordError(err, toast)) return;
     alert(err.response?.data?.message || 'Erreur lors de la modification.');
   } finally {

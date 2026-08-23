@@ -204,7 +204,7 @@ export class ContratService implements OnModuleInit {
     if (createContratDto.reservation) {
       await this.reservationModel
         .findByIdAndUpdate(createContratDto.reservation, {
-          status: 'confirmed',
+          status: 'converted',
           contrat: savedContrat._id,
         })
         .exec();

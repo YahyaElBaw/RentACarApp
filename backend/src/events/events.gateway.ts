@@ -49,9 +49,8 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   ) {
     if (payload && payload.userId) {
       this.logger.log(`User identified: ${payload.name} (${payload.role}) on socket ${client.id}`);
-      void this.presenceService.heartbeat(payload.userId, payload.name, payload.role).then(() => {
-        this.broadcastOnlineUsers();
-      });
+      // Presence itself is owned by login + API activity; just refresh the broadcast.
+      this.broadcastOnlineUsers();
     }
   }
 

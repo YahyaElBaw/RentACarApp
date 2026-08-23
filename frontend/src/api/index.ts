@@ -61,6 +61,7 @@ export const dashboardApi = {
 
 export const gpsApi = {
   getPositions: () => api.get('/gps/positions').then(res => res.data),
+  getSpeedAlerts: (limit = 50) => api.get('/gps/speed-alerts', { params: { limit } }).then(res => res.data),
 };
 
 export const carApi = {
@@ -91,6 +92,7 @@ export const reservationApi = {
   create: (data: any) => api.post('/reservations', data).then(res => res.data),
   update: (id: string, data: any) => api.patch(`/reservations/${id}`, data).then(res => res.data),
   confirm: (id: string, force = false) => api.patch(`/reservations/${id}/confirm`, null, { params: { force } }).then(res => res.data),
+  updateStatus: (id: string, status: string, contratId?: string) => api.patch(`/reservations/${id}/status`, { status, contratId }).then(res => res.data),
   delete: (id: string) => api.delete(`/reservations/${id}`).then(res => res.data),
 };
 
@@ -150,6 +152,7 @@ export const agenceApi = {
 export const presenceApi = {
   heartbeat: () => api.post('/presence/heartbeat').then(res => res.data),
   online: () => api.get('/presence/online').then(res => res.data),
+  heartbeat: (data?: any) => api.post('/presence/heartbeat', data || {}).then(res => res.data),
   logout: () => api.post('/presence/logout').then(res => res.data),
 };
 

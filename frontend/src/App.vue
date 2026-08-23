@@ -8,14 +8,14 @@ import {
   LayoutDashboard, Car, FileText, Users, Calendar, Wallet, MapPinned,
   LogOut, ShieldCheck, X, Calculator, Bell, AlertCircle, CheckCircle2,
   RefreshCcw, Search, Settings, WifiOff, ScrollText, Radio, Building2,
-  Eye as EyeIcon, EyeOff as EyeOffIcon
+  Eye as EyeIcon, EyeOff as EyeOffIcon, Monitor, Smartphone
 } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge/index'
 import TitleBar from '@/components/TitleBar.vue'
 import Toast from 'primevue/toast'
-import { dashboardApi, vidangeApi, visiteApi, settingApi, userApi } from '@/api'
+import { dashboardApi, vidangeApi, visiteApi, settingApi, userApi, gpsApi } from '@/api'
 import { onMounted, onUnmounted, reactive } from 'vue'
 import { useToast } from 'primevue/usetoast'
 import { 
@@ -100,6 +100,11 @@ const directoryUsers = computed(() =>
 )
 const onlineUsersCount = computed(() => directoryUsers.value.filter(u => u.online).length)
 
+const devicesFor = (u: any): string[] => {
+  const o = socketStore.onlineUsers.find(x => x.userId === (u._id || u.userId))
+  return o?.devices?.length ? o.devices : [o?.device || 'pc']
+}
+
 watch(showOnlineUsersModal, (val) => {
   if (val) loadDirectoryUsers()
 })
@@ -125,6 +130,53 @@ const fetchAlerts = async () => {
 }
 
 let alertInterval: any = null
+
+// ── Speed alerts (GPS) ───────────────────────────────────────────────────────
+let unsubscribeSpeedAlerts: Function | null = null
+const speedAlerts = ref<any[]>([])
+
+const formatAlertDateTime = (iso: string): string => {
+  const d = new Date(iso)
+  const date = d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  const time = d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+  return `${date} à ${time}`
+}
+
+const handleSpeedAlertEvent = (payload: any) => {
+  const a = payload?.data || payload || {}
+  const carLabel = [a.brand, a.model].filter(Boolean).join(' ') || 'Véhicule'
+  const when = formatAlertDateTime(a.alertAt || new Date().toISOString())
+  const limitTxt = Number.isFinite(Number(a.limit)) ? ` (limite ${Number(a.limit)})` : ''
+  toast.add({
+    severity: 'warn',
+    summary: 'Excès de Vitesse',
+    detail: `${carLabel} (${a.matricule || '?'}) roule à ${Math.round(a.speed)} km/h${limitTxt} — ${when}`,
+    life: 10000,
+  })
+}
+
+const loadSpeedAlerts = async () => {
+  if (!isAuthenticated.value) return
+  try {
+    speedAlerts.value = await gpsApi.getSpeedAlerts(20)
+  } catch {
+    // ignore
+  }
+}
+
+const connectSpeedAlertListener = () => {
+  if (!unsubscribeSpeedAlerts && isAuthenticated.value) {
+    unsubscribeSpeedAlerts = socketStore.onEvent('gps:speed-alert', handleSpeedAlertEvent)
+    loadSpeedAlerts()
+  }
+}
+
+const disconnectSpeedAlertListener = () => {
+  if (unsubscribeSpeedAlerts) {
+    unsubscribeSpeedAlerts()
+    unsubscribeSpeedAlerts = null
+  }
+}
 
 // Alert dismissal (admin only, password required)
 const showDismissPwd = ref(false)
@@ -223,6 +275,7 @@ onMounted(() => {
     fetchAlerts()
     socketStore.connect()
     socketStore.startPresence()
+    connectSpeedAlertListener()
     alertInterval = setInterval(fetchAlerts, 60000 * 5) // Every 5 mins
   }
 })
@@ -232,6 +285,7 @@ onUnmounted(() => {
   window.removeEventListener('offline', handleOffline)
   window.removeEventListener('api-network-error', handleApiError)
   if (alertInterval) clearInterval(alertInterval)
+  disconnectSpeedAlertListener()
   socketStore.stopPresence()
   socketStore.disconnect()
 })
@@ -242,10 +296,12 @@ watch(isAuthenticated, (val) => {
     fetchAlerts()
     socketStore.connect()
     socketStore.startPresence()
+    connectSpeedAlertListener()
     if (!alertInterval) alertInterval = setInterval(fetchAlerts, 60000 * 5)
   } else {
     socketStore.stopPresence()
     socketStore.disconnect()
+    disconnectSpeedAlertListener()
     if (alertInterval) {
       clearInterval(alertInterval)
       alertInterval = null
@@ -713,7 +769,14 @@ watch(() => vidangeForm.mileageAtChange, (newVal) => {
                       <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                       <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                     </span>
-                    En ligne
+                    <span class="flex items-center gap-1" :title="devicesFor(u).map(d => d === 'phone' ? 'Connecté depuis un téléphone' : 'Connecté depuis un PC').join(', ')">
+                      <template v-for="(d, di) in devicesFor(u)" :key="d">
+                        <span v-if="di > 0" class="opacity-40">·</span>
+                        <Smartphone v-if="d === 'phone'" class="w-3.5 h-3.5" />
+                        <Monitor v-else class="w-3.5 h-3.5" />
+                        <span>{{ d === 'phone' ? 'Tél' : 'PC' }}</span>
+                      </template>
+                    </span>
                   </div>
                 </div>
               </div>

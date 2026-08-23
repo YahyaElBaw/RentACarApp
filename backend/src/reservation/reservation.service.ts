@@ -9,6 +9,7 @@ import { Model } from 'mongoose';
 import { Reservation, ReservationDocument } from './schemas/reservation.schema';
 import { Car, CarDocument } from '../car/schemas/car.schema';
 import { Client, ClientDocument } from '../client/schemas/client.schema';
+import { Contrat, ContratDocument } from '../contrat/schemas/contrat.schema';
 
 import { JourneeService } from '../journee/journee.service';
 import { BookingConflictService } from '../shared/booking-conflict.service';
@@ -21,6 +22,7 @@ export class ReservationService {
     private reservationModel: Model<ReservationDocument>,
     @InjectModel(Car.name) private carModel: Model<CarDocument>,
     @InjectModel(Client.name) private clientModel: Model<ClientDocument>,
+    @InjectModel(Contrat.name) private contratModel: Model<ContratDocument>,
     private journeeService: JourneeService,
     private bookingConflictService: BookingConflictService,
     private eventsGateway: EventsGateway,
@@ -277,5 +279,49 @@ export class ReservationService {
     });
 
     return reservation;
+  }
+
+  async updateStatus(
+    id: string,
+    status: string,
+    contratId?: string,
+  ): Promise<ReservationDocument> {
+    const validStatuses = ['pending', 'confirmed', 'cancelled', 'converted'];
+    if (!validStatuses.includes(status)) {
+      throw new BadRequestException(`Statut invalide: ${status}`);
+    }
+
+    const reservation = await this.reservationModel.findById(id).exec();
+    if (!reservation) {
+      throw new NotFoundException(`Reservation with ID ${id} not found`);
+    }
+
+    if (status === 'converted') {
+      if (!contratId) {
+        throw new BadRequestException(
+          'Un contrat doit être sélectionné pour le statut "converted"',
+        );
+      }
+      const contrat = await this.contratModel.findById(contratId).exec();
+      if (!contrat) {
+        throw new NotFoundException(`Contract with ID ${contratId} not found`);
+      }
+      reservation.contrat = contrat._id as any;
+      // Bidirectional link
+      await this.contratModel
+        .findByIdAndUpdate(contratId, { $set: { reservation: reservation._id } })
+        .exec();
+    }
+
+    reservation.status = status;
+    await reservation.save();
+
+    this.eventsGateway.broadcastDataChange('reservation:change', {
+      action: 'status-changed',
+      id,
+      status,
+    });
+
+    return this.findOne(id);
   }
 }

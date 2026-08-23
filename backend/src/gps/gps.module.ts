@@ -9,13 +9,20 @@ import {
   CarPosition,
   CarPositionSchema,
 } from './schemas/car-position.schema';
+import {
+  SpeedAlert,
+  SpeedAlertSchema,
+} from './schemas/speed-alert.schema';
 import { Contrat, ContratSchema } from '../contrat/schemas/contrat.schema';
+import { Setting, SettingSchema } from '../setting/schemas/setting.schema';
 
 @Module({
   imports: [
     MongooseModule.forFeature([
       { name: CarPosition.name, schema: CarPositionSchema },
+      { name: SpeedAlert.name, schema: SpeedAlertSchema },
       { name: Contrat.name, schema: ContratSchema },
+      { name: Setting.name, schema: SettingSchema },
     ]),
     CarModule,
   ],

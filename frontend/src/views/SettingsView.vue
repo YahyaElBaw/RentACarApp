@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useAuthStore } from '@/stores/auth'
-import { Car, Users, Calculator, RefreshCw, AlertTriangle, FileText, Wrench, KeyRound, UserCircle2, Eye, EyeOff, Loader2 } from 'lucide-vue-next'
+import { Car, Users, Calculator, RefreshCw, AlertTriangle, FileText, Wrench, KeyRound, UserCircle2, Eye, EyeOff, Loader2, Gauge } from 'lucide-vue-next'
 import { useToast } from 'primevue/usetoast'
 
 const authStore = useAuthStore()
@@ -43,6 +43,7 @@ const appSettings = reactive({
   vidangeLimit: 10000,
   assuranceLimit: 12,
   visiteLimit: 6,
+  speedAlertLimit: 130,
   tvaEnabled: false,
   tvaValue: 20,
   contractTaxEnabled: false,
@@ -328,7 +329,7 @@ const restoreClient = async (id: string) => {
             <CardDescription class="text-[10px] font-black uppercase tracking-widest text-indigo-600/60 mt-2">Definir les valeurs par defaut pour les alertes de vidange, assurance et visite technique.</CardDescription>
           </CardHeader>
           <CardContent class="p-8">
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
               <div class="space-y-3">
                 <Label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Vidange (+ KM)</Label>
                 <div class="relative">
@@ -349,6 +350,16 @@ const restoreClient = async (id: string) => {
                   <Input type="number" v-model="appSettings.visiteLimit" class="h-14 bg-slate-50 border-slate-100 focus:ring-4 focus:ring-indigo-600/5 rounded-2xl font-black text-slate-900 pr-16" />
                   <span class="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400 uppercase tracking-widest">MOIS</span>
                 </div>
+              </div>
+              <div class="space-y-3">
+                <Label class="text-[10px] font-black text-rose-500 uppercase tracking-widest flex items-center gap-1.5">
+                  <Gauge class="w-3.5 h-3.5" /> Limite de Vitesse
+                </Label>
+                <div class="relative">
+                  <Input type="number" step="any" min="1" v-model.number="appSettings.speedAlertLimit" class="h-14 bg-rose-50/40 border-rose-100 focus:ring-4 focus:ring-rose-500/5 rounded-2xl font-black text-slate-900 pr-14" />
+                  <span class="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-rose-400 uppercase tracking-widest">KM/H</span>
+                </div>
+                <p class="text-[9px] font-bold text-slate-400 italic">Alerte GPS dès que ce seuil est dépassé.</p>
               </div>
             </div>
             <div class="mt-8 flex justify-end">

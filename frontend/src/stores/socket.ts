@@ -9,6 +9,8 @@ export interface ActiveUser {
   userId: string;
   name: string;
   role: string;
+  device?: 'phone' | 'pc' | string;
+  devices?: string[];
   connectedAt: string;
 }
 
@@ -48,7 +50,7 @@ export const useSocketStore = defineStore('socket', () => {
     });
 
     // Global listener dispatcher
-    const events = ['contract:change', 'car:change', 'reservation:change', 'depense:change', 'user:login'];
+    const events = ['contract:change', 'car:change', 'reservation:change', 'depense:change', 'user:login', 'gps:speed-alert'];
     events.forEach((eventName) => {
       socket.value?.on(eventName, (payload: any) => {
         const callbacks = listeners.get(eventName);
@@ -93,7 +95,7 @@ export const useSocketStore = defineStore('socket', () => {
 
   async function sendHeartbeat() {
     try {
-      await presenceApi.heartbeat();
+      await presenceApi.heartbeat({ device: 'pc' });
     } catch (err) {
       // ignore polling failures
     }
@@ -108,6 +110,8 @@ export const useSocketStore = defineStore('socket', () => {
         userId: u.userId,
         name: u.name || '',
         role: u.role || 'user',
+        device: u.device || 'pc',
+        devices: Array.isArray(u.devices) && u.devices.length ? u.devices : [u.device || 'pc'],
         connectedAt: u.lastSeen,
       }));
     } catch (err) {

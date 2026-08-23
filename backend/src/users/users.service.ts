@@ -10,6 +10,7 @@ import { Model } from 'mongoose';
 import * as bcrypt from 'bcrypt';
 import { User, UserDocument } from './schemas/user.schema';
 import { LogService } from '../log/log.service';
+import { PresenceService } from '../presence/presence.service';
 
 export interface UserActor {
   id: string;
@@ -22,6 +23,7 @@ export class UsersService implements OnModuleInit {
   constructor(
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     private readonly logService: LogService,
+    private readonly presenceService: PresenceService,
   ) {}
 
   async onModuleInit() {
@@ -308,6 +310,7 @@ export class UsersService implements OnModuleInit {
     }
 
     await this.userModel.findByIdAndDelete(id).exec();
+    await this.presenceService.remove(String(user._id)).catch(() => undefined);
 
     await this.logService.add({
       action: 'USER_DELETED',

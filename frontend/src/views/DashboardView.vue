@@ -222,37 +222,37 @@
           <!-- BIG MONTHLY CALENDAR VIEW -->
           <div v-else-if="dashboardViewMode === 'calendar'" class="p-6 space-y-6">
             <!-- Calendar Controls & Filters Header -->
-            <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-slate-50/80 p-4 rounded-2xl border border-slate-100">
+            <div class="flex items-center gap-3 bg-slate-50/80 px-4 py-3 rounded-2xl border border-slate-100">
               <!-- Month Navigation -->
-              <div class="flex items-center gap-3">
+              <div class="flex items-center gap-2">
                 <div class="flex items-center bg-white rounded-xl shadow-sm border border-slate-200 p-1">
                   <Button variant="ghost" size="icon" class="w-8 h-8 rounded-lg text-slate-600 hover:bg-slate-100" @click="prevCalendarMonth">
                     <ChevronLeft class="w-4 h-4" />
                   </Button>
-                  <span class="px-4 text-xs font-black text-slate-900 uppercase tracking-wider min-w-[140px] text-center italic">
+                  <span class="px-3 text-xs font-black text-slate-900 uppercase tracking-wider min-w-[130px] text-center italic">
                     {{ calendarMonthYearLabel }}
                   </span>
                   <Button variant="ghost" size="icon" class="w-8 h-8 rounded-lg text-slate-600 hover:bg-slate-100" @click="nextCalendarMonth">
                     <ChevronRight class="w-4 h-4" />
                   </Button>
                 </div>
-                <Button variant="outline" size="sm" @click="resetCalendarToToday" class="h-10 px-3 rounded-xl text-[9px] font-black uppercase tracking-widest bg-white border-slate-200 text-slate-600 hover:bg-slate-100">
+                <Button variant="outline" size="sm" @click="resetCalendarToToday" class="h-9 px-3 rounded-xl text-[9px] font-black uppercase tracking-widest bg-white border-slate-200 text-slate-600 hover:bg-slate-100">
                   Aujourd'hui
                 </Button>
               </div>
 
               <!-- Filters: Car Filter & Action Filter -->
-              <div class="flex flex-wrap items-center gap-4">
+              <div class="flex items-center gap-2.5 ml-auto">
                 <!-- Vehicle Filter -->
-                <div class="flex items-center gap-2">
+                <div class="flex items-center gap-1.5">
                   <label class="text-[9px] font-black uppercase tracking-widest text-slate-400">Véhicule:</label>
                   <select
                     v-model="calendarCarFilter"
-                    class="h-10 px-3 rounded-xl bg-white border border-slate-200 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-sm transition-all cursor-pointer"
+                    class="h-9 px-2.5 rounded-xl bg-white border border-slate-200 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-sm transition-all cursor-pointer"
                   >
                     <option value="all">Tous les véhicules ({{ allCars.length }})</option>
                     <option v-for="car in allCars" :key="car._id" :value="car._id">
-                      {{ car.brand }} {{ car.model }} — N° Série: {{ car.matricule || 'Sans plaque' }}
+                      {{ car.matricule || 'Sans plaque' }}
                     </option>
                   </select>
                 </div>
@@ -261,7 +261,7 @@
                 <div class="flex items-center gap-1 bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
                   <button
                     @click="calendarActionFilter = 'all'"
-                    :class="['px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all', calendarActionFilter === 'all' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-500 hover:text-slate-900']"
+                    :class="['px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all', calendarActionFilter === 'all' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-500 hover:text-slate-900']"
                   >
                     Toutes
                   </button>
@@ -270,7 +270,7 @@
                   <button
                     @click="calendarActionFilter = 'reservation'"
                     :class="[
-                      'px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5',
+                      'px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5',
                       calendarActionFilter === 'reservation' ? 'bg-amber-400 text-amber-950 shadow-md font-black' : 'text-slate-600 hover:text-amber-600 hover:bg-amber-50'
                     ]"
                   >
@@ -282,7 +282,7 @@
                   <button
                     @click="calendarActionFilter = 'contrat'"
                     :class="[
-                      'px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5',
+                      'px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5',
                       calendarActionFilter === 'contrat' ? 'bg-emerald-600 text-white shadow-md font-black' : 'text-slate-600 hover:text-emerald-600 hover:bg-emerald-50'
                     ]"
                   >
@@ -290,6 +290,19 @@
                     <span>Contrat</span>
                   </button>
                 </div>
+
+                <!-- Current Contracts Only Toggle -->
+                <button
+                  @click="calendarCurrentOnly = !calendarCurrentOnly"
+                  :class="[
+                    'h-9 px-3 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-2 border shadow-sm whitespace-nowrap',
+                    calendarCurrentOnly ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-200' : 'bg-white text-indigo-600 hover:bg-indigo-50 border-slate-200'
+                  ]"
+                  title="Afficher uniquement les départs/retours des contrats en cours"
+                >
+                  <span :class="['w-2.5 h-2.5 rounded-full', calendarCurrentOnly ? 'bg-white' : 'bg-indigo-500']"></span>
+                  Contrats en cours
+                </button>
 
               </div>
             </div>
@@ -342,11 +355,14 @@
                       v-for="evt in getDayEvents(day.dateStr).slice(0, 3)"
                       :key="evt.id + evt.dayType"
                       @click.stop="navigateToEvent(evt)"
+                      @mouseenter="hoveredEventId = String(evt.id)"
+                      @mouseleave="hoveredEventId = null"
                       :class="[
-                        'px-2 py-1 rounded-lg border text-[9px] font-black uppercase tracking-tight flex items-center gap-1.5 transition-all duration-200 truncate cursor-pointer shadow-2xs hover:scale-[1.02]',
-                        evt.dayType === 'depart' ? 'bg-rose-500/20 border-rose-300 text-rose-950 hover:bg-rose-500/40'
-                          : evt.dayType === 'retour' ? 'bg-emerald-500/20 border-emerald-300 text-emerald-950 hover:bg-emerald-500/40'
-                          : 'bg-amber-400/20 border-amber-300 text-amber-950 hover:bg-amber-400/40'
+                        'px-2 py-1 rounded-lg border text-[9px] font-black uppercase tracking-tight flex items-center gap-1.5 transition-all duration-300 truncate cursor-pointer',
+                        eventHighlightClass(evt),
+                        evt.dayType === 'depart' ? 'bg-rose-500/20 border-rose-300 text-rose-950'
+                          : evt.dayType === 'retour' ? 'bg-emerald-500/20 border-emerald-300 text-emerald-950'
+                          : 'bg-amber-400/20 border-amber-300 text-amber-950'
                       ]"
                       :title="`${evt.dayType === 'depart' ? 'Départ' : evt.dayType === 'retour' ? 'Retour' : 'Réservation'}: ${evt.carBrandModel} (${evt.carMatricule}) - ${evt.clientName}`"
                     >
@@ -358,11 +374,8 @@
                         ]"
                       ></span>
 
-                      <span class="truncate font-black flex items-center gap-1">
-                        <span>{{ evt.carBrandModel }}</span>
-                        <span v-if="evt.carMatricule && evt.carMatricule !== 'Sans Plaque'" class="text-[7.5px] font-mono text-slate-800 bg-white/70 px-1 rounded border border-slate-300 shrink-0">
-                          {{ evt.carMatricule }}
-                        </span>
+                      <span class="truncate font-mono font-black">
+                        {{ evt.carMatricule }}
                       </span>
 
                       <!-- Day Type Badge -->
@@ -689,6 +702,18 @@ const showConverterModal = ref(false)
 // Dashboard View Mode
 const dashboardViewMode = ref<'today' | 'calendar'>('today')
 
+// Calendar hover spotlight: dims every other action chip; the hovered action
+// AND its paired action of the same contrat/réservation (départ ↔ retour) stay crisp.
+const hoveredEventId = ref<string | null>(null)
+
+const eventHighlightClass = (evt: any): string => {
+  if (!hoveredEventId.value) return 'shadow-2xs'
+  if (hoveredEventId.value === String(evt.id)) {
+    return 'opacity-100 scale-[1.08] shadow-xl ring-2 ring-slate-900/15 relative z-20 bg-opacity-100'
+  }
+  return 'opacity-15 blur-[0.5px] scale-[0.97] shadow-none'
+}
+
 // Today Actions State & Filter
 const todayActionFilter = ref<'all' | 'départ' | 'retour'>('all')
 
@@ -706,6 +731,7 @@ const loadingCalendar = ref(false)
 const calendarCurrentDate = ref(new Date())
 const calendarCarFilter = ref<string>('all')
 const calendarActionFilter = ref<'all' | 'reservation' | 'contrat'>('all')
+const calendarCurrentOnly = ref(false)
 
 // Selected Day Modal State
 const selectedDayData = ref<{ dateStr: string; dateFormatted: string; events: any[] } | null>(null)
@@ -855,7 +881,7 @@ const calendarEvents = computed(() => {
   for (const r of allReservations.value) {
     if (!r.startDate || !r.endDate) continue
     const status = String(r.status || 'pending').toLowerCase()
-    if (status === 'cancelled' || status === 'annulé' || status === 'pending' || status === 'planifié' || status === 'planifiee') continue
+    if (status === 'cancelled' || status === 'annulé' || status === 'pending' || status === 'planifié' || status === 'planifiee' || status === 'converted') continue
 
     const carObj = r.car || {}
     const clientsList = Array.isArray(r.clients) ? r.clients : []
@@ -887,6 +913,11 @@ const filteredCalendarEvents = computed(() => {
   return calendarEvents.value.filter(evt => {
     if (calendarActionFilter.value !== 'all' && evt.category !== calendarActionFilter.value) {
       return false
+    }
+    if (calendarCurrentOnly.value) {
+      if (evt.category !== 'contrat') return false
+      const status = String((evt.raw && evt.raw.status) || evt.status || '').toLowerCase()
+      if (status !== 'active') return false
     }
     if (calendarCarFilter.value !== 'all') {
       if (evt.carId !== calendarCarFilter.value) return false

@@ -3,6 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
 import { LogService } from '../log/log.service';
 import { EventsGateway } from '../events/events.gateway';
+import { PresenceService } from '../presence/presence.service';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
@@ -12,9 +13,10 @@ export class AuthService {
     private jwtService: JwtService,
     private logService: LogService,
     private eventsGateway: EventsGateway,
+    private presenceService: PresenceService,
   ) {}
 
-  async login(cin: string, phone: string) {
+  async login(cin: string, phone: string, device?: string) {
     console.log(`Login attempt for CIN: ${cin}`);
     const user = await this.usersService.findByCin(cin);
     if (!user) {
@@ -50,9 +52,18 @@ export class AuthService {
       detail: `Connexion réussie pour ${user.firstName} ${user.lastName} (${cin})`,
     });
 
+    const fullName = `${user.firstName} ${user.lastName}`;
+    await this.presenceService.heartbeat(
+      user._id.toString(),
+      fullName,
+      user.role,
+      device,
+    );
+    this.eventsGateway.broadcastOnlineUsers();
+
     this.eventsGateway.broadcastDataChange('user:login', {
       userId: user._id.toString(),
-      name: `${user.firstName} ${user.lastName}`,
+      name: fullName,
       role: user.role,
     });
 
@@ -73,7 +84,7 @@ export class AuthService {
     };
   }
 
-  async logout(actor: any) {
+  async logout(actor: any, device?: string) {
     if (!actor?.id) return;
     const name = actor.name || actor.cin || 'utilisateur';
     await this.logService.add({
@@ -83,6 +94,8 @@ export class AuthService {
       role: actor.role,
       detail: `Déconnexion de ${name}`,
     });
+    await this.presenceService.remove(actor.id, device);
+    this.eventsGateway.broadcastOnlineUsers();
     this.eventsGateway.broadcastDataChange('user:logout', {
       userId: actor.id,
       name,
