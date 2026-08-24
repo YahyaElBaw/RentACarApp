@@ -192,6 +192,16 @@
                     >
                       <Trash2 class="w-4 h-4 stroke-[2.5]" />
                     </Button>
+                    <Button
+                      v-if="authStore.isSuperAdmin"
+                      variant="secondary"
+                      size="icon"
+                      @click.stop="openForceDelete(res._id)"
+                      title="Supprimer définitivement (super admin)"
+                      class="h-9 w-9 bg-rose-600 hover:bg-rose-700 text-white rounded-xl transition-all shadow-sm shadow-rose-200"
+                    >
+                      <AlertTriangle class="w-4 h-4 stroke-[2.5]" />
+                    </Button>
                   </div>
                 </TableCell>
               </TableRow>
@@ -440,10 +450,34 @@
             >
               <Trash2 class="w-4 h-4" />
             </Button>
+
+            <!-- Force delete (super admin only — permanent, password required) -->
+            <Button
+              v-if="authStore.isSuperAdmin"
+              @click="openForceDelete(selectedReservation._id)"
+              class="h-12 px-5 bg-rose-600 hover:bg-rose-700 text-white font-black rounded-2xl uppercase tracking-widest text-[10px] flex items-center justify-center gap-2 transition-all shrink-0 shadow-lg shadow-rose-200 active:scale-95"
+            >
+              <AlertTriangle class="w-4 h-4" />
+              Supprimer déf.
+            </Button>
           </div>
         </div>
       </DialogContent>
     </Dialog>
+
+    <!-- ===================== FORCE DELETE PASSWORD DIALOG ===================== -->
+    <PasswordConfirmDialog
+      v-model:open="showForceDeleteDialog"
+      v-model:password="forceDeletePassword"
+      title="Suppression"
+      subtitle="Définitive"
+      description="La réservation sera effacée de la base de données. Cette action est irréversible."
+      placeholder="Votre mot de passe..."
+      confirm-label="Supprimer définitivement"
+      loading-label="Suppression..."
+      :loading="forceDeleting"
+      @confirm="executeForceDelete"
+    />
 
     <!-- ===================== CONTRAT PICKER DIALOG ===================== -->
     <Dialog :open="showContratPicker" @update:open="(val) => showContratPicker = val">
@@ -1024,60 +1058,17 @@
     </Dialog>
 
     <!-- ===================== PASSWORD CONFIRM DIALOG ===================== -->
-    <Dialog :open="pwdDialogOpen" @update:open="(val) => { if (!val) cancelPasswordRequest() }">
-      <DialogContent class="sm:max-w-md bg-white border-none shadow-2xl rounded-[2rem] p-8 max-h-[90vh] overflow-y-auto no-scrollbar">
-        <DialogHeader class="mb-5">
-          <DialogTitle class="text-xl font-black text-slate-900 uppercase italic tracking-tighter flex items-center gap-3">
-            <div class="w-11 h-11 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-200 shrink-0">
-              <Lock class="w-5 h-5 text-white" />
-            </div>
-            Confirmation <span class="text-indigo-600">Requise</span>
-          </DialogTitle>
-          <p class="text-[10px] font-bold text-slate-400 tracking-widest uppercase mt-2 ml-14">Entrez votre mot de passe pour enregistrer</p>
-        </DialogHeader>
-
-        <div class="space-y-4">
-          <div class="relative">
-            <Lock class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-            <input
-              v-model="pwdValue"
-              :type="pwdShow ? 'text' : 'password'"
-              placeholder="Mot de passe"
-              autofocus
-              autocomplete="current-password"
-              class="w-full h-13 py-3.5 pl-11 pr-12 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold text-slate-900 placeholder:text-slate-400 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all"
-              @keydown.enter.prevent="confirmPasswordRequest"
-            />
-            <button
-              type="button"
-              @click="pwdShow = !pwdShow"
-              class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
-            >
-              <EyeOff v-if="pwdShow" class="w-4 h-4" />
-              <Eye v-else class="w-4 h-4" />
-            </button>
-          </div>
-
-          <p v-if="guard.isLocked" class="text-[10px] font-black uppercase tracking-widest text-rose-500 text-center">
-            Compte verrouillé — réessayez dans {{ guard.remainingSeconds }}s
-          </p>
-          <p v-else class="text-[9px] font-bold text-slate-400 text-center">{{ guard.remainingAttempts }} tentative(s) restante(s)</p>
-
-          <div class="flex gap-2 pt-1">
-            <Button type="button" variant="ghost" @click="cancelPasswordRequest" class="flex-1 h-12 uppercase text-[10px] tracking-widest font-black text-slate-500 rounded-xl">Annuler</Button>
-            <Button
-              type="button"
-              @click="confirmPasswordRequest"
-              :disabled="pwdBusy || guard.isLocked || !pwdValue"
-              class="flex-[2] h-12 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:pointer-events-none text-white font-black rounded-xl uppercase tracking-widest text-xs flex items-center justify-center gap-2"
-            >
-              <Loader2 v-if="pwdBusy" class="w-4 h-4 animate-spin" />
-              Confirmer
-            </Button>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+    <PasswordConfirmDialog
+      :open="pwdDialogOpen"
+      @update:open="(val: boolean) => { if (!val) cancelPasswordRequest() }"
+      v-model:password="pwdValue"
+      title="Confirmation"
+      subtitle="Requise"
+      description="Entrez votre mot de passe pour enregistrer"
+      placeholder="Mot de passe"
+      :loading="pwdBusy"
+      @confirm="confirmPasswordRequest"
+    />
 
     <!-- Conflict Warning Dialog -->
     <Dialog v-model:open="showConflictDialog">
@@ -1181,10 +1172,11 @@ import {
   Loader2, ShieldCheck, Banknote, Eye, EyeOff, Lock, ChevronDown
 } from 'lucide-vue-next';
 import { useToast } from 'primevue/usetoast';
-import { usePasswordGuard, handlePasswordError } from '@/composables/usePasswordGuard';
+import { usePasswordGuard, handlePasswordError, isPasswordError, LOCK_SECONDS } from '@/composables/usePasswordGuard';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { PasswordConfirmDialog } from '@/components/ui/password-dialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -1851,14 +1843,21 @@ const saveClientsChange = () => {
 };
 
 // ─── Actions ──────────────────────────────────────────────────────────────────
+let loadReservationsSeq = 0;
 const loadReservations = async () => {
+  const seq = ++loadReservationsSeq;
   loading.value = true;
   try {
-    reservations.value = await reservationApi.getAll();
+    const data = await reservationApi.getAll({ _t: Date.now() });
+    if (seq === loadReservationsSeq && Array.isArray(data)) {
+      reservations.value = data;
+    }
   } catch (err) {
     console.error('Failed to load reservations', err);
   } finally {
-    loading.value = false;
+    if (seq === loadReservationsSeq) {
+      loading.value = false;
+    }
   }
 };
 
@@ -2068,6 +2067,65 @@ const deleteReservation = async (id: string) => {
   }
 };
 
+const showForceDeleteDialog = ref(false);
+const forceDeleteId = ref('');
+const forceDeletePassword = ref('');
+const forceDeleting = ref(false);
+
+const openForceDelete = (id: string) => {
+  forceDeleteId.value = id;
+  forceDeletePassword.value = '';
+  showForceDeleteDialog.value = true;
+};
+
+const executeForceDelete = async () => {
+  if (!forceDeleteId.value || !forceDeletePassword.value) return;
+  forceDeleting.value = true;
+  try {
+    await reservationApi.forceDelete(forceDeleteId.value, forceDeletePassword.value);
+    guard.reset();
+    toast.add({
+      severity: 'success',
+      summary: 'Réservation supprimée',
+      detail: 'La réservation a été définitivement effacée.',
+      life: 2000,
+    });
+    showForceDeleteDialog.value = false;
+    selectedReservation.value = null;
+    reservations.value = reservations.value.filter(r => r._id !== forceDeleteId.value);
+    await loadReservations();
+  } catch (err: any) {
+    console.error('Failed to force delete reservation', err);
+    if (isPasswordError(err)) {
+      const locked = guard.registerFailure();
+      if (locked) {
+        toast.add({
+          severity: 'error',
+          summary: 'Compte Verrouillé',
+          detail: `Trop de tentatives. Réessayez dans ${LOCK_SECONDS} secondes.`,
+          life: 3000,
+        });
+      } else {
+        toast.add({
+          severity: 'error',
+          summary: 'Mot de passe incorrect',
+          detail: `Il vous reste ${guard.remainingAttempts} tentative(s).`,
+          life: 3000,
+        });
+      }
+      return;
+    }
+    toast.add({
+      severity: 'error',
+      summary: 'Erreur',
+      detail: `Echec de la suppression définitive.${err?.response?.status ? ` (${err.response.status})` : ''}`,
+      life: 3000,
+    });
+  } finally {
+    forceDeleting.value = false;
+  }
+};
+
 const openContractRefDialog = (res: any) => {
   if (!res) return;
   if (res.contrat) {
@@ -2181,7 +2239,11 @@ const handleQuickAddCar = async () => {
 
 onMounted(async () => {
   await loadReservations();
-  unsubscribeSocket = socketStore.onEvent('reservation:change', () => {
+  unsubscribeSocket = socketStore.onEvent('reservation:change', (payload: any) => {
+    const d = payload?.data;
+    if (d?.action === 'deleted' && d?.id) {
+      reservations.value = reservations.value.filter(r => r._id !== d.id);
+    }
     loadReservations();
   });
   
