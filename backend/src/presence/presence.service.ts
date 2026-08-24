@@ -78,12 +78,16 @@ export class PresenceService implements OnModuleInit, OnModuleDestroy {
       .catch(() => {
         /* ignore */
       });
-    this.purgeOrphans();
+    this.purgeOrphans().catch(() => {
+      /* ignore */
+    });
     this.cleanupTimer = setInterval(() => {
       this.cleanup().catch(() => {
         /* ignore */
       });
-      this.purgeOrphans();
+      this.purgeOrphans().catch(() => {
+        /* ignore */
+      });
     }, CLEANUP_INTERVAL_MS);
   }
 
