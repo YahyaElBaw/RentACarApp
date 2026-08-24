@@ -12,12 +12,44 @@ import { ConfigService } from '@nestjs/config';
 import { GpsService } from './gps.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
+import { TraciPollerService } from './traci-poller.service';
+import { WinnouPollerService } from './winnou-poller.service';
+
 @Controller('gps')
 export class GpsController {
+  private lastPollAt = 0;
+  private pollPromise: Promise<any> | null = null;
+
   constructor(
     private readonly gpsService: GpsService,
     private readonly configService: ConfigService,
+    private readonly traciPoller: TraciPollerService,
+    private readonly winnouPoller: WinnouPollerService,
   ) {}
+
+  /**
+   * On serverless platforms (like Vercel), background intervals get frozen.
+   * This on-demand poll triggers Winnou & Traci fetches whenever a user requests positions,
+   * throttled to at most once every 2 seconds.
+   */
+  private async triggerPollIfNeeded(): Promise<void> {
+    const now = Date.now();
+    if (now - this.lastPollAt < 2000) {
+      return;
+    }
+    if (this.pollPromise) {
+      await this.pollPromise;
+      return;
+    }
+    this.lastPollAt = now;
+    this.pollPromise = Promise.allSettled([
+      this.traciPoller.poll(),
+      this.winnouPoller.poll(),
+    ]).finally(() => {
+      this.pollPromise = null;
+    });
+    await this.pollPromise;
+  }
 
   // Ingestion endpoint for external GPS platforms (traci.tn, winnou.tn, ...)
   @Post('webhook')
@@ -46,7 +78,8 @@ export class GpsController {
 
   @UseGuards(JwtAuthGuard)
   @Get('positions')
-  getPositions() {
+  async getPositions() {
+    await this.triggerPollIfNeeded();
     return this.gpsService.getPositions();
   }
 
@@ -54,5 +87,12 @@ export class GpsController {
   @Get('speed-alerts')
   getSpeedAlerts(@Query('limit') limit?: string) {
     return this.gpsService.getSpeedAlerts(Number(limit) || 50);
+  }
+
+  // Sync endpoint for external cron jobs or Vercel Crons
+  @Get('sync')
+  async syncGps() {
+    await this.triggerPollIfNeeded();
+    return { ok: true, timestamp: new Date().toISOString() };
   }
 }

@@ -111,7 +111,7 @@ export class TraciPollerService implements OnModuleInit, OnModuleDestroy {
     return res;
   }
 
-  private async poll() {
+  async poll(): Promise<void> {
     if (this.inFlight) return;
     this.inFlight = true;
     try {

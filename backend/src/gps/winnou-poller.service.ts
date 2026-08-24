@@ -143,7 +143,7 @@ export class WinnouPollerService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private async poll() {
+  async poll(): Promise<void> {
     if (this.inFlight) return;
     this.inFlight = true;
     try {
