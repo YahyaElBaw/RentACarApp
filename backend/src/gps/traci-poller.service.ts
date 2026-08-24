@@ -37,6 +37,11 @@ export class TraciPollerService implements OnModuleInit, OnModuleDestroy {
   private startupTimer: ReturnType<typeof setTimeout> | null = null;
   private inFlight = false;
   private readonly allowedPlates: Set<string>;
+  public status: { lastPollAt: Date | null; lastSuccessAt: Date | null; lastError: string | null } = {
+    lastPollAt: null,
+    lastSuccessAt: null,
+    lastError: null,
+  };
 
   constructor(private readonly gpsService: GpsService) {
     this.allowedPlates = new Set(
@@ -49,6 +54,7 @@ export class TraciPollerService implements OnModuleInit, OnModuleDestroy {
 
   onModuleInit() {
     if (!this.username || !this.password) {
+      this.status.lastError = 'disabled: TRACI_USER/TRACI_PASS not set';
       this.logger.log('TRACI_USER/TRACI_PASS not set - poller disabled');
       return;
     }
@@ -114,11 +120,13 @@ export class TraciPollerService implements OnModuleInit, OnModuleDestroy {
   async poll(): Promise<void> {
     if (this.inFlight) return;
     this.inFlight = true;
+    this.status.lastPollAt = new Date();
     try {
       const vehRes = await this.authorizedFetch(
         `${TraciPollerService.BASE_PATH}/vehicules/minify`,
       );
       if (!vehRes || !vehRes.ok) {
+        this.status.lastError = `vehicles fetch failed (${vehRes?.status ?? 'no response'})`;
         this.logger.warn(
           `Traci vehicules fetch failed (${vehRes?.status ?? 'no response'})`,
         );
@@ -149,6 +157,7 @@ export class TraciPollerService implements OnModuleInit, OnModuleDestroy {
         `${TraciPollerService.BASE_PATH}/realTimeRecords`,
       );
       if (!rtRes || !rtRes.ok) {
+        this.status.lastError = `realtime fetch failed (${rtRes?.status ?? 'no response'})`;
         this.logger.warn(
           `Traci realtime fetch failed (${rtRes?.status ?? 'no response'})`,
         );
@@ -182,7 +191,10 @@ export class TraciPollerService implements OnModuleInit, OnModuleDestroy {
           `Traci poll ok: ${accepted} matched, ${unknown} unknown of ${filtered}`,
         );
       }
+      this.status.lastSuccessAt = new Date();
+      this.status.lastError = null;
     } catch (err) {
+      this.status.lastError = String(err);
       this.logger.error(`Traci poll error: ${String(err)}`);
     } finally {
       this.inFlight = false;

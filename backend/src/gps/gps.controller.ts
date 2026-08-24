@@ -92,7 +92,15 @@ export class GpsController {
   // Sync endpoint for external cron jobs or Vercel Crons
   @Get('sync')
   async syncGps() {
-    await this.triggerPollIfNeeded();
-    return { ok: true, timestamp: new Date().toISOString() };
+    await Promise.allSettled([
+      this.traciPoller.poll(),
+      this.winnouPoller.poll(),
+    ]);
+    return {
+      ok: true,
+      timestamp: new Date().toISOString(),
+      traci: this.traciPoller.status,
+      winnou: this.winnouPoller.status,
+    };
   }
 }

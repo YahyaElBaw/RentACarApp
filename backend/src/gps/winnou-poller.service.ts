@@ -33,6 +33,11 @@ export class WinnouPollerService implements OnModuleInit, OnModuleDestroy {
   private readonly allowedPlates: Set<string>;
   private plateByImei = new Map<string, string>();
   private lastPlateRefresh = 0;
+  public status: { lastPollAt: Date | null; lastSuccessAt: Date | null; lastError: string | null } = {
+    lastPollAt: null,
+    lastSuccessAt: null,
+    lastError: null,
+  };
 
   constructor(private readonly gpsService: GpsService) {
     this.allowedPlates = new Set(
@@ -45,6 +50,7 @@ export class WinnouPollerService implements OnModuleInit, OnModuleDestroy {
 
   onModuleInit() {
     if (!this.username || !this.password) {
+      this.status.lastError = 'disabled: WINNOU_USER/WINNOU_PASS not set';
       this.logger.log('WINNOU_USER/WINNOU_PASS not set - poller disabled');
       return;
     }
@@ -146,8 +152,12 @@ export class WinnouPollerService implements OnModuleInit, OnModuleDestroy {
   async poll(): Promise<void> {
     if (this.inFlight) return;
     this.inFlight = true;
+    this.status.lastPollAt = new Date();
     try {
-      if (!this.cookie && !(await this.login())) return;
+      if (!this.cookie && !(await this.login())) {
+        this.status.lastError = 'login failed';
+        return;
+      }
       if (Date.now() - this.lastPlateRefresh > 10 * 60 * 1000) {
         void this.refreshPlates();
       }
@@ -155,6 +165,7 @@ export class WinnouPollerService implements OnModuleInit, OnModuleDestroy {
         cmd: 'load_object_data',
       });
       if (!res.ok) {
+        this.status.lastError = `realtime fetch failed (${res.status})`;
         this.logger.warn(`Winnou realtime fetch failed (${res.status})`);
         return;
       }
@@ -164,6 +175,7 @@ export class WinnouPollerService implements OnModuleInit, OnModuleDestroy {
         records = JSON.parse(text);
       } catch {
         this.cookie = null;
+        this.status.lastError = 'non-JSON response (session expired?)';
         this.logger.warn('Winnou returned non-JSON (session expired?) - relogin next poll');
         return;
       }
@@ -200,7 +212,10 @@ export class WinnouPollerService implements OnModuleInit, OnModuleDestroy {
           `Winnou poll ok: ${accepted} matched, ${unknown} unknown of ${filtered}`,
         );
       }
+      this.status.lastSuccessAt = new Date();
+      this.status.lastError = null;
     } catch (err) {
+      this.status.lastError = String(err);
       this.logger.error(`Winnou poll error: ${String(err)}`);
     } finally {
       this.inFlight = false;
