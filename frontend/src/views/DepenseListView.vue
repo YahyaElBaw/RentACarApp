@@ -35,7 +35,7 @@
             </div>
             <button @click="showFilterMenu = !showFilterMenu" class="w-full h-full pl-11 pr-2 flex items-center whitespace-nowrap cursor-pointer bg-transparent border-0 text-left">
               <span :class="[filterHover ? 'opacity-100' : 'opacity-0', 'transition-all duration-300 uppercase tracking-widest text-[10px] font-black text-slate-600 group-hover:text-rose-600']">
-                {{ filters.category ? depenseCategories.find(c => c.value === filters.category)?.label || 'Catégorie' : 'Filtrer' }}
+                {{ filters.category ? catLabel(filters.category) : 'Filtrer' }}
               </span>
             </button>
           </div>
@@ -44,9 +44,25 @@
               Toutes
               <Check v-if="!filters.category" class="w-4 h-4" />
             </button>
-            <button v-for="cat in depenseCategories" :key="cat.value" @click="filters.category = cat.value; showFilterMenu = false" class="w-full text-left px-5 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-rose-50 hover:text-rose-600 flex items-center justify-between">
+            <button v-for="cat in categoryOptions" :key="cat.value" @click="filters.category = cat.value; showFilterMenu = false" class="w-full text-left px-5 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-rose-50 hover:text-rose-600 flex items-center justify-between">
               {{ cat.label }}
               <Check v-if="filters.category === cat.value" class="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        <div class="relative">
+          <div class="group relative h-12 transition-all duration-300 overflow-hidden rounded-2xl bg-white border-2 border-slate-200 hover:border-indigo-400 flex items-center active:scale-95 hover:shadow-xl hover:shadow-indigo-200/50"
+            :class="settingsOpen ? 'w-52' : 'w-12'"
+            @mouseenter="settingsOpen = true"
+            @mouseleave="settingsOpen = false">
+            <div class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none">
+              <SettingsIcon class="w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-colors duration-300 group-hover:rotate-90" />
+            </div>
+            <button @click="router.push('/settings')" class="w-full h-full pl-11 pr-2 flex items-center whitespace-nowrap cursor-pointer bg-transparent border-0 text-left">
+              <span :class="[settingsOpen ? 'opacity-100' : 'opacity-0', 'transition-all duration-300 uppercase tracking-widest text-[10px] font-black text-slate-600 group-hover:text-indigo-600']">
+                Parametres Depense
+              </span>
             </button>
           </div>
         </div>
@@ -86,9 +102,9 @@
                        <Calendar class="w-3.5 h-3.5 text-rose-600" />
                        <span class="text-[13px] font-black text-slate-900 tabular-nums lowercase">{{ formatDate(depense.date) }}</span>
                     </div>
-                    <Badge variant="outline" class="w-fit text-[8px] font-black uppercase tracking-tighter px-2 py-0 border-slate-200 bg-white/50 shadow-sm text-slate-900 font-mono">
-                       {{ depense.category }}
-                    </Badge>
+                     <Badge variant="outline" class="w-fit text-[8px] font-black uppercase tracking-tighter px-2 py-0 border-slate-200 bg-white/50 shadow-sm text-slate-900 font-mono">
+                        {{ catLabel(depense.category) }}
+                     </Badge>
                   </div>
                 </TableCell>
                 
@@ -181,13 +197,14 @@
               </div>
               <div class="space-y-2">
                 <Label class="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Catégorie</Label>
-                <select v-model="depenseForm.category" class="w-full h-12 bg-slate-50 border border-slate-100 rounded-xl px-4 font-black text-slate-700 outline-none">
-                  <option value="mechanique">Mechanique</option>
-                  <option value="vidange">Vidange</option>
-                  <option value="lavage">Lavage</option>
-                  <option value="depense_generale">Depense Generale</option>
-                  <option value="autre">Autre</option>
+                <select
+                  v-model="depenseForm.category"
+                  :disabled="categoryDisabled"
+                  :class="['w-full h-12 bg-slate-50 border border-slate-100 rounded-xl px-4 font-black text-slate-700 outline-none', categoryDisabled ? 'opacity-50 cursor-not-allowed bg-slate-100' : '']"
+                >
+                  <option v-for="cat in categoryOptions" :key="cat.value" :value="cat.value">{{ cat.label }}</option>
                 </select>
+                <p v-if="categoryDisabled" class="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Depense generale — categorie fixe</p>
               </div>
             </div>
             <div class="space-y-2">
@@ -237,7 +254,7 @@
                   <div class="flex items-start justify-between gap-3">
                     <div class="space-y-1.5 min-w-0">
                       <div class="flex items-center gap-2 flex-wrap">
-                        <Badge class="bg-rose-600/10 text-rose-600 border-none text-[8px] font-black uppercase tracking-widest">{{ depenseForm.category }}</Badge>
+                         <Badge class="bg-rose-600/10 text-rose-600 border-none text-[8px] font-black uppercase tracking-widest">{{ catLabel(depenseForm.category) }}</Badge>
                         <span class="text-[10px] font-black text-slate-400 tabular-nums">{{ formatDate(depenseForm.date) }}</span>
                       </div>
                       <p class="text-xs font-bold text-slate-600 leading-tight break-words">{{ depenseForm.description || 'Aucune description' }}</p>
@@ -253,7 +270,7 @@
                   <div class="flex items-start justify-between gap-3">
                     <div class="space-y-1.5 min-w-0">
                       <div class="flex items-center gap-2 flex-wrap">
-                        <Badge class="bg-rose-600/10 text-rose-600 border-none text-[8px] font-black uppercase tracking-widest">{{ item.category }}</Badge>
+                        <Badge class="bg-rose-600/10 text-rose-600 border-none text-[8px] font-black uppercase tracking-widest">{{ catLabel(item.category) }}</Badge>
                         <span class="text-[10px] font-black text-slate-400 tabular-nums">{{ formatDate(item.date) }}</span>
                       </div>
                       <p class="text-xs font-bold text-slate-600 leading-tight break-words">{{ item.description || 'Aucune description' }}</p>
@@ -311,13 +328,15 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, reactive, watch, computed } from 'vue';
+import { useRouter } from 'vue-router';
 import api from '../api';
 import { formatDate } from '@/lib/utils';
 import { useToast } from 'primevue/usetoast';
-import { 
-  Search, Plus, Calendar, 
+import {
+  Search, Plus, Calendar,
   Car as CarIcon, Trash2, Pencil,
-  Receipt as ReceiptIcon, Filter, Check
+  Receipt as ReceiptIcon, Filter, Check,
+  Settings as SettingsIcon
 } from 'lucide-vue-next';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -328,11 +347,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { 
   Table, TableHeader, TableBody, TableHead, TableRow, TableCell 
 } from '@/components/ui/table';
-import { depenseApi, carApi } from '../api';
+import { depenseApi, carApi, settingApi } from '../api';
 import { useSocketStore } from '@/stores/socket';
 
 const socketStore = useSocketStore();
 let unsubscribeSocket: Function | null = null;
+const router = useRouter();
 
 const toast = useToast();
 const depenses = ref<any[]>([]);
@@ -363,9 +383,10 @@ const pendingTotal = computed(() => {
 const resetForm = () => {
   depenseForm.date = new Date().toISOString().split('T')[0];
   depenseForm.amount = 0;
-  depenseForm.category = 'mechanique';
-  depenseForm.description = '';
   depenseForm.car = '';
+  // car === '' means "Depense Generale" -> locked general category
+  depenseForm.category = GENERAL_SLUG.value;
+  depenseForm.description = '';
 };
 
 const isAdmin = computed(() => {
@@ -382,14 +403,48 @@ const showFilterMenu = ref(false);
 const searchOpen = ref(false);
 const filterHover = ref(false);
 const addOpen = ref(false);
+const settingsOpen = ref(false);
 
-const depenseCategories = [
-  { value: 'mechanique', label: 'Mechanique' },
-  { value: 'vidange', label: 'Vidange' },
-  { value: 'lavage', label: 'Lavage' },
-  { value: 'depense_generale', label: 'Depense Generale' },
-  { value: 'autre', label: 'Autre' }
-];
+const DEFAULT_CATEGORIES = ['Mechanique', 'Vidange', 'Lavage', 'Depense Generale', 'Autre'];
+
+const slugifyCategory = (label: string) =>
+  label
+    .toString()
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+
+const categoryLabels = ref<string[]>([...DEFAULT_CATEGORIES]);
+
+const GENERAL_SLUG = computed(() => {
+  const general = categoryLabels.value.find(l => slugifyCategory(l).includes('general'));
+  return general ? slugifyCategory(general) : 'depense_generale';
+});
+
+const categoryOptions = computed(() =>
+  categoryLabels.value.map(label => ({ value: slugifyCategory(label), label })),
+);
+
+const catLabel = (value: string) =>
+  categoryOptions.value.find(c => c.value === value)?.label || value;
+
+// "Depense Generale" selected (no vehicle) -> category select locked on the general category
+const categoryDisabled = computed(() => depenseForm.car === '');
+
+watch(
+  () => depenseForm.car,
+  (carVal) => {
+    if (carVal === '') {
+      depenseForm.category = GENERAL_SLUG.value;
+    } else if (depenseForm.category === GENERAL_SLUG.value) {
+      const first = categoryOptions.value.find(c => c.value !== GENERAL_SLUG.value);
+      depenseForm.category = first?.value || '';
+    }
+  },
+);
 
 const filteredDepenses = computed(() => {
   let result = depenses.value;
@@ -432,7 +487,20 @@ const deleteDepense = async (id: string) => {
   }
 };
 
+const loadCategories = async () => {
+  try {
+    const settings: any = await settingApi.get();
+    if (Array.isArray(settings?.depenseCategories) && settings.depenseCategories.length > 0) {
+      categoryLabels.value = settings.depenseCategories;
+    }
+  } catch (err) {
+    // Non-admin or fetch failure -> keep default categories
+    console.warn('Using default depense categories', err);
+  }
+};
+
 onMounted(async () => {
+  loadCategories();
   await loadDepenses();
   unsubscribeSocket = socketStore.onEvent('depense:change', () => {
     loadDepenses();
@@ -450,9 +518,10 @@ const openForm = async (depense?: any) => {
     editingId.value = depense._id;
     depenseForm.date = depense.date ? new Date(depense.date).toISOString().split('T')[0] : '';
     depenseForm.amount = depense.amount;
+    depenseForm.car = depense.car?._id || depense.car || '';
     depenseForm.category = depense.category;
     depenseForm.description = depense.description;
-    depenseForm.car = depense.car?._id || depense.car || '';
+    if (!depenseForm.car) depenseForm.category = GENERAL_SLUG.value;
   } else {
     editingId.value = null;
     resetForm();

@@ -29,6 +29,12 @@ export class Setting {
 
   @Prop({ type: [String], default: [] })
   agencies: string[];
+
+  @Prop({
+    type: [String],
+    default: ['Mechanique', 'Vidange', 'Lavage', 'Depense Generale', 'Autre'],
+  })
+  depenseCategories: string[];
 }
 
 export type SettingDocument = Setting & Document;

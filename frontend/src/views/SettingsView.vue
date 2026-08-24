@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useAuthStore } from '@/stores/auth'
-import { Car, Users, Calculator, RefreshCw, AlertTriangle, FileText, Wrench, KeyRound, UserCircle2, Eye, EyeOff, Loader2, Gauge } from 'lucide-vue-next'
+import { Car, Users, Calculator, RefreshCw, AlertTriangle, FileText, Wrench, KeyRound, UserCircle2, Eye, EyeOff, Loader2, Gauge, Tags, X, Plus } from 'lucide-vue-next'
 import { useToast } from 'primevue/usetoast'
 
 const authStore = useAuthStore()
@@ -48,7 +48,32 @@ const appSettings = reactive({
   tvaValue: 20,
   contractTaxEnabled: false,
   contractTaxValue: 0,
+  depenseCategories: [] as string[],
 })
+
+const newCategoryLabel = ref('')
+
+const addDepenseCategory = () => {
+  const label = newCategoryLabel.value.trim()
+  if (!label) return
+  const exists = appSettings.depenseCategories.some(
+    (c) => c.toLowerCase() === label.toLowerCase()
+  )
+  if (exists) {
+    toast.add({ severity: 'warn', summary: 'Doublon', detail: 'Cette categorie existe deja.', life: 3000 })
+    return
+  }
+  appSettings.depenseCategories.push(label)
+  newCategoryLabel.value = ''
+}
+
+const removeDepenseCategory = (index: number) => {
+  if (appSettings.depenseCategories.length <= 1) {
+    toast.add({ severity: 'warn', summary: 'Impossible', detail: 'Au moins une categorie est requise.', life: 3000 })
+    return
+  }
+  appSettings.depenseCategories.splice(index, 1)
+}
 
 const disabledCars = ref<any[]>([])
 const disabledClients = ref<any[]>([])
@@ -490,6 +515,44 @@ const restoreClient = async (id: string) => {
               <Button @click="saveSettings" :disabled="savingSettings" class="h-12 px-8 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-xl shadow-indigo-600/20">
                 <span v-if="savingSettings" class="mr-2 w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
                 Enregistrer la Comptabilite
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        <!-- DEPENSE CATEGORIES -->
+        <Card class="border border-slate-100 shadow-2xl shadow-rose-200/30 bg-white rounded-[2.5rem] overflow-hidden">
+          <CardHeader class="bg-slate-50/50 p-8">
+            <CardTitle class="text-xl font-black text-slate-900 uppercase flex items-center gap-3">
+              <Tags class="w-5 h-5 text-rose-500" /> Categories de Depense
+            </CardTitle>
+          </CardHeader>
+          <CardContent class="p-8 space-y-6">
+            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Utilisees dans le formulaire et les filtres des depenses.</p>
+            <div class="flex flex-wrap gap-3">
+              <div v-for="(cat, index) in appSettings.depenseCategories" :key="cat" class="group flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl pl-4 pr-2 py-2">
+                <span class="text-xs font-black text-slate-700 uppercase tracking-wide">{{ cat }}</span>
+                <button @click="removeDepenseCategory(index)" class="w-6 h-6 rounded-lg flex items-center justify-center text-slate-300 hover:text-rose-600 hover:bg-rose-50 transition-all" title="Supprimer">
+                  <X class="w-3.5 h-3.5 stroke-[3]" />
+                </button>
+              </div>
+              <span v-if="appSettings.depenseCategories.length === 0" class="text-[10px] font-black text-slate-300 uppercase tracking-widest py-2">Aucune categorie</span>
+            </div>
+            <div class="flex gap-3 max-w-lg">
+              <Input
+                v-model="newCategoryLabel"
+                placeholder="Nouvelle categorie..."
+                class="h-12 bg-slate-50 border-slate-100 rounded-xl font-bold"
+                @keyup.enter="addDepenseCategory"
+              />
+              <Button @click="addDepenseCategory" variant="outline" class="h-12 px-5 rounded-xl border-slate-200 hover:border-rose-300 hover:text-rose-600 font-black uppercase tracking-widest text-[10px] whitespace-nowrap">
+                <Plus class="w-4 h-4 mr-1" /> Ajouter
+              </Button>
+            </div>
+            <div class="flex justify-end border-t border-slate-100 pt-6">
+              <Button @click="saveSettings" :disabled="savingSettings" class="h-12 px-8 bg-rose-600 hover:bg-rose-700 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-xl shadow-rose-600/20">
+                <span v-if="savingSettings" class="mr-2 w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                Enregistrer les Categories
               </Button>
             </div>
           </CardContent>
