@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { Car, CarDocument } from '../car/schemas/car.schema';
 import {
   CarPosition,
@@ -10,6 +10,14 @@ import {
   SpeedAlert,
   SpeedAlertDocument,
 } from './schemas/speed-alert.schema';
+import {
+  CarKmDay,
+  CarKmDayDocument,
+} from './schemas/car-km-day.schema';
+import {
+  MileageAlert,
+  MileageAlertDocument,
+} from './schemas/mileage-alert.schema';
 import { Contrat, ContratDocument } from '../contrat/schemas/contrat.schema';
 import { Setting, SettingDocument } from '../setting/schemas/setting.schema';
 import { EventsGateway } from '../events/events.gateway';
@@ -23,12 +31,45 @@ const normalizePlate = (plate: string) =>
 export const SPEED_ALERT_THRESHOLD_KMH = 130;
 const SPEED_ALERT_COOLDOWN_MS = 5 * 60 * 1000; // one alert per car per 5 minutes
 const SPEED_LIMIT_CACHE_TTL_MS = 30 * 1000;
+// Default daily mileage alert threshold (can be changed from Settings)
+export const KM_PER_DAY_LIMIT_DEFAULT = 200;
+const KM_LIMIT_CACHE_TTL_MS = 30 * 1000;
+// GPS jitter filters: ignore tiny jumps (stationary noise) and impossible ones
+const KM_DELTA_MIN_METERS = 30;
+const KM_MAX_IMPLIED_SPEED_KMH = 200;
+
+/** Haversine distance in meters */
+function haversineMeters(
+  lat1: number,
+  lng1: number,
+  lat2: number,
+  lng2: number,
+): number {
+  const R = 6371000;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+
+/** Day key YYYY-MM-DD in Tunisia local time (UTC+1, no DST) */
+function tunisiaDayKey(d: Date): string {
+  const shifted = new Date(d.getTime() + 60 * 60 * 1000);
+  return shifted.toISOString().slice(0, 10);
+}
 
 @Injectable()
 export class GpsService {
   private readonly logger = new Logger(GpsService.name);
   private speedLimitCache: { value: number; loadedAt: number } = {
     value: SPEED_ALERT_THRESHOLD_KMH,
+    loadedAt: 0,
+  };
+  private kmLimitCache: { value: number; loadedAt: number } = {
+    value: KM_PER_DAY_LIMIT_DEFAULT,
     loadedAt: 0,
   };
 
@@ -38,6 +79,10 @@ export class GpsService {
     private carPositionModel: Model<CarPositionDocument>,
     @InjectModel(SpeedAlert.name)
     private speedAlertModel: Model<SpeedAlertDocument>,
+    @InjectModel(CarKmDay.name)
+    private carKmDayModel: Model<CarKmDayDocument>,
+    @InjectModel(MileageAlert.name)
+    private mileageAlertModel: Model<MileageAlertDocument>,
     @InjectModel(Contrat.name)
     private contratModel: Model<ContratDocument>,
     @InjectModel(Setting.name)
@@ -66,6 +111,170 @@ export class GpsService {
       this.speedLimitCache.loadedAt = Date.now();
     }
     return this.speedLimitCache.value;
+  }
+
+  /** Configurable daily mileage limit with a short cache */
+  private async getKmPerDayLimit(): Promise<number> {
+    if (Date.now() - this.kmLimitCache.loadedAt < KM_LIMIT_CACHE_TTL_MS) {
+      return this.kmLimitCache.value;
+    }
+    try {
+      const settings = await this.settingModel
+        .findOne()
+        .select('kmPerDayLimit')
+        .lean()
+        .exec();
+      const value = Number((settings as any)?.kmPerDayLimit);
+      if (Number.isFinite(value) && value > 0) {
+        this.kmLimitCache.value = value;
+      }
+      this.kmLimitCache.loadedAt = Date.now();
+    } catch (err) {
+      this.logger.warn(`Failed to load km/day limit setting: ${String(err)}`);
+      this.kmLimitCache.loadedAt = Date.now();
+    }
+    return this.kmLimitCache.value;
+  }
+
+  /** True when the car currently has an active/soon contract spanning now */
+  private async isCarRented(carId: Types.ObjectId): Promise<boolean> {
+    try {
+      const now = new Date();
+      const count = await this.contratModel
+        .countDocuments({
+          status: { $in: ['active', 'soon'] },
+          startDate: { $lte: now },
+          endDate: { $gte: now },
+          car: { $in: [carId, String(carId)] },
+        })
+        .exec();
+      return count > 0;
+    } catch (err) {
+      this.logger.warn(`Rental check failed: ${String(err)}`);
+      return false;
+    }
+  }
+
+  /**
+   * Accumulates distance traveled per car per day from consecutive GPS fixes
+   * and fires a one-shot notification when a rented car crosses the km/day limit.
+   */
+  private async trackDailyKm(
+    car: CarDocument,
+    dto: { lat: number; lng: number; provider?: string },
+    positionAt: Date,
+  ): Promise<void> {
+    try {
+      const day = tunisiaDayKey(positionAt);
+      const prev = await this.carKmDayModel
+        .findOneAndUpdate(
+          { carId: car._id, day },
+          { $setOnInsert: { km: 0, alertSent: false } },
+          { upsert: true, new: false },
+        )
+        .exec();
+
+      // First fix of the day: just anchor the starting point.
+      if (!prev || prev.lastLat == null || prev.lastLng == null) {
+        await this.carKmDayModel.updateOne(
+          { carId: car._id, day },
+          {
+            $set: {
+              lastLat: dto.lat,
+              lastLng: dto.lng,
+              lastFixAt: positionAt,
+            },
+          },
+        ).exec();
+        return;
+      }
+
+      const meters = haversineMeters(
+        prev.lastLat,
+        prev.lastLng,
+        dto.lat,
+        dto.lng,
+      );
+      const dtHours =
+        (positionAt.getTime() -
+          (prev.lastFixAt ? new Date(prev.lastFixAt).getTime() : positionAt.getTime())) /
+        3600000;
+
+      let deltaKm = 0;
+      const impliedSpeed = dtHours > 0 ? meters / 1000 / dtHours : 0;
+      const plausible =
+        meters >= KM_DELTA_MIN_METERS &&
+        impliedSpeed <= KM_MAX_IMPLIED_SPEED_KMH;
+      if (plausible && prev.lastFixAt && dtHours > 0) {
+        deltaKm = meters / 1000;
+      }
+
+      const totalKm = Number(prev.km || 0) + deltaKm;
+
+      const update: any = {
+        lastLat: dto.lat,
+        lastLng: dto.lng,
+        lastFixAt: positionAt,
+      };
+      if (deltaKm > 0) update.$inc = { km: deltaKm };
+
+      await this.carKmDayModel
+        .updateOne({ _id: (prev as any)._id }, update)
+        .exec();
+
+      if (!prev.alertSent && totalKm >= (await this.getKmPerDayLimit())) {
+        void this.recordMileageAlert(car, totalKm, dto, positionAt, day);
+      }
+    } catch (err) {
+      this.logger.error(`Failed to track daily km: ${String(err)}`);
+    }
+  }
+
+  private async recordMileageAlert(
+    car: CarDocument,
+    kmToday: number,
+    dto: { provider?: string },
+    positionAt: Date,
+    day: string,
+  ): Promise<void> {
+    try {
+      // Only rented cars trigger the notification.
+      if (!(await this.isCarRented(car._id))) return;
+
+      const limit = await this.getKmPerDayLimit();
+      const alert = await this.mileageAlertModel.create({
+        carId: car._id,
+        matricule: car.matricule || '',
+        brand: car.brand || '',
+        model: car.model || '',
+        kmToday: Math.round(kmToday * 10) / 10,
+        limit,
+        provider: dto.provider || '',
+        alertAt: positionAt,
+      });
+
+      await this.carKmDayModel
+        .updateOne({ carId: car._id, day }, { $set: { alertSent: true } })
+        .exec();
+
+      this.logger.warn(
+        `KM ALERT: ${car.brand} ${car.model} (${car.matricule}) traveled ${alert.kmToday} km today (limit ${limit})`,
+      );
+
+      this.eventsGateway.broadcastDataChange('gps:km-alert', {
+        _id: String(alert._id),
+        carId: String(car._id),
+        matricule: car.matricule || '',
+        brand: car.brand || '',
+        model: car.model || '',
+        kmToday: alert.kmToday,
+        limit,
+        provider: dto.provider || '',
+        alertAt: positionAt.toISOString(),
+      });
+    } catch (err) {
+      this.logger.error(`Failed to record mileage alert: ${String(err)}`);
+    }
   }
 
   async ingest(dto: {
@@ -113,6 +322,8 @@ export class GpsService {
     if ((dto.speed ?? 0) >= (await this.getSpeedAlertLimit())) {
       void this.recordSpeedAlert(car, dto, positionAt);
     }
+
+    void this.trackDailyKm(car, dto, positionAt);
 
     return { accepted: true };
   }
@@ -173,6 +384,14 @@ export class GpsService {
 
   async getSpeedAlerts(limit = 50): Promise<SpeedAlertDocument[]> {
     return this.speedAlertModel
+      .find()
+      .sort({ alertAt: -1 })
+      .limit(Math.min(Math.max(limit, 1), 200))
+      .exec();
+  }
+
+  async getMileageAlerts(limit = 50): Promise<MileageAlertDocument[]> {
+    return this.mileageAlertModel
       .find()
       .sort({ alertAt: -1 })
       .limit(Math.min(Math.max(limit, 1), 200))

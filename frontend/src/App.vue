@@ -134,6 +134,7 @@ let alertInterval: any = null
 // ── Speed alerts (GPS) ───────────────────────────────────────────────────────
 let unsubscribeSpeedAlerts: Function | null = null
 const speedAlerts = ref<any[]>([])
+let unsubscribeKmAlerts: Function | null = null
 
 const formatAlertDateTime = (iso: string): string => {
   const d = new Date(iso)
@@ -155,6 +156,18 @@ const handleSpeedAlertEvent = (payload: any) => {
   })
 }
 
+const handleKmAlertEvent = (payload: any) => {
+  const a = payload?.data || payload || {}
+  const carLabel = [a.brand, a.model].filter(Boolean).join(' ') || 'Véhicule'
+  const when = formatAlertDateTime(a.alertAt || new Date().toISOString())
+  toast.add({
+    severity: 'warn',
+    summary: 'Dépassement Kilométrique',
+    detail: `${carLabel} (${a.matricule || '?'}) a parcouru ${Math.round(a.kmToday)} km aujourd'hui (max ${a.limit} km/jour) — ${when}`,
+    life: 10000,
+  })
+}
+
 const loadSpeedAlerts = async () => {
   if (!isAuthenticated.value) return
   try {
@@ -169,12 +182,19 @@ const connectSpeedAlertListener = () => {
     unsubscribeSpeedAlerts = socketStore.onEvent('gps:speed-alert', handleSpeedAlertEvent)
     loadSpeedAlerts()
   }
+  if (!unsubscribeKmAlerts && isAuthenticated.value) {
+    unsubscribeKmAlerts = socketStore.onEvent('gps:km-alert', handleKmAlertEvent)
+  }
 }
 
 const disconnectSpeedAlertListener = () => {
   if (unsubscribeSpeedAlerts) {
     unsubscribeSpeedAlerts()
     unsubscribeSpeedAlerts = null
+  }
+  if (unsubscribeKmAlerts) {
+    unsubscribeKmAlerts()
+    unsubscribeKmAlerts = null
   }
 }
 

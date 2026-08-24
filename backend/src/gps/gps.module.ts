@@ -13,6 +13,14 @@ import {
   SpeedAlert,
   SpeedAlertSchema,
 } from './schemas/speed-alert.schema';
+import {
+  CarKmDay,
+  CarKmDaySchema,
+} from './schemas/car-km-day.schema';
+import {
+  MileageAlert,
+  MileageAlertSchema,
+} from './schemas/mileage-alert.schema';
 import { Contrat, ContratSchema } from '../contrat/schemas/contrat.schema';
 import { Setting, SettingSchema } from '../setting/schemas/setting.schema';
 
@@ -21,6 +29,8 @@ import { Setting, SettingSchema } from '../setting/schemas/setting.schema';
     MongooseModule.forFeature([
       { name: CarPosition.name, schema: CarPositionSchema },
       { name: SpeedAlert.name, schema: SpeedAlertSchema },
+      { name: CarKmDay.name, schema: CarKmDaySchema },
+      { name: MileageAlert.name, schema: MileageAlertSchema },
       { name: Contrat.name, schema: ContratSchema },
       { name: Setting.name, schema: SettingSchema },
     ]),

@@ -27,6 +27,9 @@ export class Setting {
   @Prop({ default: 130 })
   speedAlertLimit: number;
 
+  @Prop({ default: 200 })
+  kmPerDayLimit: number;
+
   @Prop({ type: [String], default: [] })
   agencies: string[];
 

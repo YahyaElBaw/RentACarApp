@@ -92,7 +92,7 @@
             </TableHeader>
             <TableBody>
               <TableRow 
-                v-for="depense in filteredDepenses" 
+                v-for="depense in paginatedDepenses" 
                 :key="depense._id"
                 class="group border-slate-100 transition-all duration-500 cursor-pointer hover:bg-rose-50/40 :bg-rose-900/10 relative active:scale-[0.998]"
               >
@@ -164,6 +164,20 @@
               </TableRow>
             </TableBody>
           </Table>
+        </div>
+        <!-- PAGINATION -->
+        <div v-if="filteredDepenses.length > pageSize" class="flex items-center justify-between px-10 py-5 border-t border-slate-100 bg-slate-50/50">
+          <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+            Page {{ currentPage }} / {{ totalDepensePages }} — {{ filteredDepenses.length }} résultats
+          </p>
+          <div class="flex items-center gap-2">
+            <Button variant="outline" size="sm" :disabled="currentPage <= 1" @click="currentPage--" class="h-9 px-4 rounded-xl font-black text-[10px] uppercase tracking-widest border-slate-200 disabled:opacity-30">
+              <ChevronLeft class="w-4 h-4 mr-1" /> Précédent
+            </Button>
+            <Button variant="outline" size="sm" :disabled="currentPage >= totalDepensePages" @click="currentPage++" class="h-9 px-4 rounded-xl font-black text-[10px] uppercase tracking-widest border-slate-200 disabled:opacity-30">
+              Suivant <ChevronRight class="w-4 h-4 ml-1" />
+            </Button>
+          </div>
         </div>
       </CardContent>
     </Card>
@@ -350,7 +364,8 @@ import {
   Search, Plus, Calendar,
   Car as CarIcon, Trash2, Pencil,
   Receipt as ReceiptIcon, Filter, Check,
-  Settings as SettingsIcon
+  Settings as SettingsIcon,
+  ChevronLeft, ChevronRight
 } from 'lucide-vue-next';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -488,9 +503,25 @@ const filteredDepenses = computed(() => {
   if (filters.category) {
     result = result.filter(d => d.category === filters.category);
   }
-  // Keep only the latest 10 entries
-  return result.slice(0, 10);
+  return result;
 });
+
+// ── Pagination (10 per page, like the clients list) ─────────────────────────
+const currentPage = ref(1);
+const pageSize = 10;
+const totalDepensePages = computed(() =>
+  Math.max(1, Math.ceil(filteredDepenses.value.length / pageSize)),
+);
+const paginatedDepenses = computed(() => {
+  const start = (currentPage.value - 1) * pageSize;
+  return filteredDepenses.value.slice(start, start + pageSize);
+});
+watch(
+  () => [filters.query, filters.category],
+  () => {
+    currentPage.value = 1;
+  },
+);
 
 const loadDepenses = async () => {
   loading.value = true;

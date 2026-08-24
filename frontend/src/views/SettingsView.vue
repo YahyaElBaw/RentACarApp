@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useAuthStore } from '@/stores/auth'
-import { Car, Users, Calculator, RefreshCw, AlertTriangle, FileText, Wrench, KeyRound, UserCircle2, Eye, EyeOff, Loader2, Gauge, Tags, X, Plus } from 'lucide-vue-next'
+import { Car, Users, Calculator, RefreshCw, AlertTriangle, FileText, Wrench, KeyRound, UserCircle2, Eye, EyeOff, Loader2, Gauge, Tags, X, Plus, Route } from 'lucide-vue-next'
 import { useToast } from 'primevue/usetoast'
 
 const authStore = useAuthStore()
@@ -44,6 +44,7 @@ const appSettings = reactive({
   assuranceLimit: 12,
   visiteLimit: 6,
   speedAlertLimit: 130,
+kmPerDayLimit: 200,
   tvaEnabled: false,
   tvaValue: 20,
   contractTaxEnabled: false,
@@ -385,6 +386,16 @@ const restoreClient = async (id: string) => {
                   <span class="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-rose-400 uppercase tracking-widest">KM/H</span>
                 </div>
                 <p class="text-[9px] font-bold text-slate-400 italic">Alerte GPS dès que ce seuil est dépassé.</p>
+              </div>
+              <div class="space-y-3">
+                <Label class="text-[10px] font-black text-indigo-500 uppercase tracking-widest flex items-center gap-1.5">
+                  <Route class="w-3.5 h-3.5" /> Kilometrage Max / Jour
+                </Label>
+                <div class="relative">
+                  <Input type="number" step="any" min="1" v-model.number="appSettings.kmPerDayLimit" class="h-14 bg-indigo-50/40 border-indigo-100 focus:ring-4 focus:ring-indigo-600/5 rounded-2xl font-black text-slate-900 pr-12" />
+                  <span class="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-indigo-400 uppercase tracking-widest">KM</span>
+                </div>
+                <p class="text-[9px] font-bold text-slate-400 italic">Alerte GPS si une voiture louee depasse ce kilometrage en une journee.</p>
               </div>
             </div>
             <div class="mt-8 flex justify-end">
