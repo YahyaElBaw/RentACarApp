@@ -532,7 +532,7 @@ const restoreClient = async (id: string) => {
             <div class="flex flex-wrap gap-3">
               <div v-for="(cat, index) in appSettings.depenseCategories" :key="cat" class="group flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl pl-4 pr-2 py-2">
                 <span class="text-xs font-black text-slate-700 uppercase tracking-wide">{{ cat }}</span>
-                <button @click="removeDepenseCategory(index)" class="w-6 h-6 rounded-lg flex items-center justify-center text-slate-300 hover:text-rose-600 hover:bg-rose-50 transition-all" title="Supprimer">
+                <button v-if="authStore.isSuperAdmin" @click="removeDepenseCategory(index)" class="w-6 h-6 rounded-lg flex items-center justify-center text-slate-300 hover:text-rose-600 hover:bg-rose-50 transition-all" title="Supprimer">
                   <X class="w-3.5 h-3.5 stroke-[3]" />
                 </button>
               </div>
