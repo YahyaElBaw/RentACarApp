@@ -95,6 +95,12 @@ export class GpsController {
     return this.gpsService.getMileageAlerts(Number(limit) || 50);
   }
 
+  @UseGuards(JwtAuthGuard)
+  @Get('km-today')
+  getKmToday() {
+    return this.gpsService.getKmToday();
+  }
+
   // Sync endpoint for external cron jobs or Vercel Crons
   @Get('sync')
   async syncGps() {

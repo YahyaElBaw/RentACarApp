@@ -398,6 +398,54 @@ export class GpsService {
       .exec();
   }
 
+  /** Km traveled today per car (Tunisia local day) with the configured limit */
+  async getKmToday(): Promise<{
+    day: string;
+    limit: number;
+    cars: {
+      carId: string;
+      matricule: string;
+      brand: string;
+      model: string;
+      kmToday: number;
+      alertSent: boolean;
+    }[];
+  }> {
+    const day = tunisiaDayKey(new Date());
+    const [limit, docs] = await Promise.all([
+      this.getKmPerDayLimit(),
+      this.carKmDayModel.find({ day }).exec(),
+    ]);
+    const carIds = docs
+      .map((d) => d.carId)
+      .filter((id): id is Types.ObjectId => Boolean(id));
+    const cars = carIds.length
+      ? await this.carModel
+          .find({ _id: { $in: carIds } })
+          .select('matricule brand model')
+          .lean()
+          .exec()
+      : [];
+    const byId = new Map(
+      (cars as any[]).map((c) => [String(c._id), c]),
+    );
+    return {
+      day,
+      limit,
+      cars: docs.map((d) => {
+        const c = byId.get(String(d.carId));
+        return {
+          carId: String(d.carId),
+          matricule: (c as any)?.matricule ?? '',
+          brand: (c as any)?.brand ?? '',
+          model: (c as any)?.model ?? '',
+          kmToday: Math.round(Number(d.km || 0) * 10) / 10,
+          alertSent: !!d.alertSent,
+        };
+      }),
+    };
+  }
+
   async getPositions() {
     const positions = await this.carPositionModel
       .find()

@@ -105,6 +105,45 @@
           </button>
         </div>
 
+        <!-- ── Suivi — compteur de vitesse (coin bas-droite) ──────────────── -->
+        <transition enter-active-class="transition-all duration-300 ease-out" enter-from-class="opacity-0 translate-y-4 scale-95" enter-to-class="opacity-100 translate-y-0 scale-100"
+          leave-active-class="transition-all duration-200 ease-in" leave-from-class="opacity-100 translate-y-0 scale-100" leave-to-class="opacity-0 translate-y-4 scale-95">
+          <div v-if="followedCar" class="absolute right-4 bottom-4 z-[450]">
+            <div class="relative bg-slate-900/90 backdrop-blur-md text-white rounded-[1.75rem] p-4 pr-12 shadow-2xl shadow-black/40 border border-white/10 flex items-center gap-4">
+              <button @click.stop="stopFollowing" title="Ne plus suivre"
+                class="absolute top-3 right-3 w-7 h-7 rounded-full bg-white/10 hover:bg-white/25 transition-colors flex items-center justify-center shrink-0">
+                <X class="w-3.5 h-3.5" />
+              </button>
+
+              <div class="relative w-[84px] h-[84px] shrink-0">
+                <svg viewBox="0 0 100 100" class="w-full h-full" style="transform: rotate(135deg)">
+                  <circle cx="50" cy="50" r="41" fill="none" stroke="rgba(255,255,255,0.14)" stroke-width="9" stroke-linecap="round" :stroke-dasharray="`${gaugeLen} ${gaugeCirc}`" />
+                  <circle cx="50" cy="50" r="41" fill="none" :stroke="followGaugeColor" stroke-width="9" stroke-linecap="round"
+                    class="transition-all duration-700 ease-out" :stroke-dasharray="`${gaugeLen * followGaugeFrac} ${gaugeCirc}`" />
+                </svg>
+                <div class="absolute inset-0 flex flex-col items-center justify-center">
+                  <span class="text-[26px] font-black tabular-nums leading-none">{{ Math.round(followedCar.speed || 0) }}</span>
+                  <span class="text-[7px] font-black uppercase tracking-widest text-white/45 mt-1">km/h</span>
+                </div>
+              </div>
+
+              <div class="min-w-0 pr-1">
+                <p class="text-sm font-black uppercase tracking-wider leading-none truncate">{{ followedCar.matricule }}</p>
+                <p class="text-[8px] font-bold uppercase tracking-widest text-white/40 truncate mt-1">{{ followedCar.brand }} {{ followedCar.model }}</p>
+                <div class="flex items-center gap-1.5 mt-2.5">
+                  <span v-if="!isStale(followedCar)" class="relative flex h-1.5 w-1.5 shrink-0">
+                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span class="relative inline-flex rounded-full h-1.5 w-1.5" :class="(followedCar.speed || 0) > 2 ? 'bg-emerald-400' : 'bg-rose-400'"></span>
+                  </span>
+                  <span class="text-[8px] font-black uppercase tracking-widest whitespace-nowrap" :class="isStale(followedCar) ? 'text-slate-400' : 'text-white/70'">
+                    {{ isStale(followedCar) ? 'Inactif · vu à' : 'Vu à' }} {{ timeLabel(followedCar) }}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </transition>
+
         <!-- ── Bottom slider (all moving cars) ────────────────────────────── -->
         <transition enter-active-class="transition-transform duration-300 ease-out" enter-from-class="translate-y-full" enter-to-class="translate-y-0"
           leave-active-class="transition-transform duration-250 ease-in" leave-from-class="translate-y-0" leave-to-class="translate-y-full">
@@ -219,6 +258,21 @@
             </div>
             <span class="px-3 py-1.5 rounded-xl text-[8px] font-black uppercase tracking-widest border" :class="statusClass(selectedCar)">
               {{ statusLabel(selectedCar) }}
+            </span>
+          </div>
+
+          <!-- Kilometrage aujourd'hui -->
+          <div class="rounded-2xl border p-3 flex items-center justify-between gap-3"
+            :class="selectedKmOverLimit ? 'border-rose-200 bg-rose-50/60' : 'border-slate-100 bg-slate-50/60'">
+            <div>
+              <p class="text-[8px] font-black uppercase tracking-widest text-slate-400">Kilometrage Aujourd'hui</p>
+              <p class="text-xl font-black leading-none mt-1 tabular-nums" :class="selectedKmOverLimit ? 'text-rose-600' : 'text-slate-900'">
+                {{ selectedKmToday }}<span class="text-[10px] font-black text-slate-400 ml-1">km</span>
+              </p>
+            </div>
+            <span class="px-3 py-1.5 rounded-xl text-[8px] font-black uppercase tracking-widest border shrink-0"
+              :class="selectedKmOverLimit ? 'border-rose-300 text-rose-600 bg-white' : 'border-slate-200 text-slate-400 bg-white'">
+              Max {{ kmLimit || '-' }} km/j
             </span>
           </div>
 
@@ -426,6 +480,7 @@ const applyMapStyle = () => {
     tileLayers.satellite.forEach((l) => leafletMap!.removeLayer(l))
     tileLayers.plan.addTo(leafletMap)
   }
+  leafletMap.setMaxZoom(18)
 }
 
 watch(mapStyle, applyMapStyle)
@@ -489,10 +544,35 @@ const selectOnlineCar = (p: any) => {
 const selectedCar = computed(
   () => gpsPositions.value.find((p) => String(p.carId) === selectedCarId.value) ?? null
 )
+
+// ─── Kilometrage du jour (par voiture) ──────────────────────────────────────
+const kmByCar = ref<Record<string, number>>({})
+const kmLimit = ref(0)
+const selectedKmToday = computed(() => {
+  const id = String(selectedCar.value?.carId ?? '')
+  const v = kmByCar.value[id]
+  return v == null ? 0 : Math.round(v * 10) / 10
+})
+const selectedKmOverLimit = computed(
+  () => kmLimit.value > 0 && selectedKmToday.value >= kmLimit.value
+)
 const followedCar = computed(
   () => gpsPositions.value.find((p) => String(p.carId) === followingId.value) ?? null
 )
 const isFollowing = (p: any) => String(followingId.value) === String(p.carId)
+
+// ─── Compteur de vitesse du véhicule suivi ──────────────────────────────────
+const gaugeCirc = 2 * Math.PI * 41
+const gaugeLen = gaugeCirc * 0.75
+const SPEED_GAUGE_MAX = 160
+const followGaugeFrac = computed(() =>
+  Math.min((followedCar.value?.speed || 0) / SPEED_GAUGE_MAX, 1)
+)
+const followGaugeColor = computed(() => {
+  const c = followedCar.value
+  if (!c || isStale(c)) return '#94a3b8'
+  return (c.speed || 0) > 2 ? '#34d399' : '#fb7185'
+})
 const lastUpdateLabel = computed(() =>
   lastUpdate.value ? timeLabel({ positionAt: lastUpdate.value.toISOString() }) : '--:--'
 )
@@ -544,6 +624,7 @@ const toggleFollow = (p: any) => {
     stopFollowing()
   } else {
     followingId.value = String(p.carId)
+    selectedCarId.value = ''
     flyUntil = Date.now() + 800
     leafletMap?.panTo([p.lat, p.lng], { animate: true, duration: 0.6 })
   }
@@ -618,7 +699,19 @@ const renderGpsMarkers = () => {
 
 const fetchGpsPositions = async () => {
   try {
-    gpsPositions.value = await gpsApi.getPositions()
+    const [positions, kmToday] = await Promise.all([
+      gpsApi.getPositions(),
+      gpsApi.getKmToday().catch(() => null),
+    ])
+    gpsPositions.value = positions
+    if (kmToday?.cars) {
+      const map: Record<string, number> = {}
+      for (const c of kmToday.cars) map[String(c.carId)] = Number(c.kmToday) || 0
+      kmByCar.value = map
+      if (Number.isFinite(Number(kmToday.limit)) && Number(kmToday.limit) > 0) {
+        kmLimit.value = Number(kmToday.limit)
+      }
+    }
     lastUpdate.value = new Date()
     renderGpsMarkers()
     if (!didFitBounds && leafletMap && gpsPositions.value.length) {
@@ -646,22 +739,22 @@ onMounted(async () => {
     leafletMap = L.map(mapEl.value, {
       attributionControl: false,
       zoomControl: false,
-      maxZoom: 30
+      maxZoom: 18
     }).setView([36.8, 10.18], 8)
     tileLayers = {
       satellite: [
-        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxNativeZoom: 19, maxZoom: 30 }),
-        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}', { maxNativeZoom: 19, maxZoom: 30 }),
-        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', { maxNativeZoom: 19, maxZoom: 30 })
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxNativeZoom: 18, maxZoom: 18 }),
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}', { maxNativeZoom: 18, maxZoom: 18 }),
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', { maxNativeZoom: 18, maxZoom: 18 })
       ],
       plan: L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
         subdomains: 'abcd',
-        maxNativeZoom: 19,
-        maxZoom: 30
+        maxNativeZoom: 18,
+        maxZoom: 18
       })
     }
     applyMapStyle()
-    L.control.zoom({ position: 'topright' }).addTo(leafletMap)
+    leafletMap.setMaxZoom(18)
     markersGroup = L.layerGroup().addTo(leafletMap)
     leafletMap.on('dragstart', () => {
       followingId.value = ''

@@ -62,6 +62,7 @@ export const dashboardApi = {
 export const gpsApi = {
   getPositions: () => api.get('/gps/positions').then(res => res.data),
   getSpeedAlerts: (limit = 50) => api.get('/gps/speed-alerts', { params: { limit } }).then(res => res.data),
+  getKmToday: () => api.get('/gps/km-today').then(res => res.data),
 };
 
 export const carApi = {
@@ -94,6 +95,8 @@ export const reservationApi = {
   confirm: (id: string, force = false) => api.patch(`/reservations/${id}/confirm`, null, { params: { force } }).then(res => res.data),
   updateStatus: (id: string, status: string, contratId?: string) => api.patch(`/reservations/${id}/status`, { status, contratId }).then(res => res.data),
   delete: (id: string) => api.delete(`/reservations/${id}`).then(res => res.data),
+
+  forceDelete: (id: string, password: string) => api.delete(`/reservations/${id}/force`, { data: { password } }).then(res => res.data),
 };
 
 export const clientApi = {
