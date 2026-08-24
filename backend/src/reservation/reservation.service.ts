@@ -281,6 +281,20 @@ export class ReservationService {
     return reservation;
   }
 
+  async forceDelete(id: string): Promise<{ deleted: boolean }> {
+    const result = await this.reservationModel.findByIdAndDelete(id).exec();
+    if (!result) {
+      throw new NotFoundException(`Reservation with ID ${id} not found`);
+    }
+
+    this.eventsGateway.broadcastDataChange('reservation:change', {
+      action: 'deleted',
+      id,
+    });
+
+    return { deleted: true };
+  }
+
   async updateStatus(
     id: string,
     status: string,

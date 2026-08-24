@@ -94,4 +94,32 @@ export class ReservationController {
   cancel(@Param('id') id: string) {
     return this.reservationService.cancel(id);
   }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('super_admin')
+  @Delete(':id/force')
+  async forceDelete(
+    @Param('id') id: string,
+    @Body() body: { password?: string },
+    @Req() req: any,
+  ) {
+    const user = await this.usersService.findById(req.user.id);
+
+    if (!user || !['admin', 'super_admin'].includes(user.role)) {
+      throw new ForbiddenException('Only administrators can delete reservations');
+    }
+
+    if (!body?.password) {
+      throw new BadRequestException(
+        'Password is required to delete a reservation',
+      );
+    }
+
+    const isMatch = await bcrypt.compare(body.password, user.password);
+    if (!isMatch) {
+      throw new BadRequestException('Invalid password');
+    }
+
+    return this.reservationService.forceDelete(id);
+  }
 }
