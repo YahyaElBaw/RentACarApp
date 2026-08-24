@@ -150,7 +150,6 @@ export const agenceApi = {
 };
 
 export const presenceApi = {
-  heartbeat: () => api.post('/presence/heartbeat').then(res => res.data),
   online: () => api.get('/presence/online').then(res => res.data),
   heartbeat: (data?: any) => api.post('/presence/heartbeat', data || {}).then(res => res.data),
   logout: () => api.post('/presence/logout').then(res => res.data),
