@@ -132,10 +132,10 @@
 
                 <TableCell class="pr-10 text-right">
                   <div class="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all translate-x-4 group-hover:translate-x-0 duration-500">
-                    <Button 
-                      v-if="isAdmin"
-                      variant="secondary" 
-                      size="icon" 
+                    <Button
+                      v-if="isAdmin || isSuperAdmin"
+                      variant="secondary"
+                      size="icon"
                       @click.stop="openForm(depense)"
                       class="h-11 w-11 text-slate-400 hover:text-indigo-500 hover:bg-indigo-500/10 rounded-xl transition-all"
                     >
@@ -323,6 +323,20 @@
         </div>
       </DialogContent>
     </Dialog>
+
+    <!-- SUPER ADMIN EDIT PASSWORD DIALOG -->
+    <PasswordConfirmDialog
+      v-model:open="showEditPwdDialog"
+      v-model:password="editPassword"
+      title="Modification"
+      subtitle="Dépense"
+      description="Mot de passe requis pour modifier cette dépense"
+      placeholder="Votre mot de passe..."
+      confirm-label="Confirmer la Modification"
+      loading-label="Enregistrement..."
+      :loading="submitting"
+      @confirm="performUpdateDepense(editPassword)"
+    />
   </div>
 </template>
 
@@ -349,10 +363,15 @@ import {
 } from '@/components/ui/table';
 import { depenseApi, carApi, settingApi } from '../api';
 import { useSocketStore } from '@/stores/socket';
+import { PasswordConfirmDialog } from '@/components/ui/password-dialog';
+import { usePasswordGuard, isPasswordError, LOCK_SECONDS } from '@/composables/usePasswordGuard';
 
 const socketStore = useSocketStore();
 let unsubscribeSocket: Function | null = null;
 const router = useRouter();
+const pwdGuard = usePasswordGuard();
+const showEditPwdDialog = ref(false);
+const editPassword = ref('');
 
 const toast = useToast();
 const depenses = ref<any[]>([]);
@@ -392,6 +411,11 @@ const resetForm = () => {
 const isAdmin = computed(() => {
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   return user.role === 'admin';
+});
+
+const isSuperAdmin = computed(() => {
+  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  return user.role === 'super_admin';
 });
 
 const filters = reactive<{ query: string; category: string | null }>({
@@ -447,7 +471,11 @@ watch(
 );
 
 const filteredDepenses = computed(() => {
-  let result = depenses.value;
+  let result = [...depenses.value].sort((a, b) => {
+    const da = new Date(a.date).getTime() || 0;
+    const db = new Date(b.date).getTime() || 0;
+    return db - da;
+  });
   if (filters.query.trim()) {
     const q = filters.query.toLowerCase();
     result = result.filter(d => {
@@ -460,7 +488,8 @@ const filteredDepenses = computed(() => {
   if (filters.category) {
     result = result.filter(d => d.category === filters.category);
   }
-  return result;
+  // Keep only the latest 10 entries
+  return result.slice(0, 10);
 });
 
 const loadDepenses = async () => {
@@ -514,6 +543,8 @@ watch(filters, loadDepenses, { deep: true });
 
 const openForm = async (depense?: any) => {
   pendingDepenses.value = [];
+  editPassword.value = '';
+  showEditPwdDialog.value = false;
   if (depense) {
     editingId.value = depense._id;
     depenseForm.date = depense.date ? new Date(depense.date).toISOString().split('T')[0] : '';
@@ -568,19 +599,43 @@ const saveAllPending = async () => {
   }
 };
 
-const updateDepense = async () => {
+const updateDepense = () => {
+  if (!editingId.value) return;
+  // Super admin must confirm with password before editing
+  if (isSuperAdmin.value) {
+    editPassword.value = '';
+    showEditPwdDialog.value = true;
+    return;
+  }
+  performUpdateDepense('');
+};
+
+const performUpdateDepense = async (password: string) => {
   if (!editingId.value) return;
   submitting.value = true;
   try {
-    const payload = { ...depenseForm };
+    const payload: any = { ...depenseForm };
     if (!payload.car) delete (payload as any).car;
+    if (isSuperAdmin.value) payload.password = password;
     await depenseApi.update(editingId.value, payload);
     showForm.value = false;
+    showEditPwdDialog.value = false;
+    editPassword.value = '';
+    pwdGuard.reset();
     toast.add({ severity: 'success', summary: 'Dépense modifiée', detail: 'Modification enregistrée avec succès', life: 3000 });
     await loadDepenses();
-  } catch (err) {
+  } catch (err: any) {
     console.error('Failed to update depense', err);
-    alert('Erreur lors de la modification de la dépense.');
+    if (isSuperAdmin.value && isPasswordError(err)) {
+      const locked = pwdGuard.registerFailure();
+      if (locked) {
+        toast.add({ severity: 'error', summary: 'Compte Verrouillé', detail: `Trop de tentatives. Réessayez dans ${LOCK_SECONDS} secondes.`, life: 3000 });
+      } else {
+        toast.add({ severity: 'error', summary: 'Mot de passe incorrect', detail: `Il vous reste ${pwdGuard.remainingAttempts} tentative(s).`, life: 3000 });
+      }
+    } else {
+      alert('Erreur lors de la modification de la dépense.');
+    }
   } finally {
     submitting.value = false;
   }

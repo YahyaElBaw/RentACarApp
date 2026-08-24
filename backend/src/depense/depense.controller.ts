@@ -9,13 +9,20 @@ import {
   Patch,
   UseGuards,
   Req,
+  UnauthorizedException,
+  BadRequestException,
 } from '@nestjs/common';
 import { DepenseService } from './depense.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { UsersService } from '../users/users.service';
+import * as bcrypt from 'bcrypt';
 
 @Controller('depenses')
 export class DepenseController {
-  constructor(private readonly depenseService: DepenseService) {}
+  constructor(
+    private readonly depenseService: DepenseService,
+    private readonly usersService: UsersService,
+  ) {}
 
   @UseGuards(JwtAuthGuard)
   @Post()
@@ -41,7 +48,25 @@ export class DepenseController {
 
   @UseGuards(JwtAuthGuard)
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateDepenseDto: any) {
+  async update(
+    @Param('id') id: string,
+    @Body() updateDepenseDto: any,
+    @Req() req: any,
+  ) {
+    const user = await this.usersService.findById(req.user.id);
+    if (user && user.role === 'super_admin') {
+      const { password, ...data } = updateDepenseDto || {};
+      if (!password) {
+        throw new UnauthorizedException(
+          'Password is required to edit a depense',
+        );
+      }
+      const isMatch = await bcrypt.compare(password, user.password);
+      if (!isMatch) {
+        throw new BadRequestException('Invalid password');
+      }
+      return this.depenseService.update(id, data);
+    }
     return this.depenseService.update(id, updateDepenseDto);
   }
 
