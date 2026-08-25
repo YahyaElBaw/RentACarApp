@@ -180,7 +180,7 @@ export class TraciPollerService implements OnModuleInit, OnModuleDestroy {
           provider: 'traci',
           lat,
           lng,
-          speed: typeof rec.speed === 'number' ? rec.speed : 0,
+          speed: Number(rec.speed) || 0,
           at: rec.recordTime ? new Date(rec.recordTime) : undefined,
         });
         if (result.accepted) accepted += 1;
