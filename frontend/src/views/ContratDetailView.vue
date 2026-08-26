@@ -1,10 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, watch, nextTick } from 'vue';
+import { ref, onMounted, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { contratApi, carApi, clientApi, settingApi, getImageUrl, agenceApi, gpsApi } from '@/api';
+import { contratApi, carApi, clientApi, settingApi, getImageUrl, agenceApi } from '@/api';
 import { formatDate } from '@/lib/utils';
-import * as L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
 import { 
   ArrowLeft, Download, 
   Car, Calendar, Phone, 
@@ -13,11 +11,8 @@ import {
   ChevronRight, ClipboardList,
   ShieldAlert, Lock, Eye, EyeOff, Printer,
   ChevronDown, User, MapPin, Fuel,
-  CalendarClock, Banknote, NotepadText, X,
-  Gauge, Route, TrendingUp
+  CalendarClock, Banknote, NotepadText, X
 } from 'lucide-vue-next';
-import { Line } from 'vue-chartjs';
-import { Chart as ChartJS, Title, Tooltip, Legend, LineElement, PointElement, CategoryScale, LinearScale, Filler } from 'chart.js';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -29,9 +24,6 @@ import { PasswordConfirmDialog } from '@/components/ui/password-dialog';
 import { useAuthStore } from '@/stores/auth';
 import { usePasswordGuard, handlePasswordError } from '@/composables/usePasswordGuard';
 import { useToast } from 'primevue/usetoast';
-import { useSocketStore } from '@/stores/socket';
-
-ChartJS.register(Title, Tooltip, Legend, LineElement, PointElement, CategoryScale, LinearScale, Filler);
 
 const route = useRoute();
 const router = useRouter();
@@ -42,64 +34,6 @@ const contrat = ref<any>(null);
 const loading = ref(true);
 const cloturing = ref(false);
 const deleting = ref(false);
-
-// GPS Stats
-const gpsStats = ref<any>(null);
-const gpsPositions = ref<any[]>([]);
-const gpsLoading = ref(false);
-const gpsTab = ref<'map' | 'speed'>('map');
-const gpsMapEl = ref<HTMLElement | null>(null);
-let gpsMap: any = null;
-let gpsMapLayer: any = null;
-const socketStore = useSocketStore();
-let unsubscribeGpsPosition: Function | null = null;
-
-const handleLivePosition = (payload: any) => {
-  const a = payload?.data || payload || {};
-  const carId = String(contrat.value?.car?._id || contrat.value?.car || '');
-  if (!carId || a.carId !== carId) return;
-  const pos = { lat: a.lat, lng: a.lng, speed: a.speed || 0, positionAt: a.positionAt };
-  gpsPositions.value = [...gpsPositions.value, pos];
-  if (gpsStats.value) {
-    const pts = gpsPositions.value;
-    if (pts.length >= 2) {
-      const prev = pts[pts.length - 2];
-      const haversine = (lat1: number, lng1: number, lat2: number, lng2: number) => {
-        const R = 6371000, toRad = (d: number) => d * Math.PI / 180;
-        const dLat = toRad(lat2 - lat1), dLng = toRad(lng2 - lng1);
-        const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
-        return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
-      };
-      gpsStats.value.totalDistance = Math.round((gpsStats.value.totalDistance + haversine(prev.lat, prev.lng, pos.lat, pos.lng) / 1000) * 10) / 10;
-      gpsStats.value.pointCount = pts.length;
-    }
-    if (pos.speed > 0) {
-      const allSpeeds = gpsPositions.value.filter((p: any) => p.speed > 0);
-      gpsStats.value.avgSpeed = Math.round(allSpeeds.reduce((s: number, p: any) => s + p.speed, 0) / allSpeeds.length);
-      if (pos.speed > gpsStats.value.topSpeed) gpsStats.value.topSpeed = pos.speed;
-    }
-  }
-  if (gpsMapLayer && gpsMap) {
-    const L = (window as any).L || null;
-    if (L) {
-      L.polyline([[prev?.lat || pos.lat, prev?.lng || pos.lng], [pos.lat, pos.lng]], { color: '#6366f1', weight: 3, opacity: 0.7 }).addTo(gpsMapLayer);
-    }
-  }
-  if (gpsTab.value === 'speed' && gpsPositions.value.length > 1) {
-    rebuildSpeedChart();
-  }
-};
-
-const rebuildSpeedChart = () => {
-  // Trigger reactivity by reassigning a copy
-  gpsPositions.value = [...gpsPositions.value];
-};
-
-const subscribeGpsLive = () => {
-  if (!unsubscribeGpsPosition) {
-    unsubscribeGpsPosition = socketStore.onEvent('gps:position-update', handleLivePosition);
-  }
-};
 
 // Deletion State
 const showDeleteDialog = ref(false);
@@ -462,73 +396,11 @@ const fetchContrat = async () => {
     if (contrat.value) {
       closureForm.value.returnMileage = contrat.value.car?.mileage || 0;
       closureForm.value.isPaid = contrat.value.isPaid || false;
-      await loadGpsStats();
-      subscribeGpsLive();
     }
   } catch (err) {
     console.error('Erreur lors du chargement du contrat:', err);
   } finally {
     loading.value = false;
-  }
-};
-
-const loadGpsStats = async () => {
-  if (!contrat.value?.car) return;
-  const carId = String(contrat.value.car._id || contrat.value.car);
-  if (!carId) return;
-  gpsLoading.value = true;
-  try {
-    const isClosed = contrat.value.status === 'terminé' || contrat.value.status === 'clôturé';
-    const archiveUrl = contrat.value.gpsArchiveUrl;
-
-    if (isClosed && archiveUrl) {
-      const resp = await fetch(archiveUrl);
-      const archive = await resp.json();
-      const positions = (archive.positions || []).map((p: any) => ({
-        lat: p.lat,
-        lng: p.lng,
-        speed: p.speed || 0,
-        positionAt: p.t ? (p.t.length === 13 ? p.t + ':00:00.000Z' : p.t) : p.positionAt,
-      }));
-      gpsPositions.value = positions;
-      if (positions.length >= 2) {
-        let totalMeters = 0;
-        let speedSum = 0, speedCount = 0, topSpeed = 0;
-        for (let i = 1; i < positions.length; i++) {
-          const R = 6371000, toRad = (d: number) => d * Math.PI / 180;
-          const dLat = toRad(positions[i].lat - positions[i - 1].lat);
-          const dLng = toRad(positions[i].lng - positions[i - 1].lng);
-          const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(positions[i - 1].lat)) * Math.cos(toRad(positions[i].lat)) * Math.sin(dLng / 2) ** 2;
-          totalMeters += 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
-          if (positions[i].speed > 0) {
-            speedSum += positions[i].speed;
-            speedCount++;
-            if (positions[i].speed > topSpeed) topSpeed = positions[i].speed;
-          }
-        }
-        gpsStats.value = {
-          totalDistance: Math.round((totalMeters / 1000) * 10) / 10,
-          avgSpeed: speedCount > 0 ? Math.round(speedSum / speedCount) : 0,
-          topSpeed,
-          pointCount: positions.length,
-        };
-      } else {
-        gpsStats.value = { totalDistance: 0, avgSpeed: 0, topSpeed: 0, pointCount: positions.length };
-      }
-    } else {
-      const from = contrat.value.startDate;
-      const to = contrat.value.endDate || new Date().toISOString();
-      const [stats, positions] = await Promise.all([
-        gpsApi.getHistoryStats(carId, from, to).catch(() => null),
-        gpsApi.getHistory(carId, from, to, 10000).catch(() => null),
-      ]);
-      gpsStats.value = stats;
-      gpsPositions.value = positions || [];
-    }
-  } catch {
-    // ignore
-  } finally {
-    gpsLoading.value = false;
   }
 };
 
@@ -554,11 +426,6 @@ onMounted(async () => {
     returnMileageInput.value = contrat.value.car?.mileage || 0;
     showReturnMileageAlert.value = true;
   }
-});
-
-onUnmounted(() => {
-  if (unsubscribeGpsPosition) { unsubscribeGpsPosition(); unsubscribeGpsPosition = null; }
-  if (gpsMap) { gpsMap.remove(); gpsMap = null; }
 });
 
 const openPrintModal = () => {
@@ -772,104 +639,6 @@ const submitCloture = async () => {
   }
 };
 
-// ── GPS Stats ──────────────────────────────────────────────────────────────────
-const hasGpsData = computed(() => gpsPositions.value.length > 1);
-
-const gpsChartData = computed(() => {
-  if (!gpsPositions.value.length) return null;
-  const points = gpsPositions.value;
-
-  const firstAt = new Date(points[0].positionAt).getTime();
-  const lastAt = new Date(points[points.length - 1].positionAt).getTime();
-  const spanDays = (lastAt - firstAt) / (1000 * 60 * 60 * 24);
-  const byDay = spanDays > 1;
-
-  const buckets = new Map<string, { sum: number; count: number }>();
-  for (const p of points) {
-    const d = new Date(p.positionAt);
-    let key: string;
-    if (byDay) {
-      key = d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
-    } else {
-      key = d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }) + ' ' +
-            String(d.getHours()).padStart(2, '0') + ':00';
-    }
-    const bucket = buckets.get(key) || { sum: 0, count: 0 };
-    bucket.sum += p.speed || 0;
-    bucket.count++;
-    buckets.set(key, bucket);
-  }
-
-  const labels: string[] = [];
-  const data: number[] = [];
-  for (const [key, bucket] of buckets) {
-    labels.push(key);
-    data.push(Math.round(bucket.sum / bucket.count));
-  }
-
-  return {
-    labels,
-    datasets: [
-      {
-        label: byDay ? 'Vitesse moyenne / jour (km/h)' : 'Vitesse moyenne / heure (km/h)',
-        data,
-        borderColor: '#6366f1',
-        backgroundColor: 'rgba(99,102,241,0.08)',
-        fill: true,
-        tension: 0.3,
-        pointRadius: data.length < 50 ? 3 : 0,
-        pointBackgroundColor: '#6366f1',
-        borderWidth: 2,
-      },
-    ],
-  };
-});
-
-const gpsChartOptions = {
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: {
-    legend: { display: false },
-    tooltip: { mode: 'index' as const, intersect: false },
-  },
-  scales: {
-    x: { display: false },
-    y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.04)' }, ticks: { font: { size: 10, weight: 'bold' as const } } },
-  },
-  interaction: { mode: 'nearest' as const, axis: 'x' as const, intersect: false },
-};
-
-const initGpsMap = (el: HTMLElement) => {
-  if (gpsMap) { gpsMap.remove(); gpsMap = null; }
-  gpsMap = L.map(el, { attributionControl: false, zoomControl: true, maxZoom: 18 }).setView([36.8, 10.18], 8);
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(gpsMap);
-  gpsMapLayer = L.layerGroup().addTo(gpsMap);
-
-  if (!gpsPositions.value.length) return;
-
-  const coords = gpsPositions.value.map((p: any) => [p.lat, p.lng]);
-  const startIcon = L.divIcon({ html: '<div class="w-4 h-4 bg-emerald-500 rounded-full border-2 border-white shadow-lg"></div>', className: '', iconSize: [16, 16], iconAnchor: [8, 8] });
-  const endIcon = L.divIcon({ html: '<div class="w-4 h-4 bg-rose-500 rounded-full border-2 border-white shadow-lg"></div>', className: '', iconSize: [16, 16], iconAnchor: [8, 8] });
-
-  L.marker(coords[0], { icon: startIcon }).addTo(gpsMapLayer).bindPopup('Départ');
-  L.marker(coords[coords.length - 1], { icon: endIcon }).addTo(gpsMapLayer).bindPopup('Arrivée');
-  L.polyline(coords, { color: '#6366f1', weight: 3, opacity: 0.7 }).addTo(gpsMapLayer);
-  gpsMap.fitBounds(L.latLngBounds(coords).pad(0.1));
-};
-
-watch(gpsMapEl, (el) => {
-  if (el && gpsPositions.value.length > 1) {
-    nextTick(() => initGpsMap(el));
-  }
-});
-
-watch(gpsTab, (tab) => {
-  if (tab === 'map' && gpsMapEl.value && gpsPositions.value.length > 1) {
-    nextTick(() => {
-      initGpsMap(gpsMapEl.value!);
-    });
-  }
-});
 </script>
 
 <template>
@@ -1176,68 +945,6 @@ watch(gpsTab, (tab) => {
             </Button>
          </div>
 
-         <!-- GPS STATISTICS SECTION -->
-         <section v-if="contrat.car" class="animate-in fade-in slide-in-from-bottom-4 duration-700">
-            <Card class="border border-slate-100 shadow-2xl shadow-indigo-200/30 bg-white rounded-[2.5rem] overflow-hidden">
-               <div class="p-8 pb-0">
-                  <div class="flex items-center justify-between mb-6">
-                     <div class="flex items-center gap-3">
-                        <div class="w-10 h-10 rounded-2xl bg-indigo-50 flex items-center justify-center border border-indigo-100">
-                           <Route class="w-5 h-5 text-indigo-600" />
-                        </div>
-                        <div>
-                           <h3 class="text-lg font-black text-slate-900 uppercase tracking-tight">Statistiques GPS</h3>
-                           <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Données de la période du contrat</p>
-                        </div>
-                     </div>
-                     <div class="flex gap-2">
-                        <button @click="gpsTab = 'map'" :class="['px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all', gpsTab === 'map' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'bg-slate-100 text-slate-500 hover:bg-slate-200']">
-                           <MapPin class="w-3.5 h-3.5 inline mr-1" /> Itinéraire
-                        </button>
-                        <button @click="gpsTab = 'speed'" :class="['px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all', gpsTab === 'speed' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'bg-slate-100 text-slate-500 hover:bg-slate-200']">
-                           <Gauge class="w-3.5 h-3.5 inline mr-1" /> Vitesse
-                        </button>
-                     </div>
-                  </div>
-
-                  <!-- Summary Cards -->
-                  <div v-if="gpsStats" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-                     <div class="rounded-2xl bg-slate-50 border border-slate-100 p-4 text-center">
-                        <p class="text-[8px] font-black uppercase tracking-widest text-slate-400">Distance Totale</p>
-                        <p class="text-2xl font-black text-slate-900 mt-1 tabular-nums">{{ gpsStats.totalDistance }}<span class="text-[10px] text-slate-400 ml-1">km</span></p>
-                     </div>
-                     <div class="rounded-2xl bg-slate-50 border border-slate-100 p-4 text-center">
-                        <p class="text-[8px] font-black uppercase tracking-widest text-slate-400">Vitesse Moyenne</p>
-                        <p class="text-2xl font-black text-slate-900 mt-1 tabular-nums">{{ gpsStats.avgSpeed }}<span class="text-[10px] text-slate-400 ml-1">km/h</span></p>
-                     </div>
-                     <div class="rounded-2xl bg-slate-50 border border-slate-100 p-4 text-center">
-                        <p class="text-[8px] font-black uppercase tracking-widest text-slate-400">Vitesse Max</p>
-                        <p class="text-2xl font-black text-rose-600 mt-1 tabular-nums">{{ gpsStats.topSpeed }}<span class="text-[10px] text-slate-400 ml-1">km/h</span></p>
-                     </div>
-                     <div class="rounded-2xl bg-slate-50 border border-slate-100 p-4 text-center">
-                        <p class="text-[8px] font-black uppercase tracking-widest text-slate-400">Points GPS</p>
-                        <p class="text-2xl font-black text-slate-900 mt-1 tabular-nums">{{ gpsStats.pointCount }}</p>
-                     </div>
-                  </div>
-
-                  <!-- Map Tab -->
-                  <div v-show="gpsTab === 'map'" ref="gpsMapEl" class="h-[400px] rounded-2xl overflow-hidden border border-slate-100"></div>
-
-                  <!-- Speed Chart Tab -->
-                  <div v-if="gpsTab === 'speed' && gpsChartData" class="h-[300px]">
-                     <Line :data="gpsChartData" :options="gpsChartOptions" />
-                  </div>
-
-                  <!-- Empty State -->
-                  <div v-if="(gpsTab === 'map' && !hasGpsData && !gpsLoading) || (gpsTab === 'speed' && !gpsChartData && !gpsLoading)" class="h-[300px] flex items-center justify-center text-slate-300">
-                     <div class="text-center space-y-2">
-                        <MapPin class="w-10 h-10 mx-auto" />
-                        <p class="text-[10px] font-black uppercase tracking-widest">Aucune donnée GPS pour cette période</p>
-                     </div>
-                  </div>
-               </div>
-            </Card>
-         </section>
       </div>
       <!-- DIALOGS -->
       <PasswordConfirmDialog
