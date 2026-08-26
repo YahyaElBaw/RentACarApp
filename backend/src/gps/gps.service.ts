@@ -551,7 +551,6 @@ export class GpsService {
         .find({
           carId: new Types.ObjectId(carId),
           positionAt: { $gte: startDate, $lte: endDate },
-          uploaded: false,
         })
         .sort({ positionAt: 1 })
         .lean()
@@ -559,18 +558,50 @@ export class GpsService {
 
       if (!positions.length) return { url: null, count: 0 };
 
+      const spanMs = endDate.getTime() - startDate.getTime();
+      const spanDays = spanMs / (1000 * 60 * 60 * 24);
+      const byDay = spanDays > 1;
+
+      const buckets = new Map<string, { lat: number; lng: number; speedSum: number; count: number; firstAt: string }>();
+      for (const p of positions) {
+        const d = new Date(p.positionAt);
+        let key: string;
+        if (byDay) {
+          key = d.toISOString().slice(0, 10);
+        } else {
+          key = d.toISOString().slice(0, 13);
+        }
+        const b = buckets.get(key);
+        if (b) {
+          b.speedSum += p.speed || 0;
+          b.count++;
+        } else {
+          buckets.set(key, {
+            lat: p.lat,
+            lng: p.lng,
+            speedSum: p.speed || 0,
+            count: 1,
+            firstAt: p.positionAt.toISOString(),
+          });
+        }
+      }
+
+      const aggregated = Array.from(buckets.entries()).map(([key, b]) => ({
+        t: key,
+        lat: b.lat,
+        lng: b.lng,
+        speed: Math.round(b.speedSum / b.count),
+      }));
+
       const json = JSON.stringify({
         contractId,
         carId,
         startDate: startDate.toISOString(),
         endDate: endDate.toISOString(),
-        pointCount: positions.length,
-        positions: positions.map((p) => ({
-          lat: p.lat,
-          lng: p.lng,
-          speed: p.speed,
-          t: p.positionAt.toISOString(),
-        })),
+        aggregation: byDay ? 'daily' : 'hourly',
+        pointCount: aggregated.length,
+        rawPointCount: positions.length,
+        positions: aggregated,
       });
 
       const { v2: cloudinary } = await import('cloudinary');
@@ -590,17 +621,16 @@ export class GpsService {
         stream.end(Buffer.from(json));
       });
 
-      const ids = positions.map((p) => (p as any)._id);
-      await this.gpsHistoryModel.updateMany(
-        { _id: { $in: ids } },
-        { $set: { uploaded: true } },
-      );
+      await this.gpsHistoryModel.deleteMany({
+        carId: new Types.ObjectId(carId),
+        positionAt: { $gte: startDate, $lte: endDate },
+      }).exec();
 
       this.logger.log(
-        `Exported ${positions.length} GPS points for contract ${contractId} to Cloudinary`,
+        `Exported ${positions.length} raw → ${aggregated.length} ${byDay ? 'daily' : 'hourly'} buckets for contract ${contractId}`,
       );
 
-      return { url: result.secure_url, count: positions.length };
+      return { url: result.secure_url, count: aggregated.length };
     } catch (err) {
       this.logger.error(`GPS export failed for contract ${contractId}: ${String(err)}`);
       return { url: null, count: 0 };

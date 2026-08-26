@@ -478,14 +478,53 @@ const loadGpsStats = async () => {
   if (!carId) return;
   gpsLoading.value = true;
   try {
-    const from = contrat.value.startDate;
-    const to = contrat.value.endDate || new Date().toISOString();
-    const [stats, positions] = await Promise.all([
-      gpsApi.getHistoryStats(carId, from, to).catch(() => null),
-      gpsApi.getHistory(carId, from, to, 10000).catch(() => null),
-    ]);
-    gpsStats.value = stats;
-    gpsPositions.value = positions || [];
+    const isClosed = contrat.value.status === 'terminé' || contrat.value.status === 'clôturé';
+    const archiveUrl = contrat.value.gpsArchiveUrl;
+
+    if (isClosed && archiveUrl) {
+      const resp = await fetch(archiveUrl);
+      const archive = await resp.json();
+      const positions = (archive.positions || []).map((p: any) => ({
+        lat: p.lat,
+        lng: p.lng,
+        speed: p.speed || 0,
+        positionAt: p.t ? (p.t.length === 13 ? p.t + ':00:00.000Z' : p.t) : p.positionAt,
+      }));
+      gpsPositions.value = positions;
+      if (positions.length >= 2) {
+        let totalMeters = 0;
+        let speedSum = 0, speedCount = 0, topSpeed = 0;
+        for (let i = 1; i < positions.length; i++) {
+          const R = 6371000, toRad = (d: number) => d * Math.PI / 180;
+          const dLat = toRad(positions[i].lat - positions[i - 1].lat);
+          const dLng = toRad(positions[i].lng - positions[i - 1].lng);
+          const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(positions[i - 1].lat)) * Math.cos(toRad(positions[i].lat)) * Math.sin(dLng / 2) ** 2;
+          totalMeters += 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+          if (positions[i].speed > 0) {
+            speedSum += positions[i].speed;
+            speedCount++;
+            if (positions[i].speed > topSpeed) topSpeed = positions[i].speed;
+          }
+        }
+        gpsStats.value = {
+          totalDistance: Math.round((totalMeters / 1000) * 10) / 10,
+          avgSpeed: speedCount > 0 ? Math.round(speedSum / speedCount) : 0,
+          topSpeed,
+          pointCount: positions.length,
+        };
+      } else {
+        gpsStats.value = { totalDistance: 0, avgSpeed: 0, topSpeed: 0, pointCount: positions.length };
+      }
+    } else {
+      const from = contrat.value.startDate;
+      const to = contrat.value.endDate || new Date().toISOString();
+      const [stats, positions] = await Promise.all([
+        gpsApi.getHistoryStats(carId, from, to).catch(() => null),
+        gpsApi.getHistory(carId, from, to, 10000).catch(() => null),
+      ]);
+      gpsStats.value = stats;
+      gpsPositions.value = positions || [];
+    }
   } catch {
     // ignore
   } finally {
@@ -739,26 +778,47 @@ const hasGpsData = computed(() => gpsPositions.value.length > 1);
 const gpsChartData = computed(() => {
   if (!gpsPositions.value.length) return null;
   const points = gpsPositions.value;
+
+  const firstAt = new Date(points[0].positionAt).getTime();
+  const lastAt = new Date(points[points.length - 1].positionAt).getTime();
+  const spanDays = (lastAt - firstAt) / (1000 * 60 * 60 * 24);
+  const byDay = spanDays > 1;
+
+  const buckets = new Map<string, { sum: number; count: number }>();
+  for (const p of points) {
+    const d = new Date(p.positionAt);
+    let key: string;
+    if (byDay) {
+      key = d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
+    } else {
+      key = d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }) + ' ' +
+            String(d.getHours()).padStart(2, '0') + ':00';
+    }
+    const bucket = buckets.get(key) || { sum: 0, count: 0 };
+    bucket.sum += p.speed || 0;
+    bucket.count++;
+    buckets.set(key, bucket);
+  }
+
   const labels: string[] = [];
   const data: number[] = [];
-  const step = Math.max(1, Math.floor(points.length / 200));
-  for (let i = 0; i < points.length; i += step) {
-    const p = points[i];
-    const d = new Date(p.positionAt);
-    labels.push(d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }) + ' ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }));
-    data.push(p.speed || 0);
+  for (const [key, bucket] of buckets) {
+    labels.push(key);
+    data.push(Math.round(bucket.sum / bucket.count));
   }
+
   return {
     labels,
     datasets: [
       {
-        label: 'Vitesse (km/h)',
+        label: byDay ? 'Vitesse moyenne / jour (km/h)' : 'Vitesse moyenne / heure (km/h)',
         data,
         borderColor: '#6366f1',
         backgroundColor: 'rgba(99,102,241,0.08)',
         fill: true,
         tension: 0.3,
-        pointRadius: 0,
+        pointRadius: data.length < 50 ? 3 : 0,
+        pointBackgroundColor: '#6366f1',
         borderWidth: 2,
       },
     ],
