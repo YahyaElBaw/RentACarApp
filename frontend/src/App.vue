@@ -127,9 +127,8 @@ const fetchAlerts = async () => {
   } catch (err) {
     console.error('Failed to fetch alerts', err)
   }
+  await loadSpeedAlerts()
 }
-
-let alertInterval: any = null
 
 // ── Speed alerts (GPS) ───────────────────────────────────────────────────────
 let unsubscribeSpeedAlerts: Function | null = null
@@ -154,6 +153,16 @@ const handleSpeedAlertEvent = (payload: any) => {
     detail: `${carLabel} (${a.matricule || '?'}) roule à ${Math.round(a.speed)} km/h${limitTxt} — ${when}`,
     life: 10000,
   })
+  alerts.value = [
+    {
+      message: `${carLabel} (${a.matricule || '?'}) dépasse la limite: ${Math.round(a.speed)} km/h (limite ${a.limit || appSettings.value?.speedAlertLimit || '?'} km/h)`,
+      type: 'critique',
+      key: `gps:speed:${a.carId || a._id || Date.now()}`,
+      code: 'SPEED',
+      alertAt: a.alertAt,
+    },
+    ...alerts.value,
+  ]
 }
 
 const handleKmAlertEvent = (payload: any) => {
@@ -166,12 +175,33 @@ const handleKmAlertEvent = (payload: any) => {
     detail: `${carLabel} (${a.matricule || '?'}) a parcouru ${Math.round(a.kmToday)} km aujourd'hui (max ${a.limit} km/jour) — ${when}`,
     life: 10000,
   })
+  alerts.value = [
+    {
+      message: `${carLabel} (${a.matricule || '?'}) a dépassé le kilométrage journalier: ${Math.round(a.kmToday)} km (max ${a.limit} km/jour)`,
+      type: 'urgent',
+      key: `gps:km:${a.carId || a._id || Date.now()}`,
+      code: 'KM',
+      alertAt: a.alertAt,
+    },
+    ...alerts.value,
+  ]
 }
 
 const loadSpeedAlerts = async () => {
   if (!isAuthenticated.value) return
   try {
-    speedAlerts.value = await gpsApi.getSpeedAlerts(20)
+    const data = await gpsApi.getSpeedAlerts(20)
+    speedAlerts.value = data || []
+    const gpsAlerts = (data || []).map((a: any) => ({
+      message: `${[a.brand, a.model].filter(Boolean).join(' ')} (${a.matricule || '?'}) dépasse la limite: ${Math.round(a.speed)} km/h (limite ${a.limit || appSettings.value?.speedAlertLimit || '?'} km/h)`,
+      type: 'critique' as const,
+      key: `gps:speed:${a._id}`,
+      code: 'SPEED',
+      alertAt: a.alertAt,
+    }))
+    const existingKeys = new Set(alerts.value.map((x: any) => x.key))
+    const newGpsAlerts = gpsAlerts.filter((x: any) => !existingKeys.has(x.key))
+    alerts.value = [...newGpsAlerts, ...alerts.value]
   } catch {
     // ignore
   }
@@ -296,7 +326,6 @@ onMounted(() => {
     socketStore.connect()
     socketStore.startPresence()
     connectSpeedAlertListener()
-    alertInterval = setInterval(fetchAlerts, 60000 * 5) // Every 5 mins
   }
 })
 
@@ -304,7 +333,6 @@ onUnmounted(() => {
   window.removeEventListener('online', handleOnline)
   window.removeEventListener('offline', handleOffline)
   window.removeEventListener('api-network-error', handleApiError)
-  if (alertInterval) clearInterval(alertInterval)
   disconnectSpeedAlertListener()
   socketStore.stopPresence()
   socketStore.disconnect()
@@ -317,15 +345,10 @@ watch(isAuthenticated, (val) => {
     socketStore.connect()
     socketStore.startPresence()
     connectSpeedAlertListener()
-    if (!alertInterval) alertInterval = setInterval(fetchAlerts, 60000 * 5)
   } else {
     socketStore.stopPresence()
     socketStore.disconnect()
     disconnectSpeedAlertListener()
-    if (alertInterval) {
-      clearInterval(alertInterval)
-      alertInterval = null
-    }
     alerts.value = []
   }
 })

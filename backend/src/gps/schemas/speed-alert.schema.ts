@@ -19,6 +19,9 @@ export class SpeedAlert {
   speed: number;
 
   @Prop({ default: 0 })
+  limit: number;
+
+  @Prop({ default: 0 })
   lat: number;
 
   @Prop({ default: 0 })

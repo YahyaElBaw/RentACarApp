@@ -25,6 +25,10 @@ export class CarKmDay {
 
   @Prop({ default: false })
   alertSent: boolean;
+
+  /** Highest speed recorded today (km/h) */
+  @Prop({ default: 0 })
+  topSpeed: number;
 }
 
 export type CarKmDayDocument = CarKmDay & Document;

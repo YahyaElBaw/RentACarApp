@@ -1,7 +1,7 @@
 <template>
   <div ref="pageRoot" :class="['flex flex-col bg-gradient-to-br from-slate-50 via-indigo-50/30 to-slate-100 overflow-hidden', isFullScreen ? 'h-screen' : (isElectron ? 'h-[calc(100vh-7.375rem)]' : 'h-[calc(100vh-5rem)]')]">
     <!-- Header (page-level controls) -->
-    <header class="shrink-0 px-4 md:px-10 pt-5 pb-4 flex items-center gap-4 flex-wrap">
+    <header v-if="!isFullScreen" class="shrink-0 px-4 md:px-10 pt-5 pb-4 flex items-center gap-4 flex-wrap">
       <div class="min-w-0">
         <h1 class="text-3xl md:text-4xl font-black tracking-tight text-slate-900 uppercase flex items-center gap-2.5 truncate">
           Suivi <span class="text-indigo-600 italic">Flotte</span>
@@ -66,8 +66,8 @@
 
     <!-- Map view area (sliders constrained here, below the top bar) -->
     <div class="relative flex-1 min-h-0">
-      <main class="w-full h-full px-4 md:px-10 pb-6">
-      <div class="relative w-full h-full rounded-[2.5rem] overflow-hidden border-[3px] border-slate-200 shadow-2xl shadow-slate-300/40 bg-slate-900 z-0">
+      <main :class="['w-full h-full', isFullScreen ? '' : 'px-4 md:px-10 pb-6']">
+      <div :class="['relative w-full h-full bg-slate-900 z-0', isFullScreen ? 'overflow-hidden' : 'rounded-[2.5rem] overflow-hidden border-[3px] border-slate-200 shadow-2xl shadow-slate-300/40']">
         <div ref="mapEl" class="absolute inset-0"></div>
 
         <div v-if="loading" class="absolute inset-0 bg-white/70 backdrop-blur-sm flex items-center justify-center z-10">
@@ -78,6 +78,12 @@
           <p class="text-[9px] font-black uppercase tracking-widest text-slate-400">Aucune position GPS pour le moment</p>
           <p class="text-[9px] font-bold uppercase tracking-widest text-slate-300">Vérifiez l'IMEI ou la plaque des véhicules</p>
         </div>
+
+        <!-- ── Exit fullscreen floating button ────────────────────────────── -->
+        <button v-if="isFullScreen" @click="toggleFullScreen"
+          class="absolute top-4 right-4 z-[500] w-11 h-11 rounded-2xl bg-white/90 backdrop-blur-md shadow-xl border border-slate-200 flex items-center justify-center hover:bg-white active:scale-95 transition-all">
+          <Minimize2 class="w-4 h-4 text-slate-700" />
+        </button>
 
         <!-- ── Online / En mouvement — bottom-left widget ─────────────────── -->
         <div v-if="movingCars.length" class="absolute left-4 bottom-4 z-[450] w-[230px] flex flex-col gap-2 items-stretch">
@@ -239,7 +245,12 @@
               <span v-html="carIconSvg(colorFor(selectedCar))"></span>
             </span>
             <div class="min-w-0">
-              <p class="text-base font-black text-slate-900 uppercase tracking-wider truncate">{{ selectedCar.matricule }}</p>
+              <div class="flex items-center gap-2">
+                <p class="text-base font-black text-slate-900 uppercase tracking-wider truncate">{{ selectedCar.matricule }}</p>
+                <span :class="['px-2 py-0.5 rounded-lg text-[7px] font-black uppercase tracking-widest border shrink-0', selectedCar.isAvailable ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-rose-50 text-rose-600 border-rose-200']">
+                  {{ selectedCar.isAvailable ? 'Disponible' : 'Louée' }}
+                </span>
+              </div>
               <p class="text-[9px] font-bold uppercase tracking-widest text-slate-400 truncate mt-0.5">{{ selectedCar.brand }} {{ selectedCar.model }}</p>
             </div>
           </div>
@@ -276,18 +287,15 @@
             </span>
           </div>
 
-          <!-- Statut du véhicule (super admin uniquement) -->
-          <div v-if="authStore.isSuperAdmin" class="rounded-2xl border border-slate-100 bg-slate-50/60 p-3 flex items-center justify-between gap-3">
+          <!-- Vitesse max aujourd'hui -->
+          <div class="rounded-2xl border border-slate-100 bg-slate-50/60 p-3 flex items-center justify-between gap-3">
             <div>
-              <p class="text-[8px] font-black uppercase tracking-widest text-slate-400">Statut du véhicule</p>
-              <p class="text-[10px] font-black mt-0.5" :class="selectedCar.isAvailable ? 'text-emerald-600' : 'text-rose-600'">
-                {{ selectedCar.isAvailable ? 'Disponible' : 'Louée' }}
+              <p class="text-[8px] font-black uppercase tracking-widest text-slate-400">Vitesse Max Aujourd'hui</p>
+              <p class="text-xl font-black leading-none mt-1 tabular-nums text-slate-900">
+                {{ selectedTopSpeed }}<span class="text-[10px] font-black text-slate-400 ml-1">km/h</span>
               </p>
             </div>
-            <button v-if="selectedCar.isAvailable" @click="setCarStatus" :disabled="statusSaving"
-              class="h-9 px-4 rounded-xl text-[8px] font-black uppercase tracking-widest text-white bg-rose-500 hover:bg-rose-600 shadow-lg shadow-rose-200 transition-all active:scale-95 disabled:opacity-60 shrink-0">
-              {{ statusSaving ? '...' : 'Marquer louée' }}
-            </button>
+            <Gauge class="w-5 h-5 text-slate-300 shrink-0" />
           </div>
 
           <div class="grid grid-cols-2 gap-x-3 gap-y-2 pt-1">
@@ -422,7 +430,7 @@ import {
   RefreshCw, Loader2 as LoaderIcon, MapPin,
   X, LocateFixed, PauseCircle, Satellite, Map as MapIcon,
   FileText, Car as CarIcon, Users, ChevronRight, ChevronUp,
-  Maximize2, Minimize2
+  Maximize2, Minimize2, Gauge
 } from 'lucide-vue-next'
 import { gpsApi, carApi } from '@/api'
 import { useAuthStore } from '@/stores/auth'
@@ -466,6 +474,7 @@ const legend = [
 let leafletMap: L.Map | null = null
 let markersGroup: L.LayerGroup | null = null
 let gpsTimer: any = null
+let kmTodayTimer: any = null
 let didFitBounds = false
 
 const mapStyle = ref<'satellite' | 'plan'>('satellite')
@@ -547,11 +556,16 @@ const selectedCar = computed(
 
 // ─── Kilometrage du jour (par voiture) ──────────────────────────────────────
 const kmByCar = ref<Record<string, number>>({})
+const topSpeedByCar = ref<Record<string, number>>({})
 const kmLimit = ref(0)
 const selectedKmToday = computed(() => {
   const id = String(selectedCar.value?.carId ?? '')
   const v = kmByCar.value[id]
   return v == null ? 0 : Math.round(v * 10) / 10
+})
+const selectedTopSpeed = computed(() => {
+  const id = String(selectedCar.value?.carId ?? '')
+  return topSpeedByCar.value[id] ?? 0
 })
 const selectedKmOverLimit = computed(
   () => kmLimit.value > 0 && selectedKmToday.value >= kmLimit.value
@@ -697,20 +711,42 @@ const renderGpsMarkers = () => {
   }
 }
 
-const fetchGpsPositions = async () => {
+const KM_REFRESH_MS = 10 * 60 * 1000
+
+const fetchKmToday = async () => {
   try {
-    const [positions, kmToday] = await Promise.all([
-      gpsApi.getPositions(),
-      gpsApi.getKmToday().catch(() => null),
-    ])
-    gpsPositions.value = positions
+    const kmToday = await gpsApi.getKmToday().catch(() => null)
     if (kmToday?.cars) {
-      const map: Record<string, number> = {}
-      for (const c of kmToday.cars) map[String(c.carId)] = Number(c.kmToday) || 0
-      kmByCar.value = map
+      const kmMap: Record<string, number> = {}
+      const speedMap: Record<string, number> = {}
+      for (const c of kmToday.cars) {
+        kmMap[String(c.carId)] = Number(c.kmToday) || 0
+        speedMap[String(c.carId)] = Number(c.topSpeed) || 0
+      }
+      kmByCar.value = kmMap
+      topSpeedByCar.value = speedMap
       if (Number.isFinite(Number(kmToday.limit)) && Number(kmToday.limit) > 0) {
         kmLimit.value = Number(kmToday.limit)
       }
+    }
+  } catch (err) {
+    console.error('Failed to load km today', err)
+  }
+}
+
+const fetchGpsPositions = async () => {
+  try {
+    const positions = await gpsApi.getPositions()
+    gpsPositions.value = positions
+    const updated: Record<string, number> = {}
+    for (const p of positions) {
+      const id = String(p.carId)
+      const cur = Number(p.speed) || 0
+      const prev = topSpeedByCar.value[id] ?? 0
+      if (cur > prev) updated[id] = cur
+    }
+    if (Object.keys(updated).length) {
+      topSpeedByCar.value = { ...topSpeedByCar.value, ...updated }
     }
     lastUpdate.value = new Date()
     renderGpsMarkers()
@@ -762,13 +798,15 @@ onMounted(async () => {
     setTimeout(() => leafletMap?.invalidateSize(), 150)
   }
   document.addEventListener('fullscreenchange', syncFullScreen)
-  await fetchGpsPositions()
+  await Promise.all([fetchGpsPositions(), fetchKmToday()])
   gpsTimer = setInterval(() => fetchGpsPositions(), REFRESH_MS)
+  kmTodayTimer = setInterval(() => fetchKmToday(), KM_REFRESH_MS)
 })
 
 onUnmounted(() => {
   document.removeEventListener('fullscreenchange', syncFullScreen)
   if (gpsTimer) clearInterval(gpsTimer)
+  if (kmTodayTimer) clearInterval(kmTodayTimer)
   if (leafletMap) {
     leafletMap.remove()
     leafletMap = null

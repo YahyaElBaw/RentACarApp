@@ -87,6 +87,9 @@ export class Contrat {
 
   @Prop({ default: 'Djerba' })
   lieuRetour: string;
+
+  @Prop({ default: '' })
+  gpsArchiveUrl: string;
 }
 
 export type ContratDocument = Contrat & Document;

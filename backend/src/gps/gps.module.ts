@@ -21,6 +21,10 @@ import {
   MileageAlert,
   MileageAlertSchema,
 } from './schemas/mileage-alert.schema';
+import {
+  GpsHistory,
+  GpsHistorySchema,
+} from './schemas/gps-history.schema';
 import { Contrat, ContratSchema } from '../contrat/schemas/contrat.schema';
 import { Setting, SettingSchema } from '../setting/schemas/setting.schema';
 
@@ -31,6 +35,7 @@ import { Setting, SettingSchema } from '../setting/schemas/setting.schema';
       { name: SpeedAlert.name, schema: SpeedAlertSchema },
       { name: CarKmDay.name, schema: CarKmDaySchema },
       { name: MileageAlert.name, schema: MileageAlertSchema },
+      { name: GpsHistory.name, schema: GpsHistorySchema },
       { name: Contrat.name, schema: ContratSchema },
       { name: Setting.name, schema: SettingSchema },
     ]),
@@ -38,5 +43,6 @@ import { Setting, SettingSchema } from '../setting/schemas/setting.schema';
   ],
   controllers: [GpsController],
   providers: [GpsService, TraciPollerService, WinnouPollerService],
+  exports: [GpsService],
 })
 export class GpsModule {}

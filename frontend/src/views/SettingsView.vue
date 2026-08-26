@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, reactive } from 'vue'
-import { settingApi, carApi, clientApi, userApi } from '@/api/index'
+import { settingApi, carApi, clientApi, userApi, gpsApi } from '@/api/index'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
@@ -76,6 +76,54 @@ const removeDepenseCategory = (index: number) => {
   appSettings.depenseCategories.splice(index, 1)
 }
 
+const testingAlert = ref(false)
+const testCarId = ref('')
+const testAlertResult = ref<{ ok: boolean; message: string } | null>(null)
+const speedAlerts = ref<any[]>([])
+const cars = ref<any[]>([])
+
+const formatAlertTime = (iso: string) => {
+  const d = new Date(iso)
+  return d.toLocaleDateString('fr-TN', { day: '2-digit', month: '2-digit' }) + ' ' +
+    d.toLocaleTimeString('fr-TN', { hour: '2-digit', minute: '2-digit' })
+}
+
+const loadSpeedAlerts = async () => {
+  try {
+    const res = await gpsApi.getSpeedAlerts(20)
+    speedAlerts.value = res || []
+  } catch {}
+}
+
+const loadCarsForTest = async () => {
+  try {
+    const res = await carApi.getAll()
+    cars.value = (res || []).filter((c: any) => !c.disabled)
+    if (cars.value.length && !testCarId.value) {
+      testCarId.value = cars.value[0]._id
+    }
+  } catch {}
+}
+
+const sendTestAlert = async () => {
+  if (!testCarId.value) return
+  testingAlert.value = true
+  testAlertResult.value = null
+  try {
+    const res = await gpsApi.testSpeedAlert(testCarId.value)
+    testAlertResult.value = { ok: res.sent, message: res.message }
+    if (res.sent) {
+      toast.add({ severity: 'warn', summary: 'Test Alerte', detail: res.message, life: 5000 })
+      await loadSpeedAlerts()
+    }
+  } catch (err: any) {
+    const msg = err?.response?.data?.message || "Erreur lors de l'envoi du test."
+    testAlertResult.value = { ok: false, message: msg }
+  } finally {
+    testingAlert.value = false
+  }
+}
+
 const disabledCars = ref<any[]>([])
 const disabledClients = ref<any[]>([])
 
@@ -109,7 +157,11 @@ const loadData = async () => {
   }
 }
 
-onMounted(loadData)
+onMounted(() => {
+  loadData()
+  loadSpeedAlerts()
+  loadCarsForTest()
+})
 
 const saveProfile = async () => {
   savingProfile.value = true
@@ -403,6 +455,46 @@ const restoreClient = async (id: string) => {
                 <span v-if="savingSettings" class="mr-2 w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
                 Sauvegarder les Seuils
               </Button>
+            </div>
+
+            <!-- Test Speed Alert -->
+            <div class="mt-6 pt-6 border-t border-slate-100">
+              <div class="flex items-center justify-between gap-3 mb-4">
+                <div>
+                  <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Tester les Alertes Vitesse</p>
+                  <p class="text-[9px] font-bold text-slate-400 italic mt-0.5">Envoyer une alerte test pour verifier les notifications</p>
+                </div>
+                <div class="flex items-center gap-2">
+                  <select v-model="testCarId" class="h-9 px-3 rounded-xl border border-slate-200 text-[10px] font-bold text-slate-700 bg-white focus:ring-2 focus:ring-rose-500/30 focus:border-rose-400 outline-none">
+                    <option value="" disabled>Choisir un vehicule</option>
+                    <option v-for="c in cars" :key="c._id" :value="c._id">{{ c.brand }} {{ c.model }} ({{ c.registrationNumber }})</option>
+                  </select>
+                  <Button @click="sendTestAlert" :disabled="testingAlert || !testCarId" class="h-9 px-5 bg-rose-500 hover:bg-rose-600 text-white rounded-xl font-black uppercase tracking-widest text-[9px] shadow-lg shadow-rose-200/40 disabled:opacity-50">
+                    <span v-if="testingAlert" class="mr-2 w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                    {{ testingAlert ? 'Envoi...' : 'Tester' }}
+                  </Button>
+                </div>
+              </div>
+              <div v-if="testAlertResult" :class="['rounded-xl p-3 text-[10px] font-bold mb-4', testAlertResult.ok ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200']">
+                {{ testAlertResult.message }}
+              </div>
+
+              <!-- Speed Alert History -->
+              <div v-if="speedAlerts.length" class="mt-4">
+                <p class="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">Dernieres Alertes Vitesse</p>
+                <div class="space-y-1.5 max-h-[200px] overflow-y-auto">
+                  <div v-for="a in speedAlerts" :key="a._id" class="flex items-center gap-3 rounded-xl bg-rose-50/60 border border-rose-100 px-3 py-2">
+                    <AlertTriangle class="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                    <span class="min-w-0 flex-1">
+                      <span class="text-[10px] font-black text-slate-900 truncate">{{ a.brand }} {{ a.model }}</span>
+                      <span class="text-[9px] font-bold text-slate-500"> ({{ a.matricule }})</span>
+                    </span>
+                    <span class="text-[10px] font-black text-rose-600 tabular-nums shrink-0">{{ Math.round(a.speed) }} km/h</span>
+                    <span class="text-[8px] font-bold text-slate-400 shrink-0">{{ formatAlertTime(a.alertAt) }}</span>
+                  </div>
+                </div>
+              </div>
+              <p v-else class="text-[9px] font-bold text-slate-300 italic mt-3">Aucune alerte vitesse enregistree.</p>
             </div>
           </CardContent>
         </Card>

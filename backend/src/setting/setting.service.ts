@@ -1,12 +1,15 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Injectable, OnModuleInit, forwardRef, Inject } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Setting, SettingDocument } from './schemas/setting.schema';
+import { GpsService } from '../gps/gps.service';
 
 @Injectable()
 export class SettingService implements OnModuleInit {
   constructor(
     @InjectModel(Setting.name) private settingModel: Model<SettingDocument>,
+    @Inject(forwardRef(() => GpsService))
+    private readonly gpsService: GpsService,
   ) {}
 
   async onModuleInit() {
@@ -31,11 +34,12 @@ export class SettingService implements OnModuleInit {
 
   async updateSettings(data: Partial<Setting>): Promise<SettingDocument> {
     const settings = await this.settingModel
-      .findOneAndUpdate({}, data, { new: true })
+      .findOneAndUpdate({}, { $set: data }, { new: true })
       .exec();
     if (!settings) {
       return this.settingModel.create(data);
     }
+    this.gpsService.resetSettingsCache();
     return settings;
   }
 }

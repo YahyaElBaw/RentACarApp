@@ -21,6 +21,7 @@ import { BookingConflictService } from '../shared/booking-conflict.service';
 import { SettingService } from '../setting/setting.service';
 import { LogService } from '../log/log.service';
 import { EventsGateway } from '../events/events.gateway';
+import { GpsService } from '../gps/gps.service';
 
 @Injectable()
 export class ContratService implements OnModuleInit {
@@ -36,6 +37,7 @@ export class ContratService implements OnModuleInit {
     private settingService: SettingService,
     private logService: LogService,
     private eventsGateway: EventsGateway,
+    private gpsService: GpsService,
   ) {}
 
   async onModuleInit() {
@@ -362,6 +364,20 @@ export class ContratService implements OnModuleInit {
       mileage: closureData.returnMileage,
     };
     await this.carModel.findByIdAndUpdate(contrat.car, carUpdate).exec();
+
+    // Export GPS history to Cloudinary
+    const carId = String(contrat.car);
+    const start = contrat.startDate ? new Date(contrat.startDate) : new Date();
+    const end = contrat.endDate ? new Date(contrat.endDate) : new Date();
+    void this.gpsService
+      .exportToCloudinary(String(contrat._id), carId, start, end)
+      .then(async (result) => {
+        if (result.url) {
+          contrat.gpsArchiveUrl = result.url;
+          await contrat.save();
+        }
+      })
+      .catch(() => {});
 
     await this.logService.add({
       action: 'CONTRAT_CLOSED',

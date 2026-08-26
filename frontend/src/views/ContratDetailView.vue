@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue';
+import { ref, onMounted, onUnmounted, computed, watch, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { contratApi, carApi, clientApi, settingApi, getImageUrl, agenceApi } from '@/api';
+import { contratApi, carApi, clientApi, settingApi, getImageUrl, agenceApi, gpsApi } from '@/api';
 import { formatDate } from '@/lib/utils';
+import * as L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import { 
   ArrowLeft, Download, 
   Car, Calendar, Phone, 
@@ -11,8 +13,11 @@ import {
   ChevronRight, ClipboardList,
   ShieldAlert, Lock, Eye, EyeOff, Printer,
   ChevronDown, User, MapPin, Fuel,
-  CalendarClock, Banknote, NotepadText, X
+  CalendarClock, Banknote, NotepadText, X,
+  Gauge, Route, TrendingUp
 } from 'lucide-vue-next';
+import { Line } from 'vue-chartjs';
+import { Chart as ChartJS, Title, Tooltip, Legend, LineElement, PointElement, CategoryScale, LinearScale, Filler } from 'chart.js';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -20,9 +25,13 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { 
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription
 } from '@/components/ui/dialog';
+import { PasswordConfirmDialog } from '@/components/ui/password-dialog';
 import { useAuthStore } from '@/stores/auth';
 import { usePasswordGuard, handlePasswordError } from '@/composables/usePasswordGuard';
 import { useToast } from 'primevue/usetoast';
+import { useSocketStore } from '@/stores/socket';
+
+ChartJS.register(Title, Tooltip, Legend, LineElement, PointElement, CategoryScale, LinearScale, Filler);
 
 const route = useRoute();
 const router = useRouter();
@@ -33,6 +42,64 @@ const contrat = ref<any>(null);
 const loading = ref(true);
 const cloturing = ref(false);
 const deleting = ref(false);
+
+// GPS Stats
+const gpsStats = ref<any>(null);
+const gpsPositions = ref<any[]>([]);
+const gpsLoading = ref(false);
+const gpsTab = ref<'map' | 'speed'>('map');
+const gpsMapEl = ref<HTMLElement | null>(null);
+let gpsMap: any = null;
+let gpsMapLayer: any = null;
+const socketStore = useSocketStore();
+let unsubscribeGpsPosition: Function | null = null;
+
+const handleLivePosition = (payload: any) => {
+  const a = payload?.data || payload || {};
+  const carId = String(contrat.value?.car?._id || contrat.value?.car || '');
+  if (!carId || a.carId !== carId) return;
+  const pos = { lat: a.lat, lng: a.lng, speed: a.speed || 0, positionAt: a.positionAt };
+  gpsPositions.value = [...gpsPositions.value, pos];
+  if (gpsStats.value) {
+    const pts = gpsPositions.value;
+    if (pts.length >= 2) {
+      const prev = pts[pts.length - 2];
+      const haversine = (lat1: number, lng1: number, lat2: number, lng2: number) => {
+        const R = 6371000, toRad = (d: number) => d * Math.PI / 180;
+        const dLat = toRad(lat2 - lat1), dLng = toRad(lng2 - lng1);
+        const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+        return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+      };
+      gpsStats.value.totalDistance = Math.round((gpsStats.value.totalDistance + haversine(prev.lat, prev.lng, pos.lat, pos.lng) / 1000) * 10) / 10;
+      gpsStats.value.pointCount = pts.length;
+    }
+    if (pos.speed > 0) {
+      const allSpeeds = gpsPositions.value.filter((p: any) => p.speed > 0);
+      gpsStats.value.avgSpeed = Math.round(allSpeeds.reduce((s: number, p: any) => s + p.speed, 0) / allSpeeds.length);
+      if (pos.speed > gpsStats.value.topSpeed) gpsStats.value.topSpeed = pos.speed;
+    }
+  }
+  if (gpsMapLayer && gpsMap) {
+    const L = (window as any).L || null;
+    if (L) {
+      L.polyline([[prev?.lat || pos.lat, prev?.lng || pos.lng], [pos.lat, pos.lng]], { color: '#6366f1', weight: 3, opacity: 0.7 }).addTo(gpsMapLayer);
+    }
+  }
+  if (gpsTab.value === 'speed' && gpsPositions.value.length > 1) {
+    rebuildSpeedChart();
+  }
+};
+
+const rebuildSpeedChart = () => {
+  // Trigger reactivity by reassigning a copy
+  gpsPositions.value = [...gpsPositions.value];
+};
+
+const subscribeGpsLive = () => {
+  if (!unsubscribeGpsPosition) {
+    unsubscribeGpsPosition = socketStore.onEvent('gps:position-update', handleLivePosition);
+  }
+};
 
 // Deletion State
 const showDeleteDialog = ref(false);
@@ -395,11 +462,34 @@ const fetchContrat = async () => {
     if (contrat.value) {
       closureForm.value.returnMileage = contrat.value.car?.mileage || 0;
       closureForm.value.isPaid = contrat.value.isPaid || false;
+      await loadGpsStats();
+      subscribeGpsLive();
     }
   } catch (err) {
     console.error('Erreur lors du chargement du contrat:', err);
   } finally {
     loading.value = false;
+  }
+};
+
+const loadGpsStats = async () => {
+  if (!contrat.value?.car) return;
+  const carId = String(contrat.value.car._id || contrat.value.car);
+  if (!carId) return;
+  gpsLoading.value = true;
+  try {
+    const from = contrat.value.startDate;
+    const to = contrat.value.endDate || new Date().toISOString();
+    const [stats, positions] = await Promise.all([
+      gpsApi.getHistoryStats(carId, from, to).catch(() => null),
+      gpsApi.getHistory(carId, from, to, 10000).catch(() => null),
+    ]);
+    gpsStats.value = stats;
+    gpsPositions.value = positions || [];
+  } catch {
+    // ignore
+  } finally {
+    gpsLoading.value = false;
   }
 };
 
@@ -425,6 +515,11 @@ onMounted(async () => {
     returnMileageInput.value = contrat.value.car?.mileage || 0;
     showReturnMileageAlert.value = true;
   }
+});
+
+onUnmounted(() => {
+  if (unsubscribeGpsPosition) { unsubscribeGpsPosition(); unsubscribeGpsPosition = null; }
+  if (gpsMap) { gpsMap.remove(); gpsMap = null; }
 });
 
 const openPrintModal = () => {
@@ -637,6 +732,84 @@ const submitCloture = async () => {
     cloturing.value = false;
   }
 };
+
+// ── GPS Stats ──────────────────────────────────────────────────────────────────
+const hasGpsData = computed(() => gpsPositions.value.length > 1);
+
+const gpsChartData = computed(() => {
+  if (!gpsPositions.value.length) return null;
+  const points = gpsPositions.value;
+  const labels: string[] = [];
+  const data: number[] = [];
+  const step = Math.max(1, Math.floor(points.length / 200));
+  for (let i = 0; i < points.length; i += step) {
+    const p = points[i];
+    const d = new Date(p.positionAt);
+    labels.push(d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }) + ' ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }));
+    data.push(p.speed || 0);
+  }
+  return {
+    labels,
+    datasets: [
+      {
+        label: 'Vitesse (km/h)',
+        data,
+        borderColor: '#6366f1',
+        backgroundColor: 'rgba(99,102,241,0.08)',
+        fill: true,
+        tension: 0.3,
+        pointRadius: 0,
+        borderWidth: 2,
+      },
+    ],
+  };
+});
+
+const gpsChartOptions = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: { display: false },
+    tooltip: { mode: 'index' as const, intersect: false },
+  },
+  scales: {
+    x: { display: false },
+    y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.04)' }, ticks: { font: { size: 10, weight: 'bold' as const } } },
+  },
+  interaction: { mode: 'nearest' as const, axis: 'x' as const, intersect: false },
+};
+
+const initGpsMap = (el: HTMLElement) => {
+  if (gpsMap) { gpsMap.remove(); gpsMap = null; }
+  gpsMap = L.map(el, { attributionControl: false, zoomControl: true, maxZoom: 18 }).setView([36.8, 10.18], 8);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(gpsMap);
+  gpsMapLayer = L.layerGroup().addTo(gpsMap);
+
+  if (!gpsPositions.value.length) return;
+
+  const coords = gpsPositions.value.map((p: any) => [p.lat, p.lng]);
+  const startIcon = L.divIcon({ html: '<div class="w-4 h-4 bg-emerald-500 rounded-full border-2 border-white shadow-lg"></div>', className: '', iconSize: [16, 16], iconAnchor: [8, 8] });
+  const endIcon = L.divIcon({ html: '<div class="w-4 h-4 bg-rose-500 rounded-full border-2 border-white shadow-lg"></div>', className: '', iconSize: [16, 16], iconAnchor: [8, 8] });
+
+  L.marker(coords[0], { icon: startIcon }).addTo(gpsMapLayer).bindPopup('Départ');
+  L.marker(coords[coords.length - 1], { icon: endIcon }).addTo(gpsMapLayer).bindPopup('Arrivée');
+  L.polyline(coords, { color: '#6366f1', weight: 3, opacity: 0.7 }).addTo(gpsMapLayer);
+  gpsMap.fitBounds(L.latLngBounds(coords).pad(0.1));
+};
+
+watch(gpsMapEl, (el) => {
+  if (el && gpsPositions.value.length > 1) {
+    nextTick(() => initGpsMap(el));
+  }
+});
+
+watch(gpsTab, (tab) => {
+  if (tab === 'map' && gpsMapEl.value && gpsPositions.value.length > 1) {
+    nextTick(() => {
+      initGpsMap(gpsMapEl.value!);
+    });
+  }
+});
 </script>
 
 <template>
@@ -942,35 +1115,84 @@ const submitCloture = async () => {
                <ShieldAlert class="w-4 h-4"/> Supprimer
             </Button>
          </div>
+
+         <!-- GPS STATISTICS SECTION -->
+         <section v-if="contrat.car" class="animate-in fade-in slide-in-from-bottom-4 duration-700">
+            <Card class="border border-slate-100 shadow-2xl shadow-indigo-200/30 bg-white rounded-[2.5rem] overflow-hidden">
+               <div class="p-8 pb-0">
+                  <div class="flex items-center justify-between mb-6">
+                     <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-2xl bg-indigo-50 flex items-center justify-center border border-indigo-100">
+                           <Route class="w-5 h-5 text-indigo-600" />
+                        </div>
+                        <div>
+                           <h3 class="text-lg font-black text-slate-900 uppercase tracking-tight">Statistiques GPS</h3>
+                           <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Données de la période du contrat</p>
+                        </div>
+                     </div>
+                     <div class="flex gap-2">
+                        <button @click="gpsTab = 'map'" :class="['px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all', gpsTab === 'map' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'bg-slate-100 text-slate-500 hover:bg-slate-200']">
+                           <MapPin class="w-3.5 h-3.5 inline mr-1" /> Itinéraire
+                        </button>
+                        <button @click="gpsTab = 'speed'" :class="['px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all', gpsTab === 'speed' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'bg-slate-100 text-slate-500 hover:bg-slate-200']">
+                           <Gauge class="w-3.5 h-3.5 inline mr-1" /> Vitesse
+                        </button>
+                     </div>
+                  </div>
+
+                  <!-- Summary Cards -->
+                  <div v-if="gpsStats" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+                     <div class="rounded-2xl bg-slate-50 border border-slate-100 p-4 text-center">
+                        <p class="text-[8px] font-black uppercase tracking-widest text-slate-400">Distance Totale</p>
+                        <p class="text-2xl font-black text-slate-900 mt-1 tabular-nums">{{ gpsStats.totalDistance }}<span class="text-[10px] text-slate-400 ml-1">km</span></p>
+                     </div>
+                     <div class="rounded-2xl bg-slate-50 border border-slate-100 p-4 text-center">
+                        <p class="text-[8px] font-black uppercase tracking-widest text-slate-400">Vitesse Moyenne</p>
+                        <p class="text-2xl font-black text-slate-900 mt-1 tabular-nums">{{ gpsStats.avgSpeed }}<span class="text-[10px] text-slate-400 ml-1">km/h</span></p>
+                     </div>
+                     <div class="rounded-2xl bg-slate-50 border border-slate-100 p-4 text-center">
+                        <p class="text-[8px] font-black uppercase tracking-widest text-slate-400">Vitesse Max</p>
+                        <p class="text-2xl font-black text-rose-600 mt-1 tabular-nums">{{ gpsStats.topSpeed }}<span class="text-[10px] text-slate-400 ml-1">km/h</span></p>
+                     </div>
+                     <div class="rounded-2xl bg-slate-50 border border-slate-100 p-4 text-center">
+                        <p class="text-[8px] font-black uppercase tracking-widest text-slate-400">Points GPS</p>
+                        <p class="text-2xl font-black text-slate-900 mt-1 tabular-nums">{{ gpsStats.pointCount }}</p>
+                     </div>
+                  </div>
+
+                  <!-- Map Tab -->
+                  <div v-show="gpsTab === 'map'" ref="gpsMapEl" class="h-[400px] rounded-2xl overflow-hidden border border-slate-100"></div>
+
+                  <!-- Speed Chart Tab -->
+                  <div v-if="gpsTab === 'speed' && gpsChartData" class="h-[300px]">
+                     <Line :data="gpsChartData" :options="gpsChartOptions" />
+                  </div>
+
+                  <!-- Empty State -->
+                  <div v-if="(gpsTab === 'map' && !hasGpsData && !gpsLoading) || (gpsTab === 'speed' && !gpsChartData && !gpsLoading)" class="h-[300px] flex items-center justify-center text-slate-300">
+                     <div class="text-center space-y-2">
+                        <MapPin class="w-10 h-10 mx-auto" />
+                        <p class="text-[10px] font-black uppercase tracking-widest">Aucune donnée GPS pour cette période</p>
+                     </div>
+                  </div>
+               </div>
+            </Card>
+         </section>
       </div>
       <!-- DIALOGS -->
-      <Dialog v-model:open="showDeleteDialog">
-         <DialogContent class="max-w-md bg-white border-border shadow-3xl rounded-[3rem] p-10 overflow-hidden text-center max-h-[90vh] overflow-y-auto">
-            <DialogHeader class="mb-8">
-               <div class="w-16 h-16 bg-destructive/10 text-destructive rounded-3xl flex items-center justify-center mx-auto mb-6"><Lock class="w-8 h-8" /></div>
-               <DialogTitle class="text-2xl font-black uppercase tracking-tight">Accès Administrateur</DialogTitle>
-               <DialogDescription class="text-[10px] font-black uppercase opacity-40 mt-1">Saisissez votre mot de passe</DialogDescription>
-            </DialogHeader>
-            <div class="space-y-6">
-               <div v-if="guard.isLocked" class="flex items-center justify-center gap-2 bg-rose-50 text-rose-600 border border-rose-200 rounded-xl px-4 py-3">
-                 <Lock class="w-4 h-4" />
-                 <span class="text-[10px] font-black uppercase tracking-widest">Trop de tentatives — réessayez dans {{ guard.remainingSeconds }}s</span>
-               </div>
-               <div class="relative">
-                 <input v-model="deletePassword" :type="showDeletePassword ? 'text' : 'password'" :disabled="guard.isLocked" class="w-full h-14 px-6 rounded-2xl bg-muted border-2 border-border focus:border-destructive outline-none font-black text-center pr-14" placeholder="••••••••" @keyup.enter="submitDelete" />
-                 <button type="button" @click="showDeletePassword = !showDeletePassword" class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors outline-none">
-                   <Eye v-if="!showDeletePassword" class="w-5 h-5" />
-                   <EyeOff v-else class="w-5 h-5" />
-                 </button>
-               </div>
-               <p v-if="deleteError" class="text-[10px] font-black text-destructive uppercase italic">⚠ {{ deleteError }}</p>
-               <div class="flex gap-4">
-                  <Button @click="showDeleteDialog = false" variant="ghost" class="flex-1 h-14 rounded-2xl font-black uppercase text-[10px]">Annuler</Button>
-                  <Button @click="submitDelete" :loading="deleting" :disabled="guard.isLocked" class="flex-1 h-14 bg-destructive hover:bg-destructive/90 text-white rounded-2xl font-black uppercase text-[10px] shadow-xl shadow-destructive/20">Confirmer</Button>
-               </div>
-            </div>
-         </DialogContent>
-      </Dialog>
+      <PasswordConfirmDialog
+        v-model:open="showDeleteDialog"
+        v-model:password="deletePassword"
+        title="Accès"
+        subtitle="Administrateur"
+        description="Saisissez votre mot de passe pour supprimer ce contrat"
+        placeholder="••••••••"
+        confirm-label="Confirmer"
+        loading-label="Suppression..."
+        :loading="deleting"
+        :error="deleteError"
+        @confirm="submitDelete"
+      />
 
       <!-- EDIT CONTRAT DIALOG -->
       <Dialog v-model:open="showEditDialog">
@@ -1189,33 +1411,17 @@ const submitCloture = async () => {
       </Dialog>
 
       <!-- EDIT PASSWORD POPUP -->
-      <Dialog v-model:open="showEditPasswordDialog">
-         <DialogContent class="max-w-md bg-white border-border shadow-3xl rounded-[2.5rem] p-10 overflow-hidden text-center max-h-[90vh] overflow-y-auto">
-            <DialogHeader class="mb-8">
-               <div class="w-16 h-16 bg-gradient-to-br from-indigo-500 to-violet-600 text-white rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-indigo-600/25"><Lock class="w-8 h-8" /></div>
-               <DialogTitle class="text-2xl font-black uppercase tracking-tight">Accès Administrateur</DialogTitle>
-               <DialogDescription class="text-[10px] font-black uppercase opacity-40 mt-1">Saisissez votre mot de passe pour enregistrer</DialogDescription>
-            </DialogHeader>
-            <div class="space-y-6">
-               <div v-if="guard.isLocked" class="flex items-center justify-center gap-2 bg-rose-50 text-rose-600 border border-rose-200 rounded-xl px-4 py-3">
-                  <Lock class="w-4 h-4" />
-                  <span class="text-[10px] font-black uppercase tracking-widest">Trop de tentatives — réessayez dans {{ guard.remainingSeconds }}s</span>
-               </div>
-               <div class="relative">
-                  <input v-model="editPassword" :type="showEditPwdInput ? 'text' : 'password'" :disabled="guard.isLocked" class="w-full h-14 px-6 rounded-2xl bg-slate-50 border-2 border-slate-200 focus:border-indigo-500 outline-none font-black text-center pr-14 transition-colors duration-200" placeholder="••••••••" @keyup.enter="confirmEditPassword" />
-                  <button type="button" @click="showEditPwdInput = !showEditPwdInput" class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-600 transition-colors outline-none">
-                     <Eye v-if="!showEditPwdInput" class="w-5 h-5" />
-                     <EyeOff v-else class="w-5 h-5" />
-                  </button>
-               </div>
-               <p v-if="editPasswordError" class="text-[10px] font-black text-destructive uppercase italic">⚠ {{ editPasswordError }}</p>
-               <div class="flex gap-4">
-                  <Button @click="showEditPasswordDialog = false" variant="ghost" class="flex-1 h-14 rounded-2xl font-black uppercase text-[10px]">Annuler</Button>
-                  <Button @click="confirmEditPassword" :loading="editing" :disabled="guard.isLocked" class="flex-1 h-14 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black uppercase text-[10px] shadow-xl shadow-indigo-600/20">Confirmer</Button>
-               </div>
-            </div>
-         </DialogContent>
-      </Dialog>
+      <PasswordConfirmDialog
+        v-model:open="showEditPasswordDialog"
+        v-model:password="editPassword"
+        title="Accès"
+        subtitle="Administrateur"
+        description="Saisissez votre mot de passe pour enregistrer"
+        placeholder="••••••••"
+        :loading="editing"
+        :error="editPasswordError"
+        @confirm="confirmEditPassword"
+      />
 
       <Dialog v-model:open="showCloseDialog">
          <DialogContent class="max-w-xl bg-white border-border shadow-3xl rounded-[3rem] p-0 overflow-hidden text-foreground max-h-[90vh] flex flex-col">

@@ -3,6 +3,7 @@ import {
   Controller,
   ForbiddenException,
   Get,
+  Param,
   Post,
   Query,
   Req,
@@ -90,6 +91,12 @@ export class GpsController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Post('test-speed-alert')
+  async testSpeedAlert(@Body() body: { carId: string }) {
+    return this.gpsService.testSpeedAlert(body.carId);
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Get('km-alerts')
   getMileageAlerts(@Query('limit') limit?: string) {
     return this.gpsService.getMileageAlerts(Number(limit) || 50);
@@ -99,6 +106,27 @@ export class GpsController {
   @Get('km-today')
   getKmToday() {
     return this.gpsService.getKmToday();
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('history/:carId')
+  getHistory(
+    @Param('carId') carId: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.gpsService.getHistory(carId, from, to, Number(limit) || 10000);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('history/:carId/stats')
+  getHistoryStats(
+    @Param('carId') carId: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.gpsService.getHistoryStats(carId, from, to);
   }
 
   // Sync endpoint for external cron jobs or Vercel Crons

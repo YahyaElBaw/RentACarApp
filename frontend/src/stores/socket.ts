@@ -50,7 +50,7 @@ export const useSocketStore = defineStore('socket', () => {
     });
 
     // Global listener dispatcher
-    const events = ['contract:change', 'car:change', 'reservation:change', 'depense:change', 'user:login', 'gps:speed-alert', 'gps:km-alert'];
+    const events = ['contract:change', 'car:change', 'reservation:change', 'depense:change', 'user:login', 'gps:speed-alert', 'gps:km-alert', 'gps:position-update'];
     events.forEach((eventName) => {
       socket.value?.on(eventName, (payload: any) => {
         const callbacks = listeners.get(eventName);

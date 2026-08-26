@@ -18,6 +18,10 @@ import {
   MileageAlert,
   MileageAlertDocument,
 } from './schemas/mileage-alert.schema';
+import {
+  GpsHistory,
+  GpsHistoryDocument,
+} from './schemas/gps-history.schema';
 import { Contrat, ContratDocument } from '../contrat/schemas/contrat.schema';
 import { Setting, SettingDocument } from '../setting/schemas/setting.schema';
 import { EventsGateway } from '../events/events.gateway';
@@ -83,6 +87,8 @@ export class GpsService {
     private carKmDayModel: Model<CarKmDayDocument>,
     @InjectModel(MileageAlert.name)
     private mileageAlertModel: Model<MileageAlertDocument>,
+    @InjectModel(GpsHistory.name)
+    private gpsHistoryModel: Model<GpsHistoryDocument>,
     @InjectModel(Contrat.name)
     private contratModel: Model<ContratDocument>,
     @InjectModel(Setting.name)
@@ -136,6 +142,12 @@ export class GpsService {
     return this.kmLimitCache.value;
   }
 
+  /** Called by SettingService when settings are updated to pick up new limits immediately */
+  resetSettingsCache(): void {
+    this.speedLimitCache.loadedAt = 0;
+    this.kmLimitCache.loadedAt = 0;
+  }
+
   /** True when the car currently has an active/soon contract spanning now */
   private async isCarRented(carId: Types.ObjectId): Promise<boolean> {
     try {
@@ -161,15 +173,16 @@ export class GpsService {
    */
   private async trackDailyKm(
     car: CarDocument,
-    dto: { lat: number; lng: number; provider?: string },
+    dto: { lat: number; lng: number; speed?: number; provider?: string },
     positionAt: Date,
   ): Promise<void> {
     try {
       const day = tunisiaDayKey(positionAt);
+      const currentSpeed = Number(dto.speed) || 0;
       const prev = await this.carKmDayModel
         .findOneAndUpdate(
           { carId: car._id, day },
-          { $setOnInsert: { km: 0, alertSent: false } },
+          { $setOnInsert: { km: 0, alertSent: false, topSpeed: 0 } },
           { upsert: true, new: false },
         )
         .exec();
@@ -184,6 +197,7 @@ export class GpsService {
               lastLng: dto.lng,
               lastFixAt: positionAt,
             },
+            $max: { topSpeed: currentSpeed },
           },
         ).exec();
         return;
@@ -215,6 +229,7 @@ export class GpsService {
         lastLat: dto.lat,
         lastLng: dto.lng,
         lastFixAt: positionAt,
+        $max: { topSpeed: currentSpeed },
       };
       if (deltaKm > 0) update.$inc = { km: deltaKm };
 
@@ -319,7 +334,30 @@ export class GpsService {
       { upsert: true },
     );
 
-    if ((dto.speed ?? 0) >= (await this.getSpeedAlertLimit())) {
+    void this.gpsHistoryModel.create({
+      carId: car._id,
+      lat: dto.lat,
+      lng: dto.lng,
+      speed: dto.speed ?? 0,
+      provider: dto.provider ?? '',
+      positionAt,
+    });
+
+    const speed = dto.speed ?? 0;
+    const limit = await this.getSpeedAlertLimit();
+    this.logger.debug(
+      `GPS ingest ${car.matricule}: speed=${speed} limit=${limit} check=${speed >= limit}`,
+    );
+
+    this.eventsGateway.broadcastDataChange('gps:position-update', {
+      carId: String(car._id),
+      lat: dto.lat,
+      lng: dto.lng,
+      speed,
+      positionAt: positionAt.toISOString(),
+    });
+
+    if (speed >= limit) {
       void this.recordSpeedAlert(car, dto, positionAt);
     }
 
@@ -354,6 +392,7 @@ export class GpsService {
         brand: car.brand || '',
         model: car.model || '',
         speed: dto.speed ?? 0,
+        limit,
         lat: dto.lat,
         lng: dto.lng,
         provider: dto.provider || '',
@@ -390,12 +429,182 @@ export class GpsService {
       .exec();
   }
 
+  /** Manually trigger a test speed alert to verify the notification pipeline */
+  async testSpeedAlert(carId: string): Promise<{ sent: boolean; message: string }> {
+    const car = await this.carModel.findById(carId).exec();
+    if (!car) return { sent: false, message: 'Voiture introuvable' };
+
+    const limit = await this.getSpeedAlertLimit();
+    const fakeSpeed = limit + 30;
+    const now = new Date();
+
+    const alert = await this.speedAlertModel.create({
+      carId: car._id,
+      matricule: car.matricule || '',
+      brand: car.brand || '',
+      model: car.model || '',
+      speed: fakeSpeed,
+      lat: 36.8065,
+      lng: 10.1815,
+      provider: 'test',
+      alertAt: now,
+    });
+
+    this.logger.warn(
+      `TEST SPEED ALERT: ${car.brand} ${car.model} (${car.matricule}) at ${fakeSpeed} km/h (limit ${limit})`,
+    );
+
+    this.eventsGateway.broadcastDataChange('gps:speed-alert', {
+      _id: String(alert._id),
+      carId: String(car._id),
+      matricule: car.matricule || '',
+      brand: car.brand || '',
+      model: car.model || '',
+      speed: fakeSpeed,
+      limit,
+      lat: 36.8065,
+      lng: 10.1815,
+      provider: 'test',
+      alertAt: now.toISOString(),
+    });
+
+    return { sent: true, message: `Alerte test envoyée: ${car.brand} ${car.model} à ${fakeSpeed} km/h` };
+  }
+
   async getMileageAlerts(limit = 50): Promise<MileageAlertDocument[]> {
     return this.mileageAlertModel
       .find()
       .sort({ alertAt: -1 })
       .limit(Math.min(Math.max(limit, 1), 200))
       .exec();
+  }
+
+  async getHistory(
+    carId: string,
+    from?: string,
+    to?: string,
+    limit = 10000,
+  ): Promise<{ lat: number; lng: number; speed: number; positionAt: Date }[]> {
+    const query: any = { carId: new Types.ObjectId(carId) };
+    if (from || to) {
+      query.positionAt = {};
+      if (from) query.positionAt.$gte = new Date(from);
+      if (to) query.positionAt.$lte = new Date(to);
+    }
+    return this.gpsHistoryModel
+      .find(query)
+      .sort({ positionAt: 1 })
+      .limit(Math.min(Math.max(limit, 1), 50000))
+      .select({ lat: 1, lng: 1, speed: 1, positionAt: 1, _id: 0 })
+      .lean()
+      .exec();
+  }
+
+  async getHistoryStats(
+    carId: string,
+    from?: string,
+    to?: string,
+  ): Promise<{
+    totalDistance: number;
+    avgSpeed: number;
+    topSpeed: number;
+    pointCount: number;
+  }> {
+    const positions = await this.getHistory(carId, from, to, 50000);
+    if (positions.length < 2) {
+      return { totalDistance: 0, avgSpeed: 0, topSpeed: 0, pointCount: positions.length };
+    }
+    let totalMeters = 0;
+    let speedSum = 0;
+    let speedCount = 0;
+    let topSpeed = 0;
+    for (let i = 1; i < positions.length; i++) {
+      totalMeters += haversineMeters(
+        positions[i - 1].lat,
+        positions[i - 1].lng,
+        positions[i].lat,
+        positions[i].lng,
+      );
+      const spd = positions[i].speed;
+      if (spd > 0) {
+        speedSum += spd;
+        speedCount++;
+        if (spd > topSpeed) topSpeed = spd;
+      }
+    }
+    return {
+      totalDistance: Math.round((totalMeters / 1000) * 10) / 10,
+      avgSpeed: speedCount > 0 ? Math.round(speedSum / speedCount) : 0,
+      topSpeed,
+      pointCount: positions.length,
+    };
+  }
+
+  async exportToCloudinary(
+    contractId: string,
+    carId: string,
+    startDate: Date,
+    endDate: Date,
+  ): Promise<{ url: string | null; count: number }> {
+    try {
+      const positions = await this.gpsHistoryModel
+        .find({
+          carId: new Types.ObjectId(carId),
+          positionAt: { $gte: startDate, $lte: endDate },
+          uploaded: false,
+        })
+        .sort({ positionAt: 1 })
+        .lean()
+        .exec();
+
+      if (!positions.length) return { url: null, count: 0 };
+
+      const json = JSON.stringify({
+        contractId,
+        carId,
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+        pointCount: positions.length,
+        positions: positions.map((p) => ({
+          lat: p.lat,
+          lng: p.lng,
+          speed: p.speed,
+          t: p.positionAt.toISOString(),
+        })),
+      });
+
+      const { v2: cloudinary } = await import('cloudinary');
+      const result = await new Promise<any>((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
+          {
+            folder: 'RentACarData/gps-history',
+            resource_type: 'raw',
+            public_id: `contract-${contractId}-${Date.now()}`,
+            format: 'json',
+          },
+          (error, result) => {
+            if (error) reject(error);
+            else resolve(result);
+          },
+        );
+        stream.end(Buffer.from(json));
+      });
+
+      const ids = positions.map((p) => (p as any)._id);
+      await this.gpsHistoryModel.updateMany(
+        { _id: { $in: ids } },
+        { $set: { uploaded: true } },
+      );
+
+      this.logger.log(
+        `Exported ${positions.length} GPS points for contract ${contractId} to Cloudinary`,
+      );
+
+      return { url: result.secure_url, count: positions.length };
+    } catch (err) {
+      this.logger.error(`GPS export failed for contract ${contractId}: ${String(err)}`);
+      return { url: null, count: 0 };
+    }
   }
 
   /** Km traveled today per car (Tunisia local day) with the configured limit */
@@ -408,6 +617,7 @@ export class GpsService {
       brand: string;
       model: string;
       kmToday: number;
+      topSpeed: number;
       alertSent: boolean;
     }[];
   }> {
@@ -440,6 +650,7 @@ export class GpsService {
           brand: (c as any)?.brand ?? '',
           model: (c as any)?.model ?? '',
           kmToday: Math.round(Number(d.km || 0) * 10) / 10,
+          topSpeed: Math.round(Number(d.topSpeed || 0)),
           alertSent: !!d.alertSent,
         };
       }),
