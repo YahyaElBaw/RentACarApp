@@ -17,9 +17,10 @@ interface DateInputProps {
   minimumDate?: Date;
   placeholder?: string;
   style?: any;
+  compact?: boolean;
 }
 
-export default function DateInput({ label, value, onChange, maximumDate, minimumDate, placeholder, style }: DateInputProps) {
+export default function DateInput({ label, value, onChange, maximumDate, minimumDate, placeholder, style, compact }: DateInputProps) {
   const [show, setShow] = useState(false);
 
   const parsedDate = value ? new Date(value) : new Date();
@@ -39,7 +40,11 @@ export default function DateInput({ label, value, onChange, maximumDate, minimum
       <TouchableOpacity
         onPress={() => setShow(true)}
         activeOpacity={0.7}
-        style={[
+        style={compact ? {
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        } : [
           {
             height: 52,
             backgroundColor: BG,
@@ -55,7 +60,12 @@ export default function DateInput({ label, value, onChange, maximumDate, minimum
         ]}
       >
         <Text
-          style={{
+          style={compact ? {
+            fontSize: 15,
+            fontWeight: '800',
+            color: value ? TEXT : '#CBD5E1',
+            paddingVertical: 4,
+          } : {
             fontSize: 14,
             fontWeight: '700',
             color: value ? TEXT : '#CBD5E1',
@@ -63,7 +73,7 @@ export default function DateInput({ label, value, onChange, maximumDate, minimum
         >
           {value || placeholder || 'Sélectionnez une date'}
         </Text>
-        <Calendar size={16} color={MUTED} />
+        <Calendar size={compact ? 14 : 16} color={MUTED} />
       </TouchableOpacity>
 
       {Platform.OS === 'ios' ? (

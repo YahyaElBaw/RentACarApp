@@ -38,6 +38,7 @@ export default function RootLayout() {
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="client/new" options={{ presentation: 'modal' }} />
       <Stack.Screen name="client/[id]" />
+      <Stack.Screen name="car/[id]" />
       <Stack.Screen name="fleet-tracking" />
     </Stack>
   );

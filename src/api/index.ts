@@ -77,6 +77,8 @@ export const authApi = {
 export const carApi = {
   getAll: (params?: any) => api.get('/cars', { params }).then((res) => res.data),
   getOne: (id: string) => api.get(`/cars/${id}`).then((res) => res.data),
+  update: (id: string, data: any) =>
+    api.patch(`/cars/${id}`, data).then((res) => res.data),
 };
 
 export const reservationApi = {
@@ -105,8 +107,6 @@ export const gpsApi = {
     api.get('/gps/positions').then((res) => res.data),
   getKmToday: () =>
     api.get('/gps/km-today').then((res) => res.data),
-  getSpeedAlerts: (limit = 20) =>
-    api.get(`/gps/speed-alerts?limit=${limit}`).then((res) => res.data),
   testSpeedAlert: (carId: string) =>
     api.post('/gps/test-speed-alert', { carId }).then((res) => res.data),
 };

@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, FlatList, TouchableOpacity, SafeAreaView, RefreshControl, Image } from 'react-native';
+import { useRouter } from 'expo-router';
 import { carApi } from '../../src/api';
 import { Search, Filter, Car as CarIcon, MapPin, Gauge } from 'lucide-react-native';
 
 export default function FleetScreen() {
+  const router = useRouter();
   const [cars, setCars] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -30,7 +32,11 @@ export default function FleetScreen() {
   }, []);
 
   const CarCard = ({ item }: { item: any }) => (
-    <TouchableOpacity className="bg-white border border-slate-100 rounded-[2.5rem] p-6 mb-6 shadow-sm">
+    <TouchableOpacity
+      onPress={() => router.push(`/car/${item._id}`)}
+      className="bg-white border border-slate-100 rounded-[2.5rem] p-6 mb-6 shadow-sm"
+      activeOpacity={0.7}
+    >
        <View className="flex-row justify-between items-start mb-4">
           <View>
              <Text className="text-[10px] font-black uppercase tracking-widest text-slate-400">{item.brand}</Text>
@@ -61,7 +67,10 @@ export default function FleetScreen() {
              <Text className="text-[9px] font-black uppercase tracking-widest text-slate-400">Tarif Journalier</Text>
              <Text className="text-lg font-black text-indigo-600 tabular-nums">{item.dailyRate} <Text className="text-[10px]">TND</Text></Text>
           </View>
-          <TouchableOpacity className="bg-slate-900 px-6 h-10 rounded-xl items-center justify-center">
+          <TouchableOpacity
+            onPress={() => router.push(`/car/${item._id}`)}
+            className="bg-slate-900 px-6 h-10 rounded-xl items-center justify-center"
+          >
              <Text className="text-white text-[9px] font-black uppercase tracking-widest">Détails</Text>
           </TouchableOpacity>
        </View>

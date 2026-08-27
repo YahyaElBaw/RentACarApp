@@ -4,7 +4,7 @@ import * as SecureStore from 'expo-secure-store';
 const SERVER_PORT = 3000;
 const CACHE_KEY = 'discovered_server_url';
 const HEALTH_ENDPOINT = '/version';
-const FALLBACK_URL = `http://192.168.1.128:${SERVER_PORT}`;
+const FALLBACK_URL = `http://172.20.10.2:${SERVER_PORT}`;
 
 let cachedUrl: string | null = null;
 let discoveryInProgress: Promise<string> | null = null;
@@ -103,6 +103,8 @@ async function doDiscover(): Promise<string> {
     '192.168.0.128',
     '192.168.0.1',
     '10.0.0.1',
+    '172.20.10.2',
+    '172.20.10.1',
   );
 
   const unique = [...new Set(candidates)];
