@@ -15,6 +15,7 @@ import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
 import { 
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription 
 } from '@/components/ui/dialog'
+import { PasswordConfirmDialog } from '@/components/ui/password-dialog'
 import { Label } from '@/components/ui/label'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from 'primevue/usetoast'
@@ -595,48 +596,18 @@ const deleteUser = async (user: UserRecord) => {
     </Dialog>
 
     <!-- Reveal Password Popup (Admin Password Required) -->
-    <Dialog v-model:open="revealOpen">
-      <DialogContent class="sm:max-w-md bg-white/95 backdrop-blur-3xl rounded-[3rem] border-slate-200 shadow-3xl p-0 overflow-y-auto max-h-[90vh] text-slate-900 no-scrollbar">
-        <DialogHeader class="bg-amber-500 p-8 text-white relative overflow-hidden">
-          <div class="absolute -top-12 -right-12 w-48 h-48 bg-white/10 rounded-full blur-3xl opacity-50"></div>
-          <DialogTitle class="text-2xl font-black uppercase tracking-tighter flex items-center gap-4 relative z-10 italic">
-            <div class="w-11 h-11 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-md shadow-inner">
-              <Lock class="w-6 h-6 text-white stroke-[3]" />
-            </div>
-            Autorisation <span class="text-amber-200">Requise</span>
-          </DialogTitle>
-          <DialogDescription class="text-white/70 font-black uppercase text-[10px] tracking-[0.3em] mt-2 ml-16 relative z-10 leading-relaxed">
-            Mot de passe admin requis pour révéler le mot de passe de {{ profileUser?.lastName }} {{ profileUser?.firstName }}.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div class="p-8 space-y-6">
-          <div v-if="guard.isLocked" class="flex items-center justify-center gap-2 bg-rose-50 text-rose-600 border border-rose-200 rounded-xl px-4 py-3">
-            <Lock class="w-4 h-4" />
-            <span class="text-[10px] font-black uppercase tracking-widest">Trop de tentatives — réessayez dans {{ guard.remainingSeconds }}s</span>
-          </div>
-
-          <div class="space-y-2">
-            <Label for="revealAdminPassword" class="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Mot de passe Admin</Label>
-            <div class="relative">
-              <Input id="revealAdminPassword" :type="showRevealPassword ? 'text' : 'password'" v-model="revealAdminPassword" :disabled="guard.isLocked" placeholder="••••••••" class="h-14 bg-slate-50 border-slate-100 rounded-2xl font-black font-mono tracking-widest transition-all pr-12" @keyup.enter="submitReveal" />
-              <button type="button" @click="showRevealPassword = !showRevealPassword" class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-amber-600 transition-colors outline-none">
-                <Eye v-if="!showRevealPassword" class="w-5 h-5" />
-                <EyeOff v-else class="w-5 h-5" />
-              </button>
-            </div>
-          </div>
-
-          <DialogFooter class="pt-2 flex gap-4">
-            <Button variant="ghost" type="button" @click="revealOpen = false" class="flex-1 h-14 rounded-2xl text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-900 transition-all" :disabled="isRevealing">Annuler</Button>
-            <Button @click="submitReveal" :disabled="!revealAdminPassword.trim() || guard.isLocked || isRevealing" class="flex-1 h-14 rounded-2xl bg-amber-500 hover:bg-amber-600 text-white font-black uppercase tracking-widest text-[10px] shadow-xl shadow-amber-500/20 active:scale-95 transition-all">
-              <Loader2 v-if="isRevealing" class="w-5 h-5 animate-spin mr-2" />
-              <Eye class="w-4 h-4 mr-2" /> Révéler
-            </Button>
-          </DialogFooter>
-        </div>
-      </DialogContent>
-    </Dialog>
+    <PasswordConfirmDialog
+      v-model:open="revealOpen"
+      v-model:password="revealAdminPassword"
+      title="Autorisation"
+      subtitle="Requise"
+      :description="`Mot de passe admin requis pour révéler le mot de passe de ${profileUser?.lastName || ''} ${profileUser?.firstName || ''}.`"
+      placeholder="••••••••"
+      confirm-label="Révéler"
+      loading-label="Vérification..."
+      :loading="isRevealing"
+      @confirm="submitReveal"
+    />
   </div>
 </template>
 

@@ -479,6 +479,16 @@ export class GpsService {
       .exec();
   }
 
+  async deleteSpeedAlert(id: string): Promise<{ deleted: boolean }> {
+    const result = await this.speedAlertModel.findByIdAndDelete(id).exec();
+    return { deleted: !!result };
+  }
+
+  async deleteMileageAlert(id: string): Promise<{ deleted: boolean }> {
+    const result = await this.mileageAlertModel.findByIdAndDelete(id).exec();
+    return { deleted: !!result };
+  }
+
   async getHistory(
     carId: string,
     from?: string,

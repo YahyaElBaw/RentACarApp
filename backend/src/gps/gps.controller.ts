@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   ForbiddenException,
   Get,
   Param,
@@ -85,6 +86,12 @@ export class GpsController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Delete('speed-alerts/:id')
+  deleteSpeedAlert(@Param('id') id: string) {
+    return this.gpsService.deleteSpeedAlert(id);
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Post('test-speed-alert')
   async testSpeedAlert(@Body() body: { carId: string }) {
     return this.gpsService.testSpeedAlert(body.carId);
@@ -94,6 +101,12 @@ export class GpsController {
   @Get('km-alerts')
   getMileageAlerts(@Query('limit') limit?: string) {
     return this.gpsService.getMileageAlerts(Number(limit) || 50);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete('km-alerts/:id')
+  deleteMileageAlert(@Param('id') id: string) {
+    return this.gpsService.deleteMileageAlert(id);
   }
 
   @UseGuards(JwtAuthGuard)

@@ -21,6 +21,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { 
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter 
 } from '@/components/ui/dialog'
+import { PasswordConfirmDialog } from '@/components/ui/password-dialog'
 import { Label } from '@/components/ui/label'
 import { Cropper } from 'vue-advanced-cropper'
 import 'vue-advanced-cropper/dist/style.css'
@@ -708,35 +709,18 @@ const getStatusBadge = (car: any) => {
     </Dialog>
 
     <!-- DELETE SECURITY DIALOG -->
-    <Dialog v-model:open="showSecurityModal">
-      <DialogContent class="sm:max-w-md bg-white border-none shadow-[0_20px_60px_rgba(0,0,0,0.3)] rounded-[2.5rem] p-8 max-h-[90vh] overflow-y-auto no-scrollbar">
-        <DialogHeader class="mb-4 text-center">
-          <DialogTitle class="text-xl font-black text-rose-600 uppercase italic tracking-tighter">Confirmation <span class="text-slate-900">Requise</span></DialogTitle>
-          <p class="text-[10px] font-bold text-slate-400 tracking-widest uppercase mt-1">Autorisation de suppression définitive</p>
-        </DialogHeader>
-        
-        <div v-if="guard.isLocked" class="flex items-center justify-center gap-2 bg-rose-50 text-rose-600 border border-rose-200 rounded-xl px-4 py-3 mb-4">
-          <Lock class="w-4 h-4" />
-          <span class="text-[10px] font-black uppercase tracking-widest">Trop de tentatives — réessayez dans {{ guard.remainingSeconds }}s</span>
-        </div>
-        <div class="space-y-4">
-           <div class="relative">
-             <Input :type="showPassword ? 'text' : 'password'" v-model="adminPassword" :disabled="guard.isLocked" placeholder="Mot de passe admin..." class="h-14 bg-slate-50 border-slate-100 rounded-2xl font-black font-mono tracking-widest text-center pr-12" @keyup.enter="executeDelete" />
-             <button type="button" @click="showPassword = !showPassword" class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors outline-none">
-               <Eye v-if="!showPassword" class="w-5 h-5" />
-               <EyeOff v-else class="w-5 h-5" />
-             </button>
-           </div>
-        </div>
-        
-        <DialogFooter class="mt-6 border-t border-slate-100 pt-6">
-          <Button variant="ghost" @click="showSecurityModal = false" class="w-full h-12 font-black uppercase text-[10px] tracking-widest rounded-xl text-slate-400">Annuler</Button>
-          <Button @click="executeDelete" :disabled="!adminPassword || submitting || guard.isLocked" class="w-full h-12 bg-rose-600 hover:bg-rose-700 text-white font-black uppercase tracking-widest text-[10px] rounded-xl shadow-lg shadow-rose-200">
-            {{ submitting ? 'Suppression...' : 'Confirmer' }}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <PasswordConfirmDialog
+      v-model:open="showSecurityModal"
+      v-model:password="adminPassword"
+      title="Confirmation"
+      subtitle="Requise"
+      description="Autorisation de suppression définitive du véhicule"
+      placeholder="Mot de passe admin..."
+      confirm-label="Confirmer"
+      loading-label="Suppression..."
+      :loading="submitting"
+      @confirm="executeDelete"
+    />
   </div>
 </template>
 

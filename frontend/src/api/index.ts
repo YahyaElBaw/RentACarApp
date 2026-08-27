@@ -62,8 +62,10 @@ export const dashboardApi = {
 export const gpsApi = {
   getPositions: () => api.get('/gps/positions').then(res => res.data),
   getSpeedAlerts: (limit = 50) => api.get('/gps/speed-alerts', { params: { limit } }).then(res => res.data),
+  deleteSpeedAlert: (id: string) => api.delete(`/gps/speed-alerts/${id}`).then(res => res.data),
   getKmToday: () => api.get('/gps/km-today').then(res => res.data),
   testSpeedAlert: (carId: string) => api.post('/gps/test-speed-alert', { carId }).then(res => res.data),
+  deleteMileageAlert: (id: string) => api.delete(`/gps/km-alerts/${id}`).then(res => res.data),
   getHistory: (carId: string, from?: string, to?: string, limit = 10000) =>
     api.get(`/gps/history/${carId}`, { params: { from, to, limit } }).then(res => res.data),
   getHistoryStats: (carId: string, from?: string, to?: string) =>

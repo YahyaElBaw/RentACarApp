@@ -634,33 +634,19 @@
     </Dialog>
 
     <!-- Sensitive KPI Password Dialog -->
-    <Dialog :open="showProfitPwdModal" @update:open="(val: boolean) => { if (!val) showProfitPwdModal = false }">
-      <DialogContent class="sm:max-w-md bg-white border-none shadow-2xl rounded-[2rem] p-8">
-        <DialogTitle class="text-lg font-black text-slate-900 uppercase tracking-tight flex items-center gap-2">
-          <EyeOff class="w-5 h-5 text-indigo-600" />
-          Mot de passe requis
-        </DialogTitle>
-        <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Pour afficher les données financières</p>
-        <div class="mt-4 space-y-3">
-          <Input
-            type="password"
-            v-model="profitPwd"
-            placeholder="Mot de passe"
-            class="h-12 bg-slate-50 border-slate-100 rounded-xl font-bold"
-            @keyup.enter="confirmProfitReveal"
-          />
-          <p v-if="profitPwdError" class="text-[10px] font-black text-rose-500 uppercase tracking-widest">Mot de passe incorrect</p>
-          <div class="flex justify-end gap-2 pt-2">
-            <Button variant="secondary" @click="showProfitPwdModal = false" class="rounded-xl h-10 px-5 text-[10px] font-black uppercase tracking-widest">
-              Annuler
-            </Button>
-            <Button :loading="verifyingProfitPwd" @click="confirmProfitReveal" class="rounded-xl h-10 px-5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase tracking-widest shadow-lg shadow-indigo-600/20">
-              Valider
-            </Button>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+    <PasswordConfirmDialog
+      :open="showProfitPwdModal"
+      @update:open="(val: boolean) => { if (!val) showProfitPwdModal = false }"
+      v-model:password="profitPwd"
+      title="Accès"
+      subtitle="Financier"
+      description="Mot de passe requis pour afficher les données financières"
+      placeholder="Mot de passe..."
+      confirm-label="Valider"
+      :loading="verifyingProfitPwd"
+      :error="profitPwdError ? 'Mot de passe incorrect' : ''"
+      @confirm="confirmProfitReveal"
+    />
   </div>
 </template>
 
@@ -686,6 +672,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
+import { PasswordConfirmDialog } from '@/components/ui/password-dialog'
 
 const { t } = useI18n()
 const router = useRouter()

@@ -10,6 +10,7 @@ import CardTitle from '@/components/ui/card/CardTitle.vue'
 import Badge from '@/components/ui/badge/Badge.vue'
 import Button from '@/components/ui/button/Button.vue'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { PasswordConfirmDialog } from '@/components/ui/password-dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useToast } from 'primevue/usetoast'
@@ -548,32 +549,18 @@ const executeDelete = async () => {
     </Dialog>
 
     <!-- DELETE MODAL -->
-    <Dialog v-model:open="showDeleteModal">
-      <DialogContent class="sm:max-w-md bg-white border-none shadow-[0_20px_60px_rgba(0,0,0,0.3)] rounded-[2.5rem] p-8">
-        <DialogHeader class="mb-4 text-center">
-          <DialogTitle class="text-xl font-black text-rose-600 uppercase italic tracking-tighter">Supprimer <span class="text-slate-900">l'Agence</span></DialogTitle>
-          <p class="text-[10px] font-bold text-slate-400 tracking-widest uppercase mt-1">Cette action est définitive et irréversible.</p>
-        </DialogHeader>
-        <div v-if="guard.isLocked" class="flex items-center justify-center gap-2 bg-rose-50 text-rose-600 border border-rose-200 rounded-xl px-4 py-3 mb-4">
-          <Lock class="w-4 h-4" />
-          <span class="text-[10px] font-black uppercase tracking-widest">Trop de tentatives — réessayez dans {{ guard.remainingSeconds }}s</span>
-        </div>
-        <div class="space-y-2 mb-4">
-          <Label class="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Mot de passe Super Admin</Label>
-          <div class="relative">
-            <Lock class="w-4 h-4 text-slate-300 absolute left-4 top-1/2 -translate-y-1/2" />
-            <Input type="password" v-model="deletePassword" :disabled="guard.isLocked" placeholder="Configuration requise..." class="h-14 bg-rose-50 border-rose-100 placeholder:text-rose-300 text-rose-700 rounded-2xl font-black font-mono tracking-widest pl-12" @keydown.enter="executeDelete" />
-          </div>
-        </div>
-        <DialogFooter class="mt-6 border-t border-slate-100 pt-6">
-          <Button variant="ghost" @click="showDeleteModal = false" class="w-full h-12 font-black uppercase text-[10px] tracking-widest rounded-xl text-slate-400">Annuler</Button>
-          <Button @click="executeDelete" :disabled="deleting || !deletePassword || guard.isLocked" class="w-full h-12 bg-rose-600 hover:bg-rose-700 text-white font-black uppercase tracking-widest text-[10px] rounded-xl shadow-lg shadow-rose-200">
-            <Loader2 v-if="deleting" class="w-4 h-4 animate-spin mr-2" />
-            {{ deleting ? 'Suppression...' : 'Confirmer la Suppression' }}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <PasswordConfirmDialog
+      v-model:open="showDeleteModal"
+      v-model:password="deletePassword"
+      title="Supprimer"
+      subtitle="l'Agence"
+      description="Cette action est définitive et irréversible."
+      placeholder="Mot de passe Super Admin..."
+      confirm-label="Confirmer la Suppression"
+      loading-label="Suppression..."
+      :loading="deleting"
+      @confirm="executeDelete"
+    />
 
     <AgenceTemplateEditorModal
       v-model:open="isEditorModalOpen"

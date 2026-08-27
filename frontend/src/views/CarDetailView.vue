@@ -604,122 +604,57 @@
   </Dialog>
 
   <!-- EDIT PASSWORD POPUP -->
-  <Dialog v-model:open="showPasswordDialog">
-    <DialogContent class="sm:max-w-md bg-white border-border shadow-3xl rounded-[2.5rem] p-10 overflow-hidden text-center max-h-[90vh] overflow-y-auto">
-      <DialogHeader class="mb-8">
-        <div class="w-16 h-16 bg-gradient-to-br from-indigo-500 to-violet-600 text-white rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-indigo-600/25"><Lock class="w-8 h-8" /></div>
-        <DialogTitle class="text-2xl font-black uppercase tracking-tight">Accès Administrateur</DialogTitle>
-        <p class="text-[10px] font-black uppercase opacity-40 mt-1">Saisissez votre mot de passe pour enregistrer</p>
-      </DialogHeader>
-      <div class="space-y-6">
-        <div v-if="guard.isLocked" class="flex items-center justify-center gap-2 bg-rose-50 text-rose-600 border border-rose-200 rounded-xl px-4 py-3">
-          <Lock class="w-4 h-4" />
-          <span class="text-[10px] font-black uppercase tracking-widest">Trop de tentatives — réessayez dans {{ guard.remainingSeconds }}s</span>
-        </div>
-        <div class="relative">
-          <Input :type="showPassword ? 'text' : 'password'" v-model="adminPassword" :disabled="guard.isLocked" placeholder="••••••••" class="form-field form-field-pwd text-center pr-12" @keyup.enter="confirmEditPassword" />
-          <button type="button" @click="showPassword = !showPassword" class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-600 transition-colors outline-none">
-            <Eye v-if="!showPassword" class="w-5 h-5" />
-            <EyeOff v-else class="w-5 h-5" />
-          </button>
-        </div>
-        <p v-if="editPasswordError" class="text-[10px] font-black text-destructive uppercase italic">⚠ {{ editPasswordError }}</p>
-        <div class="flex gap-4">
-          <Button @click="showPasswordDialog = false" variant="ghost" class="flex-1 h-14 rounded-2xl font-black uppercase text-[10px]">Annuler</Button>
-          <Button @click="confirmEditPassword" :loading="submittingAction" :disabled="guard.isLocked" class="flex-1 h-14 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black uppercase text-[10px] shadow-xl shadow-indigo-600/20">Confirmer</Button>
-        </div>
-      </div>
-    </DialogContent>
-  </Dialog>
+  <PasswordConfirmDialog
+    v-model:open="showPasswordDialog"
+    v-model:password="adminPassword"
+    title="Accès"
+    subtitle="Administrateur"
+    description="Saisissez votre mot de passe pour enregistrer"
+    placeholder="••••••••"
+    :loading="submittingAction"
+    :error="editPasswordError"
+    @confirm="confirmEditPassword"
+  />
 
   <!-- DOCUMENTS SAVE PASSWORD POPUP -->
-  <Dialog v-model:open="showDocPasswordDialog">
-    <DialogContent class="sm:max-w-md bg-white border-border shadow-3xl rounded-[2.5rem] p-10 overflow-hidden text-center max-h-[90vh] overflow-y-auto">
-      <DialogHeader class="mb-8">
-        <div class="w-16 h-16 bg-gradient-to-br from-emerald-500 to-teal-600 text-white rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-emerald-600/25"><Lock class="w-8 h-8" /></div>
-        <DialogTitle class="text-2xl font-black uppercase tracking-tight">Accès Administrateur</DialogTitle>
-        <p class="text-[10px] font-black uppercase opacity-40 mt-1">Saisissez votre mot de passe pour enregistrer les documents</p>
-      </DialogHeader>
-      <div class="space-y-6">
-        <div v-if="guard.isLocked" class="flex items-center justify-center gap-2 bg-rose-50 text-rose-600 border border-rose-200 rounded-xl px-4 py-3">
-          <Lock class="w-4 h-4" />
-          <span class="text-[10px] font-black uppercase tracking-widest">Trop de tentatives — réessayez dans {{ guard.remainingSeconds }}s</span>
-        </div>
-        <div class="relative">
-          <Input :type="showPassword ? 'text' : 'password'" v-model="adminPassword" :disabled="guard.isLocked" placeholder="••••••••" class="form-field form-field-pwd text-center pr-12" @keyup.enter="confirmDocSave" />
-          <button type="button" @click="showPassword = !showPassword" class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-600 transition-colors outline-none">
-            <Eye v-if="!showPassword" class="w-4 h-4" />
-            <EyeOff v-else class="w-4 h-4" />
-          </button>
-        </div>
-        <p v-if="docPasswordError" class="text-[10px] font-black text-destructive uppercase italic">⚠ {{ docPasswordError }}</p>
-        <div class="flex gap-4">
-          <Button @click="showDocPasswordDialog = false" variant="ghost" class="flex-1 h-14 rounded-2xl font-black uppercase text-[10px]">Annuler</Button>
-          <Button @click="confirmDocSave" :loading="docSaving" :disabled="guard.isLocked" class="flex-1 h-14 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-black uppercase text-[10px] shadow-xl shadow-emerald-600/20">Confirmer</Button>
-        </div>
-      </div>
-    </DialogContent>
-  </Dialog>
+  <PasswordConfirmDialog
+    v-model:open="showDocPasswordDialog"
+    v-model:password="adminPassword"
+    title="Accès"
+    subtitle="Administrateur"
+    description="Saisissez votre mot de passe pour enregistrer les documents"
+    placeholder="••••••••"
+    :loading="docSaving"
+    :error="docPasswordError"
+    @confirm="confirmDocSave"
+  />
 
   <!-- GPS REVEAL PASSWORD POPUP -->
-  <Dialog v-model:open="showGpsPwdDialog">
-    <DialogContent class="sm:max-w-md bg-white border-border shadow-3xl rounded-[2.5rem] p-10 overflow-hidden text-center max-h-[90vh] overflow-y-auto">
-      <DialogHeader class="mb-8">
-        <div class="w-16 h-16 bg-gradient-to-br from-emerald-500 to-teal-600 text-white rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-emerald-600/25"><Lock class="w-8 h-8" /></div>
-        <DialogTitle class="text-2xl font-black uppercase tracking-tight">Information Sensible</DialogTitle>
-        <p class="text-[10px] font-black uppercase opacity-40 mt-1">Saisissez votre mot de passe pour afficher {{ pendingGpsField === 'provider' ? 'le fournisseur GPS' : "l'IMEI GPS" }}</p>
-      </DialogHeader>
-      <div class="space-y-6">
-        <div v-if="guard.isLocked" class="flex items-center justify-center gap-2 bg-rose-50 text-rose-600 border border-rose-200 rounded-xl px-4 py-3">
-          <Lock class="w-4 h-4" />
-          <span class="text-[10px] font-black uppercase tracking-widest">Trop de tentatives — réessayez dans {{ guard.remainingSeconds }}s</span>
-        </div>
-        <div class="relative">
-          <Input :type="showPassword ? 'text' : 'password'" v-model="adminPassword" :disabled="guard.isLocked" placeholder="••••••••" class="form-field form-field-pwd text-center pr-12" @keyup.enter="confirmGpsReveal" />
-          <button type="button" @click="showPassword = !showPassword" class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-emerald-600 transition-colors outline-none">
-            <Eye v-if="!showPassword" class="w-4 h-4" />
-            <EyeOff v-else class="w-4 h-4" />
-          </button>
-        </div>
-        <p v-if="gpsPasswordError" class="text-[10px] font-black text-destructive uppercase italic">⚠ {{ gpsPasswordError }}</p>
-        <div class="flex gap-4">
-          <Button @click="showGpsPwdDialog = false" variant="ghost" class="flex-1 h-14 rounded-2xl font-black uppercase text-[10px]">Annuler</Button>
-          <Button @click="confirmGpsReveal" :disabled="!adminPassword || guard.isLocked" class="flex-1 h-14 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-black uppercase text-[10px] shadow-xl shadow-emerald-600/20">Afficher</Button>
-        </div>
-      </div>
-    </DialogContent>
-  </Dialog>
+  <PasswordConfirmDialog
+    v-model:open="showGpsPwdDialog"
+    v-model:password="adminPassword"
+    title="Information"
+    subtitle="Sensible"
+    :description="pendingGpsField === 'provider' ? 'Saisissez votre mot de passe pour afficher le fournisseur GPS' : 'Saisissez votre mot de passe pour afficher l IMEI GPS'"
+    placeholder="••••••••"
+    confirm-label="Afficher"
+    :error="gpsPasswordError"
+    @confirm="confirmGpsReveal"
+  />
 
   <!-- DELETE MODAL -->
-  <Dialog v-model:open="showSecurityModal">
-    <DialogContent class="sm:max-w-md bg-white border-none shadow-[0_20px_60px_rgba(0,0,0,0.3)] rounded-[2.5rem] p-8 max-h-[90vh] overflow-y-auto no-scrollbar">
-      <DialogHeader class="mb-4 text-center">
-        <DialogTitle class="text-xl font-black text-rose-600 uppercase italic tracking-tighter">Confirmation <span class="text-slate-900">Requise</span></DialogTitle>
-        <p class="text-[10px] font-bold text-slate-400 tracking-widest uppercase mt-1">Autorisation de suppression</p>
-      </DialogHeader>
-      
-      <div v-if="guard.isLocked" class="flex items-center justify-center gap-2 bg-rose-50 text-rose-600 border border-rose-200 rounded-xl px-4 py-3 mb-4">
-        <Lock class="w-4 h-4" />
-        <span class="text-[10px] font-black uppercase tracking-widest">Trop de tentatives — réessayez dans {{ guard.remainingSeconds }}s</span>
-      </div>
-      <div class="space-y-4">
-         <div class="relative">
-           <Input :type="showPassword ? 'text' : 'password'" v-model="adminPassword" :disabled="guard.isLocked" placeholder="Mot de passe admin..." class="h-14 bg-slate-50 border-slate-100 rounded-2xl font-black font-mono tracking-widest text-center pr-12" @keyup.enter="executeDelete" />
-           <button type="button" @click="showPassword = !showPassword" class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors outline-none">
-             <Eye v-if="!showPassword" class="w-5 h-5" />
-             <EyeOff v-else class="w-5 h-5" />
-           </button>
-         </div>
-      </div>
-      
-      <DialogFooter class="mt-6 border-t border-slate-100 pt-6">
-        <Button variant="ghost" @click="showSecurityModal = false" class="w-full h-12 font-black uppercase text-[10px] tracking-widest rounded-xl text-slate-400">Annuler</Button>
-        <Button @click="executeDelete" :disabled="!adminPassword || submittingAction || guard.isLocked" class="w-full h-12 bg-rose-600 hover:bg-rose-700 text-white font-black uppercase tracking-widest text-[10px] rounded-xl shadow-lg shadow-rose-200">
-          {{ submittingAction ? 'Suppression...' : 'Confirmer' }}
-        </Button>
-      </DialogFooter>
-    </DialogContent>
-  </Dialog>
+  <PasswordConfirmDialog
+    v-model:open="showSecurityModal"
+    v-model:password="adminPassword"
+    title="Confirmation"
+    subtitle="Requise"
+    description="Autorisation de suppression du véhicule"
+    placeholder="Mot de passe admin..."
+    confirm-label="Confirmer"
+    loading-label="Suppression..."
+    :loading="submittingAction"
+    @confirm="executeDelete"
+  />
 
   <!-- STICKY BATCH SAVE BAR -->
   <transition enter-active-class="transition duration-300 ease-out" enter-from-class="opacity-0 translate-y-6" enter-to-class="opacity-100 translate-y-0"
@@ -750,38 +685,18 @@
   </transition>
 
   <!-- INLINE EDIT PASSWORD CONFIRM -->
-  <Dialog v-model:open="showConfirmDialog">
-    <DialogContent class="sm:max-w-md bg-white border-none shadow-3xl rounded-[2.5rem] p-8">
-      <DialogHeader class="mb-6 text-center">
-        <div class="w-16 h-16 bg-indigo-50 text-indigo-600 rounded-3xl flex items-center justify-center mx-auto mb-4">
-          <ShieldAlert class="w-8 h-8" />
-        </div>
-        <DialogTitle class="text-xl font-black text-slate-900 uppercase italic tracking-tighter">Confirmation <span class="text-indigo-600">Admin</span></DialogTitle>
-        <p class="text-[10px] font-bold text-slate-400 tracking-widest uppercase mt-1">Mot de passe requis pour {{ pendingCount }} modification(s)</p>
-      </DialogHeader>
-      
-      <div v-if="guard.isLocked" class="flex items-center justify-center gap-2 bg-rose-50 text-rose-600 border border-rose-200 rounded-xl px-4 py-3 mb-4">
-        <Lock class="w-4 h-4" />
-        <span class="text-[10px] font-black uppercase tracking-widest">Trop de tentatives — réessayez dans {{ guard.remainingSeconds }}s</span>
-      </div>
-      <div class="space-y-4">
-         <div class="relative">
-           <Input :type="showPassword ? 'text' : 'password'" v-model="adminPassword" :disabled="guard.isLocked" placeholder="Mot de passe admin..." class="h-14 bg-slate-50 border-slate-100 rounded-2xl font-black font-mono tracking-widest text-center pr-12" @keyup.enter="executeInlineSave" />
-           <button type="button" @click="showPassword = !showPassword" class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors outline-none">
-             <Eye v-if="!showPassword" class="w-5 h-5" />
-             <EyeOff v-else class="w-5 h-5" />
-           </button>
-         </div>
-      </div>
-      
-      <DialogFooter class="mt-8 flex gap-4">
-        <Button variant="ghost" @click="showConfirmDialog = false" class="flex-1 h-12 font-black uppercase text-[10px] tracking-widest rounded-xl text-slate-400">Annuler</Button>
-        <Button @click="executeInlineSave" :disabled="!adminPassword || submittingAction || guard.isLocked" class="flex-1 h-12 bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase tracking-widest text-[10px] rounded-xl shadow-lg shadow-indigo-200">
-          {{ submittingAction ? 'Validation...' : 'Confirmer' }}
-        </Button>
-      </DialogFooter>
-    </DialogContent>
-  </Dialog>
+  <PasswordConfirmDialog
+    v-model:open="showConfirmDialog"
+    v-model:password="adminPassword"
+    title="Confirmation"
+    subtitle="Admin"
+    :description="`Mot de passe requis pour ${pendingCount} modification(s)`"
+    placeholder="Mot de passe admin..."
+    confirm-label="Confirmer"
+    loading-label="Validation..."
+    :loading="submittingAction"
+    @confirm="executeInlineSave"
+  />
 
   <!-- HISTORY DETAIL DIALOG -->
   <Dialog v-model:open="showHistoryDetail">
@@ -866,6 +781,7 @@ import CardContent from '@/components/ui/card/CardContent.vue';
 import Badge from '@/components/ui/badge/Badge.vue';
 import Button from '@/components/ui/button/Button.vue';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { PasswordConfirmDialog } from '@/components/ui/password-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import TabView from 'primevue/tabview';

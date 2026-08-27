@@ -95,6 +95,13 @@ const loadSpeedAlerts = async () => {
   } catch {}
 }
 
+const deleteSpeedAlert = async (id: string) => {
+  try {
+    await gpsApi.deleteSpeedAlert(id)
+    speedAlerts.value = speedAlerts.value.filter((a) => a._id !== id)
+  } catch {}
+}
+
 const loadCarsForTest = async () => {
   try {
     const res = await carApi.getAll()
@@ -491,6 +498,9 @@ const restoreClient = async (id: string) => {
                     </span>
                     <span class="text-[10px] font-black text-rose-600 tabular-nums shrink-0">{{ Math.round(a.speed) }} km/h</span>
                     <span class="text-[8px] font-bold text-slate-400 shrink-0">{{ formatAlertTime(a.alertAt) }}</span>
+                    <button @click="deleteSpeedAlert(a._id)" class="shrink-0 p-1 rounded-lg hover:bg-rose-100 transition" title="Supprimer">
+                      <X class="w-3 h-3 text-rose-400" />
+                    </button>
                   </div>
                 </div>
               </div>

@@ -24,6 +24,7 @@ import {
 import { 
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription 
 } from '@/components/ui/dialog'
+import { PasswordConfirmDialog } from '@/components/ui/password-dialog'
 import { Label } from '@/components/ui/label'
 import { Cropper } from 'vue-advanced-cropper'
 import 'vue-advanced-cropper/dist/style.css'
@@ -826,68 +827,18 @@ const isStepValid = computed(() => {
     </Dialog>
 
     <!-- Security Modal for Admin Password -->
-    <Dialog v-model:open="showSecurityModal">
-      <DialogContent class="sm:max-w-[400px] bg-white/95 backdrop-blur-3xl border border-slate-200 shadow-3xl rounded-[2.5rem] p-0 overflow-hidden text-slate-900">
-        <DialogHeader class="p-8 bg-rose-600 text-white relative overflow-hidden">
-          <div class="absolute -top-12 -right-12 w-32 h-32 bg-white/10 rounded-full blur-[60px]"></div>
-          <div class="flex items-center gap-4 relative z-10">
-            <div class="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center shadow-inner">
-              <Shield class="w-6 h-6 text-white" />
-            </div>
-            <div>
-              <DialogTitle class="text-xl font-black uppercase tracking-tighter text-white italic">Confirmation <span class="text-rose-200">{{ pendingEdit ? 'Admin' : 'Requise' }}</span></DialogTitle>
-              <DialogDescription class="text-white/60 text-[8px] font-black uppercase tracking-[0.3em] mt-1">Action Administrative Sécurisée</DialogDescription>
-            </div>
-          </div>
-        </DialogHeader>
-
-        <div class="p-8 space-y-6">
-          <div class="p-4 bg-rose-50 border border-rose-100 rounded-2xl flex items-start gap-3">
-             <div class="w-2 h-2 rounded-full bg-rose-500 mt-1.5 shrink-0"></div>
-              <p class="text-[11px] font-bold text-rose-700 leading-relaxed italic">{{ pendingEdit ? 'Cette action va modifier les informations du client. Veuillez saisir votre mot de passe administrateur pour confirmer.' : 'Cette action va désactiver le client. Veuillez saisir votre mot de passe administrateur pour confirmer.' }}</p>
-          </div>
-          
-          <div class="space-y-3">
-            <Label class="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Mot de Passe Admin</Label>
-            <div v-if="guard.isLocked" class="flex items-center gap-2 bg-rose-50 text-rose-600 border border-rose-200 rounded-xl px-4 py-3 mb-2">
-              <Lock class="w-4 h-4" />
-              <span class="text-[10px] font-black uppercase tracking-widest">Trop de tentatives — réessayez dans {{ guard.remainingSeconds }}s</span>
-            </div>
-            <div class="relative">
-              <Input 
-                :type="showPassword ? 'text' : 'password'" 
-                v-model="adminPassword" 
-                :disabled="guard.isLocked"
-                placeholder="••••••••" 
-                class="h-14 bg-slate-50 border-slate-100 focus:ring-4 focus:ring-rose-500/5 rounded-2xl font-black text-center text-xl tracking-widest pr-12"
-                @keyup.enter="executeDelete"
-              />
-              <button type="button" @click="showPassword = !showPassword" class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors outline-none">
-                <Eye v-if="!showPassword" class="w-5 h-5" />
-                <EyeOff v-else class="w-5 h-5" />
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <DialogFooter class="p-8 bg-slate-50/50 border-t border-slate-100 flex flex-col gap-3">
-          <Button 
-            @click="executeDelete" 
-            :disabled="!adminPassword || submitting || guard.isLocked"
-            class="w-full h-14 bg-rose-600 hover:bg-rose-700 text-white font-black rounded-2xl shadow-xl shadow-rose-600/20 disabled:opacity-50 flex items-center justify-center gap-3 uppercase tracking-widest text-[10px]"
-          >
-            <template v-if="submitting">
-              <div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-              Traitement...
-            </template>
-            <template v-else>
-              {{ pendingEdit ? 'Confirmer la Modification' : 'Confirmer la Désactivation' }}
-            </template>
-          </Button>
-          <Button variant="ghost" @click="showSecurityModal = false" class="w-full h-12 font-black rounded-xl text-slate-400 uppercase tracking-widest text-[9px]">Annuler</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <PasswordConfirmDialog
+      v-model:open="showSecurityModal"
+      v-model:password="adminPassword"
+      :title="pendingEdit ? 'Confirmation' : 'Accès'"
+      :subtitle="pendingEdit ? 'Admin' : 'Requis'"
+      :description="pendingEdit ? 'Cette action va modifier les informations du client.' : 'Cette action va désactiver le client. Action administrative sécurisée.'"
+      placeholder="Mot de passe admin..."
+      :confirm-label="pendingEdit ? 'Confirmer la Modification' : 'Confirmer la Désactivation'"
+      loading-label="Traitement..."
+      :loading="submitting"
+      @confirm="executeDelete"
+    />
   </div>
 </template>
 

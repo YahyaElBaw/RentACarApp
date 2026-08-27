@@ -740,47 +740,19 @@
     </Dialog>
 
     <!-- Password Confirmation Dialog -->
-    <Dialog :open="showPasswordDialog" @update:open="(open: boolean) => { showPasswordDialog = open; if (!open) pendingFormSave = false }">
-      <DialogContent class="sm:max-w-md bg-white border-none shadow-2xl rounded-[2.5rem] p-10 overflow-hidden">
-        <div class="space-y-8">
-          <div class="flex items-center gap-4 border-b border-slate-100 pb-6">
-            <div class="p-3 bg-rose-50 rounded-2xl">
-              <ShieldCheck class="w-6 h-6 text-rose-600" />
-            </div>
-            <div>
-              <DialogTitle class="text-2xl font-black text-slate-900 uppercase tracking-tight">Confirmation <span class="text-rose-600 italic">Admin</span></DialogTitle>
-              <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Mot de passe requis pour modifier les données</p>
-            </div>
-          </div>
-
-          <div class="space-y-4">
-            <div v-if="guard.isLocked" class="flex items-center gap-2 bg-rose-50 text-rose-600 border border-rose-200 rounded-xl px-4 py-3">
-              <Lock class="w-4 h-4" />
-              <span class="text-[10px] font-black uppercase tracking-widest">Trop de tentatives — réessayez dans {{ guard.remainingSeconds }}s</span>
-            </div>
-            <div class="space-y-2">
-              <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Mot de passe Administrateur</label>
-              <div class="relative">
-                <Input :type="showPassword ? 'text' : 'password'" v-model="adminPassword" :disabled="guard.isLocked" placeholder="••••••••" class="h-14 rounded-2xl border-slate-200 focus:ring-rose-500/20 pr-12" @keyup.enter="confirmSave" />
-                <button type="button" @click="showPassword = !showPassword" class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors outline-none">
-                  <Eye v-if="!showPassword" class="w-5 h-5" />
-                  <EyeOff v-else class="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div class="flex flex-col gap-3 pt-4">
-             <Button @click="confirmSave" :disabled="saving || !adminPassword || guard.isLocked" class="h-14 bg-rose-600 hover:bg-rose-700 text-white font-black uppercase tracking-widest text-[10px] rounded-2xl shadow-xl shadow-rose-100 transition-all gap-2">
-                <Check v-if="!saving" class="w-4 h-4" />
-                <Loader2 v-else class="w-4 h-4 animate-spin" />
-                Confirmer la Modification
-             </Button>
-             <Button variant="ghost" @click="showPasswordDialog = false; pendingFormSave = false" class="text-slate-400 font-black uppercase text-[9px] tracking-widest">Annuler</Button>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+    <PasswordConfirmDialog
+      :open="showPasswordDialog"
+      @update:open="(open: boolean) => { showPasswordDialog = open; if (!open) pendingFormSave = false }"
+      v-model:password="adminPassword"
+      title="Confirmation"
+      subtitle="Admin"
+      description="Mot de passe requis pour modifier les données"
+      placeholder="••••••••"
+      :confirm-label="pendingFormSave ? 'Confirmer la Modification' : 'Confirmer'"
+      loading-label="Enregistrement..."
+      :loading="saving"
+      @confirm="confirmSave"
+    />
     <input type="file" ref="replacementFileInput" class="hidden" accept="image/*" @change="handleReplacementFile" />
   </div>
 
@@ -823,6 +795,7 @@ import {
 import {
   Dialog, DialogContent, DialogTitle
 } from '@/components/ui/dialog'
+import { PasswordConfirmDialog } from '@/components/ui/password-dialog'
 import { Cropper } from 'vue-advanced-cropper'
 import 'vue-advanced-cropper/dist/style.css'
 

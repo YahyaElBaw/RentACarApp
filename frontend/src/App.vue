@@ -239,6 +239,10 @@ const showDismissText = ref(false)
 
 const askDismissAlert = (alert: any) => {
   if (!authStore.isAdmin || !alert?.key) return
+  if (alert.code === 'SPEED' || alert.code === 'KM') {
+    alerts.value = alerts.value.filter((a) => a.key !== alert.key)
+    return
+  }
   pendingDismissKey.value = alert.key
   dismissPwd.value = ''
   dismissError.value = false
