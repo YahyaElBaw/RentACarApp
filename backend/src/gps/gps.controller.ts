@@ -29,19 +29,14 @@ export class GpsController {
   ) {}
 
   /**
-   * On serverless platforms (like Vercel), background intervals get frozen.
-   * This on-demand poll triggers Winnou & Traci fetches whenever a user requests positions,
-   * throttled to at most once every 2 seconds.
+   * Fire an on-demand poll in the background (non-blocking).
+   * The pollers already run every 1s on their own timers; this just
+   * kicks them if the REST caller needs fresher data.
    */
-  private async triggerPollIfNeeded(): Promise<void> {
+  private triggerPollIfNeeded(): void {
     const now = Date.now();
-    if (now - this.lastPollAt < 2000) {
-      return;
-    }
-    if (this.pollPromise) {
-      await this.pollPromise;
-      return;
-    }
+    if (now - this.lastPollAt < 1500) return;
+    if (this.pollPromise) return;
     this.lastPollAt = now;
     this.pollPromise = Promise.allSettled([
       this.traciPoller.poll(),
@@ -49,7 +44,6 @@ export class GpsController {
     ]).finally(() => {
       this.pollPromise = null;
     });
-    await this.pollPromise;
   }
 
   // Ingestion endpoint for external GPS platforms (traci.tn, winnou.tn, ...)
@@ -80,7 +74,7 @@ export class GpsController {
   @UseGuards(JwtAuthGuard)
   @Get('positions')
   async getPositions() {
-    await this.triggerPollIfNeeded();
+    this.triggerPollIfNeeded();
     return this.gpsService.getPositions();
   }
 
