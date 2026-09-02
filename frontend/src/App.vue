@@ -137,6 +137,7 @@ const fetchAlerts = async () => {
   } catch (err) {
     console.error('Failed to fetch alerts', err)
   }
+  await loadDismissedKeys()
   await loadSpeedAlerts()
 }
 
@@ -197,18 +198,32 @@ const handleKmAlertEvent = (payload: any) => {
   ]
 }
 
+const dismissedKeys = ref<Set<string>>(new Set())
+
+const loadDismissedKeys = async () => {
+  if (!isAuthenticated.value) return
+  try {
+    const keys = await dashboardApi.getDismissedKeys()
+    dismissedKeys.value = new Set(keys || [])
+  } catch {
+    // ignore
+  }
+}
+
 const loadSpeedAlerts = async () => {
   if (!isAuthenticated.value) return
   try {
     const data = await gpsApi.getSpeedAlerts(20)
     speedAlerts.value = data || []
-    const gpsAlerts = (data || []).map((a: any) => ({
-      message: `${[a.brand, a.model].filter(Boolean).join(' ')} (${a.matricule || '?'}) dépasse la limite: ${Math.round(a.speed)} km/h (limite ${a.limit || appSettings.value?.speedAlertLimit || '?'} km/h)`,
-      type: 'critique' as const,
-      key: `gps:speed:${a._id}`,
-      code: 'SPEED',
-      alertAt: a.alertAt,
-    }))
+    const gpsAlerts = (data || [])
+      .filter((a: any) => !dismissedKeys.value.has(`gps:speed:${a._id}`))
+      .map((a: any) => ({
+        message: `${[a.brand, a.model].filter(Boolean).join(' ')} (${a.matricule || '?'}) dépasse la limite: ${Math.round(a.speed)} km/h (limite ${a.limit || appSettings.value?.speedAlertLimit || '?'} km/h)`,
+        type: 'critique' as const,
+        key: `gps:speed:${a._id}`,
+        code: 'SPEED',
+        alertAt: a.alertAt,
+      }))
     const existingKeys = new Set(alerts.value.map((x: any) => x.key))
     const newGpsAlerts = gpsAlerts.filter((x: any) => !existingKeys.has(x.key))
     alerts.value = [...newGpsAlerts, ...alerts.value]
@@ -220,7 +235,7 @@ const loadSpeedAlerts = async () => {
 const connectSpeedAlertListener = () => {
   if (!unsubscribeSpeedAlerts && isAuthenticated.value) {
     unsubscribeSpeedAlerts = socketStore.onEvent('gps:speed-alert', handleSpeedAlertEvent)
-    loadSpeedAlerts()
+    loadDismissedKeys().then(() => loadSpeedAlerts())
   }
   if (!unsubscribeKmAlerts && isAuthenticated.value) {
     unsubscribeKmAlerts = socketStore.onEvent('gps:km-alert', handleKmAlertEvent)
@@ -479,6 +494,7 @@ watch(isAuthenticated, (val) => {
     socketStore.disconnect()
     disconnectSpeedAlertListener()
     alerts.value = []
+    dismissedKeys.value = new Set()
   }
 })
 
@@ -789,7 +805,7 @@ watch(() => vidangeForm.mileageAtChange, (newVal) => {
                </div>
 
               <!-- Global Notification Bell -->
-              <button @click="showAlertsModal = true" class="relative group outline-none hover:scale-105 active:scale-95 transition-all">
+              <button @click="showAlertsModal = true; loadDismissedKeys().then(() => fetchAlerts())" class="relative group outline-none hover:scale-105 active:scale-95 transition-all">
                 <div class="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center border border-slate-100 shadow-sm group-hover:bg-primary group-hover:border-primary transition-colors duration-300">
                   <Bell :class="['w-5 h-5 transition-colors duration-300', alerts.length > 0 ? 'text-primary group-hover:text-white' : 'text-slate-400 group-hover:text-white']" />
                 </div>

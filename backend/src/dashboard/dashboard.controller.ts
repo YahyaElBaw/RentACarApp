@@ -72,6 +72,12 @@ export class DashboardController {
     return this.dashboardService.getDismissedAlerts(code);
   }
 
+  @UseGuards(JwtAuthGuard)
+  @Get('alerts/dismissed-keys')
+  getDismissedKeys() {
+    return this.dashboardService.getDismissedKeys();
+  }
+
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('super_admin')
   @Patch('alerts/restore/:id')

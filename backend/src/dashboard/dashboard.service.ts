@@ -355,7 +355,7 @@ export class DashboardService {
         const remainingKm = car.nextOilChangeMileage - car.mileage;
         if (remainingKm <= 3000) {
           alerts.push({
-            key: `vidange:${car._id}:${car.nextOilChangeMileage}`,
+            key: `vidange:${car._id}`,
             code: 'VIDANGE',
             type: remainingKm <= 500 ? 'critique' : 'urgent',
             carId: car._id,
@@ -385,7 +385,7 @@ export class DashboardService {
           else alertMsg += `expire dans ${daysLeft} jours.`;
 
           alerts.push({
-            key: `visite:${car._id}:${new Date(car.nextTechnicalVisitDate).toISOString().split('T')[0]}`,
+            key: `visite:${car._id}`,
             code: 'VISITE',
             type: daysLeft <= 15 ? 'critique' : 'urgent',
             carId: car._id,
@@ -414,7 +414,7 @@ export class DashboardService {
           else alertMsg += `expire dans ${daysLeft} jours.`;
 
           alerts.push({
-            key: `assurance:${car._id}:${insuranceDate.toISOString().split('T')[0]}`,
+            key: `assurance:${car._id}`,
             code: 'ASSURANCE',
             type: daysLeft <= 7 ? 'critique' : 'urgent',
             carId: car._id,
@@ -535,6 +535,11 @@ export class DashboardService {
     }));
     await this.dismissedAlertModel.bulkWrite(ops as any);
     return { dismissed: alertKeys.length };
+  }
+
+  async getDismissedKeys(): Promise<string[]> {
+    const docs = await this.dismissedAlertModel.find().select('key').exec();
+    return docs.map((d) => d.key);
   }
 
   async getDismissedAlerts(code?: string) {
