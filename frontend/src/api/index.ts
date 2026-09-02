@@ -56,7 +56,20 @@ export const logApi = {
 export const dashboardApi = {
   getStats: (params?: any) => api.get('/dashboard', { params }).then(res => res.data),
   getAppVersion: () => api.get('/version').then(res => res.data),
-  dismissAlert: (key: string, password: string) => api.post('/dashboard/alerts/dismiss', { key, password }).then(res => res.data),
+  dismissAlert: (key: string, password: string, alertData?: { code?: string; type?: string; message?: string; metadata?: any }) =>
+    api.post('/dashboard/alerts/dismiss', { key, password, ...alertData }).then(res => res.data),
+  bulkDismissAlert: (alerts: Array<{ key: string; code?: string; type?: string; message?: string; metadata?: any }>, password: string) =>
+    api.post('/dashboard/alerts/bulk-dismiss', { alerts, password }).then(res => res.data),
+  getRemovedAlerts: (code?: string) =>
+    api.get('/dashboard/alerts/removed', { params: { code } }).then(res => res.data),
+  restoreAlert: (id: string) =>
+    api.patch(`/dashboard/alerts/restore/${id}`).then(res => res.data),
+  permanentDeleteAlert: (id: string) =>
+    api.delete(`/dashboard/alerts/permanent/${id}`).then(res => res.data),
+  bulkRestoreAlerts: (ids: string[]) =>
+    api.post('/dashboard/alerts/bulk-restore', { ids }).then(res => res.data),
+  bulkPermanentDeleteAlerts: (ids: string[]) =>
+    api.post('/dashboard/alerts/bulk-permanent-delete', { ids }).then(res => res.data),
 };
 
 export const gpsApi = {

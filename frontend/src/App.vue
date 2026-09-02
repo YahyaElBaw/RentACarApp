@@ -8,7 +8,8 @@ import {
   LayoutDashboard, Car, FileText, Users, Calendar, Wallet, MapPinned,
   LogOut, ShieldCheck, X, Calculator, Bell, AlertCircle, CheckCircle2,
   RefreshCcw, Search, Settings, WifiOff, ScrollText, Radio, Building2,
-  Eye as EyeIcon, EyeOff as EyeOffIcon, Monitor, Smartphone
+  Eye as EyeIcon, EyeOff as EyeOffIcon, Monitor, Smartphone,
+  CheckSquare, Square, Trash2, Filter
 } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -108,6 +109,15 @@ const devicesFor = (u: any): string[] => {
 watch(showOnlineUsersModal, (val) => {
   if (val) loadDirectoryUsers()
 })
+
+watch(showAlertsModal, (val) => {
+  if (!val) {
+    selectMode.value = false
+    selectedAlertKeys.value = new Set()
+    activeAlertFilter.value = 'all'
+  }
+})
+
 const appSettings = ref<any>(null)
 
 const fetchSettings = async () => {
@@ -236,13 +246,85 @@ const dismissServerError = ref(false)
 const dismissing = ref(false)
 const pendingDismissKey = ref<string | null>(null)
 const showDismissText = ref(false)
+const alertForDismiss = ref<any>(null)
+const isBulkDismiss = ref(false)
+
+// Alert filters
+const activeAlertFilter = ref('all')
+const alertFilterOptions = [
+  { key: 'all', label: 'Tous', code: null },
+  { key: 'VIDANGE', label: 'Vidange', code: 'VIDANGE' },
+  { key: 'VISITE', label: 'Visite', code: 'VISITE' },
+  { key: 'ASSURANCE', label: 'Assurance', code: 'ASSURANCE' },
+  { key: 'INCOMPLETE_CLIENT', label: 'Client', code: 'INCOMPLETE_CLIENT' },
+  { key: 'SPEED', label: 'Vitesse', code: 'SPEED' },
+  { key: 'KM', label: 'Kilometrage', code: 'KM' },
+]
+
+const filteredAlerts = computed(() => {
+  if (activeAlertFilter.value === 'all') return alerts.value
+  return alerts.value.filter((a: any) => a.code === activeAlertFilter.value)
+})
+
+const alertFilterCount = computed(() => {
+  const counts: Record<string, number> = { all: alerts.value.length }
+  for (const a of alerts.value) {
+    const code = a.code || 'other'
+    counts[code] = (counts[code] || 0) + 1
+  }
+  return counts
+})
+
+// Select mode
+const selectMode = ref(false)
+const selectedAlertKeys = ref<Set<string>>(new Set())
+
+const toggleSelectMode = () => {
+  selectMode.value = !selectMode.value
+  if (!selectMode.value) {
+    selectedAlertKeys.value = new Set()
+  }
+}
+
+const toggleAlertSelection = (key: string) => {
+  const s = new Set(selectedAlertKeys.value)
+  if (s.has(key)) s.delete(key)
+  else s.add(key)
+  selectedAlertKeys.value = s
+}
+
+const allFilteredSelected = computed(() => {
+  const keys = filteredAlerts.value.map((a: any) => a.key)
+  return keys.length > 0 && keys.every((k: string) => selectedAlertKeys.value.has(k))
+})
+
+const toggleSelectAll = () => {
+  if (allFilteredSelected.value) {
+    selectedAlertKeys.value = new Set()
+  } else {
+    const keys = filteredAlerts.value.map((a: any) => a.key)
+    selectedAlertKeys.value = new Set(keys)
+  }
+}
+
+const selectedCount = computed(() => selectedAlertKeys.value.size)
+
+const askBulkDismiss = () => {
+  if (!selectedCount.value || !authStore.isAdmin) return
+  isBulkDismiss.value = true
+  alertForDismiss.value = null
+  pendingDismissKey.value = null
+  dismissPwd.value = ''
+  dismissError.value = false
+  dismissServerError.value = false
+  showDismissText.value = false
+  showDismissPwd.value = true
+}
 
 const askDismissAlert = (alert: any) => {
   if (!authStore.isAdmin || !alert?.key) return
-  if (alert.code === 'SPEED' || alert.code === 'KM') {
-    alerts.value = alerts.value.filter((a) => a.key !== alert.key)
-    return
-  }
+  isBulkDismiss.value = false
+  alertForDismiss.value = alert
   pendingDismissKey.value = alert.key
   dismissPwd.value = ''
   dismissError.value = false
@@ -254,20 +336,63 @@ const askDismissAlert = (alert: any) => {
 const cancelDismiss = () => {
   showDismissPwd.value = false
   pendingDismissKey.value = null
+  alertForDismiss.value = null
+  isBulkDismiss.value = false
+  dismissPwd.value = ''
+  dismissError.value = false
+  dismissServerError.value = false
 }
 
 const confirmDismiss = async () => {
-  if (!pendingDismissKey.value || dismissing.value) return
+  if (dismissing.value) return
+  if (!dismissPwd.value) return
+  dismissError.value = false
+  dismissServerError.value = false
   dismissing.value = true
   try {
-    await dashboardApi.dismissAlert(pendingDismissKey.value, dismissPwd.value)
+    if (isBulkDismiss.value && selectedAlertKeys.value.size > 0) {
+      const alertPayloads = alerts.value
+        .filter((a: any) => selectedAlertKeys.value.has(a.key))
+        .map((a: any) => ({
+          key: a.key,
+          code: a.code || '',
+          type: a.type || '',
+          message: a.message || '',
+          metadata: a.metadata || {},
+        }))
+      await dashboardApi.bulkDismissAlert(alertPayloads, dismissPwd.value)
+      const removedKeys = new Set(selectedAlertKeys.value)
+      alerts.value = alerts.value.filter((a: any) => !removedKeys.has(a.key))
+      selectedAlertKeys.value = new Set()
+      selectMode.value = false
+      showDismissPwd.value = false
+      isBulkDismiss.value = false
+      dismissPwd.value = ''
+      toast.add({ severity: 'success', summary: 'Succes', detail: `${removedKeys.size} notification(s) supprimee(s)`, life: 3000 })
+      return
+    }
+
+    if (!pendingDismissKey.value) return
+    const a = alertForDismiss.value
+    await dashboardApi.dismissAlert(pendingDismissKey.value, dismissPwd.value, {
+      code: a?.code,
+      type: a?.type,
+      message: a?.message,
+      metadata: a?.metadata,
+    })
     showDismissPwd.value = false
+    const removedKey = pendingDismissKey.value
     pendingDismissKey.value = null
-    toast.add({ severity: 'success', summary: 'Succès', detail: 'Notification supprimée', life: 3000 })
-    await fetchAlerts()
+    alertForDismiss.value = null
+    dismissPwd.value = ''
+    alerts.value = alerts.value.filter((x) => x.key !== removedKey)
+    toast.add({ severity: 'success', summary: 'Succes', detail: 'Notification supprimee', life: 3000 })
   } catch (err: any) {
-    if (err?.response?.status === 401) dismissError.value = true
-    else dismissServerError.value = true
+    if (err?.response?.status === 401) {
+      dismissError.value = true
+    } else {
+      dismissServerError.value = true
+    }
   } finally {
     dismissing.value = false
   }
@@ -701,7 +826,7 @@ watch(() => vidangeForm.mileageAtChange, (newVal) => {
           <div v-if="showAlertsModal" class="fixed inset-y-0 right-0 z-[100] w-full max-w-sm bg-white border-l border-slate-100 shadow-[-20px_0_60px_rgba(0,0,0,0.1)] flex flex-col p-8 overflow-hidden">
              <button @click="showAlertsModal = false" class="absolute top-6 right-6 p-2 text-slate-300 hover:text-slate-600 hover:bg-slate-50 transition-colors rounded-full"><X class="w-5 h-5"/></button>
              
-             <h2 class="text-2xl font-black text-slate-900 uppercase tracking-tight flex items-center gap-3 mb-8 shrink-0">
+             <h2 class="text-2xl font-black text-slate-900 uppercase tracking-tight flex items-center gap-3 mb-4 shrink-0">
                <span class="relative flex h-3 w-3">
                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
                  <span class="relative inline-flex rounded-full h-3 w-3 bg-destructive"></span>
@@ -709,20 +834,92 @@ watch(() => vidangeForm.mileageAtChange, (newVal) => {
                Centre d'<span class="text-primary italic">Alertes</span>
              </h2>
 
+             <!-- Filter Pills -->
+             <div class="flex gap-1.5 mb-3 shrink-0 overflow-x-auto no-scrollbar pb-1">
+               <button
+                 v-for="f in alertFilterOptions"
+                 :key="f.key"
+                 @click="activeAlertFilter = f.key"
+                 :class="[
+                   'px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest whitespace-nowrap transition-all flex items-center gap-1.5 shrink-0',
+                   activeAlertFilter === f.key
+                     ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200'
+                     : 'bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600'
+                 ]"
+               >
+                 {{ f.label }}
+                 <span :class="[
+                   'min-w-[16px] h-4 px-1 rounded-full text-[8px] font-black flex items-center justify-center',
+                   activeAlertFilter === f.key ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-500'
+                 ]">{{ alertFilterCount[f.key] || 0 }}</span>
+               </button>
+             </div>
+
+             <!-- Select Mode Controls -->
+             <div v-if="authStore.isAdmin && filteredAlerts.length" class="flex items-center justify-between mb-3 shrink-0">
+               <button
+                 @click="toggleSelectMode"
+                 :class="[
+                   'flex items-center gap-2 px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all',
+                   selectMode ? 'bg-indigo-100 text-indigo-700' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'
+                 ]"
+               >
+                 <CheckSquare class="w-3.5 h-3.5" />
+                 {{ selectMode ? 'Annuler' : 'Selectionner' }}
+               </button>
+
+               <transition
+                 enter-active-class="transition duration-200"
+                 enter-from-class="opacity-0 scale-95"
+                 enter-to-class="opacity-100 scale-100"
+                 leave-active-class="transition duration-150"
+                 leave-from-class="opacity-100 scale-100"
+                 leave-to-class="opacity-0 scale-95"
+               >
+                 <button
+                   v-if="selectMode && selectedCount > 0"
+                   @click="askBulkDismiss"
+                   class="flex items-center gap-2 px-4 py-1.5 rounded-xl bg-destructive text-white text-[9px] font-black uppercase tracking-widest shadow-lg shadow-destructive/20 hover:bg-destructive/90 transition-all"
+                 >
+                   <Trash2 class="w-3.5 h-3.5" />
+                   Supprimer ({{ selectedCount }})
+                 </button>
+               </transition>
+             </div>
+
+             <!-- Select All (in select mode) -->
+             <div v-if="selectMode && filteredAlerts.length" class="flex items-center gap-2 mb-2 shrink-0 px-1">
+               <button @click="toggleSelectAll" class="flex items-center gap-2 text-[9px] font-black text-slate-400 uppercase tracking-widest hover:text-indigo-600 transition-colors">
+                 <component :is="allFilteredSelected ? CheckSquare : Square" class="w-4 h-4" />
+                 Tout selectionner
+               </button>
+             </div>
+
              <div class="flex-1 overflow-y-auto no-scrollbar space-y-3 pb-10">
-                <template v-if="alerts.length">
-                   <div v-for="(alert, idx) in alerts" :key="idx" 
-                     @click="handleAlertClick(alert)"
+                <template v-if="filteredAlerts.length">
+                   <div v-for="(alert, idx) in filteredAlerts" :key="alert.key || idx" 
+                     @click="selectMode ? toggleAlertSelection(alert.key) : handleAlertClick(alert)"
                      :class="[
-                     'p-5 rounded-[1.5rem] border transition-all hover:scale-[1.02] flex items-start gap-4 cursor-pointer',
-                     alert.type === 'critique' || alert.type === 'urgent' ? 'bg-destructive/5 border-destructive/10 shadow-lg shadow-destructive/5' : 'bg-muted/30 border-border shadow-sm'
+                     'p-5 rounded-[1.5rem] border transition-all flex items-start gap-4 cursor-pointer',
+                     selectedAlertKeys.has(alert.key) ? 'bg-indigo-50 border-indigo-200 shadow-md shadow-indigo-100 scale-[1.01]' : 'hover:scale-[1.02]',
+                     !selectedAlertKeys.has(alert.key) && (alert.type === 'critique' || alert.type === 'urgent') ? 'bg-destructive/5 border-destructive/10 shadow-lg shadow-destructive/5' : '',
+                     !selectedAlertKeys.has(alert.key) && alert.type !== 'critique' && alert.type !== 'urgent' ? 'bg-muted/30 border-border shadow-sm' : '',
                    ]">
+                      <!-- Checkbox (select mode) -->
+                      <button v-if="selectMode" @click.stop="toggleAlertSelection(alert.key)" class="shrink-0 mt-0.5">
+                        <component :is="selectedAlertKeys.has(alert.key) ? CheckSquare : Square" :class="['w-5 h-5', selectedAlertKeys.has(alert.key) ? 'text-indigo-600' : 'text-slate-300']" />
+                      </button>
+
                       <AlertCircle :class="['w-5 h-5 shrink-0 mt-0.5', alert.type === 'critique' || alert.type === 'urgent' ? 'text-destructive' : 'text-amber-500']" />
-                       <div class="space-y-1 flex-1">
+                       <div class="space-y-1 flex-1 min-w-0">
                           <p class="text-xs font-black text-foreground leading-tight">{{ alert.message }}</p>
-                          <p :class="['text-[8px] font-black uppercase tracking-[0.2em] mt-1', alert.type === 'critique' || alert.type === 'urgent' ? 'text-destructive' : 'text-amber-500']">{{ alert.type || 'Avertissement' }}</p>
+                          <p v-if="alert.alertAt" class="text-[9px] font-bold text-slate-400 mt-0.5 tabular-nums">{{ formatAlertDateTime(alert.alertAt) }}</p>
+                          <div class="flex items-center gap-2 mt-1">
+                            <span :class="['text-[8px] font-black uppercase tracking-[0.2em]', alert.type === 'critique' || alert.type === 'urgent' ? 'text-destructive' : 'text-amber-500']">{{ alert.type || 'Avertissement' }}</span>
+                            <span v-if="alert.code" class="text-[7px] font-black uppercase tracking-[0.15em] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">{{ alert.code }}</span>
+                          </div>
                        </div>
-                       <button v-if="authStore.isAdmin && alert.key" @click.stop="askDismissAlert(alert)" class="p-1.5 rounded-full hover:bg-white transition-colors shrink-0">
+                       <button v-if="authStore.isAdmin && alert.key && !selectMode" @click.stop="askDismissAlert(alert)" class="p-1.5 rounded-full hover:bg-white transition-colors shrink-0">
                           <X class="w-3.5 h-3.5 text-slate-400 hover:text-destructive" />
                        </button>
                     </div>
@@ -753,7 +950,7 @@ watch(() => vidangeForm.mileageAtChange, (newVal) => {
             Mot de passe requis
           </DialogTitle>
           <DialogDescription class="text-xs font-bold text-slate-400 uppercase tracking-widest">
-            Entrez votre mot de passe pour supprimer cette notification.
+            {{ isBulkDismiss ? `Entrez votre mot de passe pour supprimer ${selectedCount} notification(s).` : 'Entrez votre mot de passe pour supprimer cette notification.' }}
           </DialogDescription>
         </DialogHeader>
         <div class="mt-4 space-y-4">
@@ -764,11 +961,11 @@ watch(() => vidangeForm.mileageAtChange, (newVal) => {
             </button>
           </div>
           <p v-if="dismissError" class="text-[11px] font-bold text-destructive">Mot de passe incorrect.</p>
-          <p v-if="dismissServerError" class="text-[11px] font-bold text-destructive">Erreur serveur. Réessayez.</p>
+          <p v-if="dismissServerError" class="text-[11px] font-bold text-destructive">Erreur serveur. Reessayez.</p>
           <div class="flex gap-3 pt-2">
             <Button variant="outline" @click="cancelDismiss" class="flex-1 h-12 rounded-xl font-black uppercase text-xs tracking-widest border-slate-200">Annuler</Button>
             <Button :disabled="dismissing || !dismissPwd" @click="confirmDismiss" class="flex-1 h-12 rounded-xl font-black uppercase text-xs tracking-widest bg-indigo-600 hover:bg-indigo-700 text-white">
-              <LoaderIcon v-if="dismissing" class="w-4 h-4 animate-spin mr-2" /> Supprimer
+              <LoaderIcon v-if="dismissing" class="w-4 h-4 animate-spin mr-2" /> {{ isBulkDismiss ? `Supprimer (${selectedCount})` : 'Supprimer' }}
             </Button>
           </div>
         </div>

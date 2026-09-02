@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import { ref, onMounted, reactive } from 'vue'
-import { settingApi, carApi, clientApi, userApi, gpsApi } from '@/api/index'
+import { ref, computed, onMounted, reactive } from 'vue'
+import { settingApi, carApi, clientApi, userApi, gpsApi, dashboardApi } from '@/api/index'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useAuthStore } from '@/stores/auth'
-import { Car, Users, Calculator, RefreshCw, AlertTriangle, FileText, Wrench, KeyRound, UserCircle2, Eye, EyeOff, Loader2, Gauge, Tags, X, Plus, Route } from 'lucide-vue-next'
+import { Car, Users, Calculator, RefreshCw, AlertTriangle, FileText, Wrench, KeyRound, UserCircle2, Eye, EyeOff, Loader2, Gauge, Tags, X, Plus, Route, Trash2, RotateCcw, CheckSquare, Square, Search } from 'lucide-vue-next'
 import { useToast } from 'primevue/usetoast'
 
 const authStore = useAuthStore()
@@ -170,6 +170,13 @@ onMounted(() => {
   loadCarsForTest()
 })
 
+const onTabChange = (tab: string) => {
+  activeTab.value = tab
+  if (tab === 'corbeille') {
+    loadDismissedAlerts()
+  }
+}
+
 const saveProfile = async () => {
   savingProfile.value = true
   try {
@@ -270,6 +277,150 @@ const restoreClient = async (id: string) => {
     alert("Erreur lors de la restauration.")
   }
 }
+
+// ── Corbeille (Dismissed Alerts) ──
+const dismissedAlerts = ref<any[]>([])
+const dismissedAlertFilter = ref('')
+const dismissedAlertSearch = ref('')
+const dismissedSelectMode = ref(false)
+const selectedDismissedIds = ref<Set<string>>(new Set())
+const loadingDismissed = ref(false)
+
+const codeLabels: Record<string, string> = {
+  VIDANGE: 'Vidange',
+  VISITE: 'Visite',
+  ASSURANCE: 'Assurance',
+  INCOMPLETE_CLIENT: 'Client',
+  SPEED: 'Vitesse',
+  KM: 'Kilometrage',
+}
+
+const codeColors: Record<string, string> = {
+  VIDANGE: 'bg-amber-100 text-amber-700',
+  VISITE: 'bg-rose-100 text-rose-700',
+  ASSURANCE: 'bg-blue-100 text-blue-700',
+  INCOMPLETE_CLIENT: 'bg-slate-100 text-slate-600',
+  SPEED: 'bg-red-100 text-red-700',
+  KM: 'bg-indigo-100 text-indigo-700',
+}
+
+const filteredDismissedAlerts = computed(() => {
+  let list = dismissedAlerts.value
+  if (dismissedAlertFilter.value) {
+    list = list.filter((a: any) => a.code === dismissedAlertFilter.value)
+  }
+  if (dismissedAlertSearch.value) {
+    const q = dismissedAlertSearch.value.toLowerCase()
+    list = list.filter((a: any) =>
+      (a.message || '').toLowerCase().includes(q) ||
+      (a.key || '').toLowerCase().includes(q) ||
+      (a.code || '').toLowerCase().includes(q)
+    )
+  }
+  return list
+})
+
+const dismissedFilterCounts = computed(() => {
+  const counts: Record<string, number> = { all: dismissedAlerts.value.length }
+  for (const a of dismissedAlerts.value) {
+    const code = a.code || 'other'
+    counts[code] = (counts[code] || 0) + 1
+  }
+  return counts
+})
+
+const allDismissedSelected = computed(() => {
+  const ids = filteredDismissedAlerts.value.map((a: any) => a._id)
+  return ids.length > 0 && ids.every((id: string) => selectedDismissedIds.value.has(id))
+})
+
+const toggleDismissedSelectAll = () => {
+  if (allDismissedSelected.value) {
+    selectedDismissedIds.value = new Set()
+  } else {
+    const ids = filteredDismissedAlerts.value.map((a: any) => a._id)
+    selectedDismissedIds.value = new Set(ids)
+  }
+}
+
+const toggleDismissedSelection = (id: string) => {
+  const s = new Set(selectedDismissedIds.value)
+  if (s.has(id)) s.delete(id)
+  else s.add(id)
+  selectedDismissedIds.value = s
+}
+
+const selectedDismissedCount = computed(() => selectedDismissedIds.value.size)
+
+const loadDismissedAlerts = async () => {
+  loadingDismissed.value = true
+  try {
+    const data = await dashboardApi.getRemovedAlerts()
+    dismissedAlerts.value = data || []
+  } catch (err) {
+    console.error('Failed to load dismissed alerts', err)
+  } finally {
+    loadingDismissed.value = false
+  }
+}
+
+const restoreDismissedAlert = async (id: string) => {
+  try {
+    await dashboardApi.restoreAlert(id)
+    dismissedAlerts.value = dismissedAlerts.value.filter((a: any) => a._id !== id)
+    selectedDismissedIds.value.delete(id)
+    toast.add({ severity: 'success', summary: 'Restauree', detail: "L'alerte a ete restainee.", life: 3000 })
+  } catch (err) {
+    toast.add({ severity: 'error', summary: 'Erreur', detail: 'Echec de la restauration.', life: 3000 })
+  }
+}
+
+const permanentDeleteDismissed = async (id: string) => {
+  if (!confirm('Supprimer definitivement cette alerte ? Cette action est irreversible.')) return
+  try {
+    await dashboardApi.permanentDeleteAlert(id)
+    dismissedAlerts.value = dismissedAlerts.value.filter((a: any) => a._id !== id)
+    toast.add({ severity: 'success', summary: 'Supprimee', detail: "L'alerte a ete supprimee definitivement.", life: 3000 })
+  } catch (err) {
+    toast.add({ severity: 'error', summary: 'Erreur', detail: 'Echec de la suppression.', life: 3000 })
+  }
+}
+
+const bulkRestoreDismissed = async () => {
+  const ids = Array.from(selectedDismissedIds.value)
+  if (!ids.length) return
+  try {
+    await dashboardApi.bulkRestoreAlerts(ids)
+    dismissedAlerts.value = dismissedAlerts.value.filter((a: any) => !selectedDismissedIds.value.has(a._id))
+    selectedDismissedIds.value = new Set()
+    dismissedSelectMode.value = false
+    toast.add({ severity: 'success', summary: 'Restaurees', detail: `${ids.length} alerte(s) restauree(s).`, life: 3000 })
+  } catch (err) {
+    toast.add({ severity: 'error', summary: 'Erreur', detail: 'Echec de la restauration.', life: 3000 })
+  }
+}
+
+const bulkPermanentDeleteDismissed = async () => {
+  const ids = Array.from(selectedDismissedIds.value)
+  if (!ids.length) return
+  if (!confirm(`Supprimer definitivement ${ids.length} alerte(s) ? Cette action est irreversible.`)) return
+  try {
+    await dashboardApi.bulkPermanentDeleteAlerts(ids)
+    dismissedAlerts.value = dismissedAlerts.value.filter((a: any) => !selectedDismissedIds.value.has(a._id))
+    selectedDismissedIds.value = new Set()
+    dismissedSelectMode.value = false
+    toast.add({ severity: 'success', summary: 'Supprimees', detail: `${ids.length} alerte(s) supprimee(s) definitivement.`, life: 3000 })
+  } catch (err) {
+    toast.add({ severity: 'error', summary: 'Erreur', detail: 'Echec de la suppression.', life: 3000 })
+  }
+}
+
+const formatDismissedDate = (iso: string) => {
+  if (!iso) return ''
+  const d = new Date(iso)
+  return d.toLocaleDateString('fr-TN', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' +
+    d.toLocaleTimeString('fr-TN', { hour: '2-digit', minute: '2-digit' })
+}
 </script>
 
 <template>
@@ -284,29 +435,37 @@ const restoreClient = async (id: string) => {
     <!-- TABS -->
     <div class="flex gap-4 border-b border-slate-200/50 pb-4 flex-wrap">
       <button 
-        @click="activeTab = 'compte'"
+        @click="onTabChange('compte')"
         :class="['px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all flex items-center gap-3', activeTab === 'compte' ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-600/20' : 'bg-white text-slate-400 hover:bg-slate-50 hover:text-slate-900 border border-slate-100']"
       >
         <KeyRound class="w-4 h-4" /> Mon Compte
       </button>
       <template v-if="authStore.isAdmin">
         <button 
-          @click="activeTab = 'voitures'"
+          @click="onTabChange('voitures')"
           :class="['px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all flex items-center gap-3', activeTab === 'voitures' ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-600/20' : 'bg-white text-slate-400 hover:bg-slate-50 hover:text-slate-900 border border-slate-100']"
         >
           <Car class="w-4 h-4" /> Flotte & Vehicules
         </button>
         <button 
-          @click="activeTab = 'clients'"
+          @click="onTabChange('clients')"
           :class="['px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all flex items-center gap-3', activeTab === 'clients' ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-600/20' : 'bg-white text-slate-400 hover:bg-slate-50 hover:text-slate-900 border border-slate-100']"
         >
           <Users class="w-4 h-4" /> Base Clients
         </button>
         <button 
-          @click="activeTab = 'comptabilite'"
+          @click="onTabChange('comptabilite')"
           :class="['px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all flex items-center gap-3', activeTab === 'comptabilite' ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-600/20' : 'bg-white text-slate-400 hover:bg-slate-50 hover:text-slate-900 border border-slate-100']"
         >
           <Calculator class="w-4 h-4" /> Comptabilite
+        </button>
+      </template>
+      <template v-if="authStore.isSuperAdmin">
+        <button 
+          @click="onTabChange('corbeille')"
+          :class="['px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all flex items-center gap-3', activeTab === 'corbeille' ? 'bg-slate-900 text-white shadow-xl shadow-slate-900/20' : 'bg-white text-slate-400 hover:bg-slate-50 hover:text-slate-900 border border-slate-100']"
+        >
+          <Trash2 class="w-4 h-4" /> Corbeille
         </button>
       </template>
     </div>
@@ -667,6 +826,166 @@ const restoreClient = async (id: string) => {
                 <span v-if="savingSettings" class="mr-2 w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
                 Enregistrer les Categories
               </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <!-- CORBEILLE TAB (super_admin only) -->
+      <div v-if="authStore.isSuperAdmin && activeTab === 'corbeille'" class="space-y-8 animate-in slide-in-from-right-4 duration-500">
+        <Card class="border border-slate-100 shadow-2xl shadow-slate-200/50 bg-white rounded-[2.5rem] overflow-hidden">
+          <CardHeader class="bg-slate-50/50 p-8">
+            <div class="flex items-center justify-between">
+              <div>
+                <CardTitle class="text-xl font-black text-slate-900 uppercase flex items-center gap-3">
+                  <Trash2 class="w-5 h-5 text-slate-500" /> Alertes Supprimees
+                </CardTitle>
+                <CardDescription class="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-2">
+                  {{ dismissedAlerts.length }} alerte(s) dans la corbeille
+                </CardDescription>
+              </div>
+              <div class="flex items-center gap-2">
+                <button
+                  v-if="dismissedSelectMode"
+                  @click="dismissedSelectMode = false; selectedDismissedIds = new Set()"
+                  class="flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-500 hover:bg-slate-100 transition-all"
+                >
+                  <X class="w-3.5 h-3.5" /> Annuler
+                </button>
+                <button
+                  v-if="dismissedSelectMode && selectedDismissedCount > 0"
+                  @click="bulkRestoreDismissed"
+                  class="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-[10px] font-black uppercase tracking-widest shadow-lg shadow-emerald-200/40 transition-all"
+                >
+                  <RotateCcw class="w-3.5 h-3.5" /> Restaurer ({{ selectedDismissedCount }})
+                </button>
+                <button
+                  v-if="dismissedSelectMode && selectedDismissedCount > 0"
+                  @click="bulkPermanentDeleteDismissed"
+                  class="flex items-center gap-2 px-4 py-2 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-[10px] font-black uppercase tracking-widest shadow-lg shadow-rose-200/40 transition-all"
+                >
+                  <Trash2 class="w-3.5 h-3.5" /> Supprimer ({{ selectedDismissedCount }})
+                </button>
+                <button
+                  v-if="!dismissedSelectMode && dismissedAlerts.length"
+                  @click="dismissedSelectMode = true"
+                  class="flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-500 hover:bg-slate-100 transition-all border border-slate-200"
+                >
+                  <CheckSquare class="w-3.5 h-3.5" /> Selectionner
+                </button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent class="p-0">
+            <!-- Filters & Search -->
+            <div class="px-8 pt-6 pb-4 space-y-4">
+              <div class="flex items-center gap-3">
+                <div class="relative flex-1 max-w-xs">
+                  <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input
+                    v-model="dismissedAlertSearch"
+                    placeholder="Rechercher..."
+                    class="w-full h-10 pl-9 pr-4 rounded-xl border border-slate-200 text-[10px] font-bold text-slate-700 bg-white focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 outline-none"
+                  />
+                </div>
+                <div class="flex gap-1.5 flex-wrap">
+                  <button
+                    @click="dismissedAlertFilter = ''"
+                    :class="[
+                      'px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest transition-all',
+                      dismissedAlertFilter === '' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
+                    ]"
+                  >
+                    Tous <span class="ml-1 opacity-60">{{ dismissedFilterCounts.all || 0 }}</span>
+                  </button>
+                  <button
+                    v-for="(count, code) in dismissedFilterCounts"
+                    :key="code"
+                    v-if="code !== 'all' && count"
+                    @click="dismissedAlertFilter = code as string"
+                    :class="[
+                      'px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest transition-all',
+                      dismissedAlertFilter === code ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
+                    ]"
+                  >
+                    {{ codeLabels[code as string] || code }} <span class="ml-1 opacity-60">{{ count }}</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Select All -->
+              <div v-if="dismissedSelectMode && filteredDismissedAlerts.length" class="flex items-center gap-2">
+                <button @click="toggleDismissedSelectAll" class="flex items-center gap-2 text-[9px] font-black text-slate-400 uppercase tracking-widest hover:text-indigo-600 transition-colors">
+                  <component :is="allDismissedSelected ? CheckSquare : Square" class="w-4 h-4" />
+                  Tout selectionner
+                </button>
+              </div>
+            </div>
+
+            <!-- Table -->
+            <div v-if="loadingDismissed" class="flex justify-center py-16">
+              <div class="w-6 h-6 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+            </div>
+            <Table v-else-if="filteredDismissedAlerts.length > 0">
+              <TableHeader>
+                <TableRow class="bg-slate-50/50">
+                  <TableHead v-if="dismissedSelectMode" class="w-12 pl-8 py-4"></TableHead>
+                  <TableHead class="pl-8 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">Type</TableHead>
+                  <TableHead class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Message</TableHead>
+                  <TableHead class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Supprime par</TableHead>
+                  <TableHead class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Date</TableHead>
+                  <TableHead class="text-right pr-8 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                <TableRow v-for="alert in filteredDismissedAlerts" :key="alert._id" :class="selectedDismissedIds.has(alert._id) ? 'bg-indigo-50/50' : ''">
+                  <TableCell v-if="dismissedSelectMode" class="pl-8">
+                    <button @click="toggleDismissedSelection(alert._id)">
+                      <component :is="selectedDismissedIds.has(alert._id) ? CheckSquare : Square" :class="['w-4 h-4', selectedDismissedIds.has(alert._id) ? 'text-indigo-600' : 'text-slate-300']" />
+                    </button>
+                  </TableCell>
+                  <TableCell class="pl-8">
+                    <span :class="['text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-full', codeColors[alert.code] || 'bg-slate-100 text-slate-500']">
+                      {{ codeLabels[alert.code] || alert.code || 'Inconnu' }}
+                    </span>
+                  </TableCell>
+                  <TableCell class="max-w-xs">
+                    <p class="text-xs font-bold text-slate-700 truncate">{{ alert.message || alert.key }}</p>
+                  </TableCell>
+                  <TableCell>
+                    <span class="text-[10px] font-bold text-slate-500">
+                      {{ alert.dismissedBy?.firstName ? alert.dismissedBy.firstName + ' ' + alert.dismissedBy.lastName : 'N/A' }}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    <span class="text-[10px] font-bold text-slate-400 tabular-nums">{{ formatDismissedDate(alert.createdAt) }}</span>
+                  </TableCell>
+                  <TableCell class="pr-8 text-right">
+                    <div class="flex items-center justify-end gap-2">
+                      <button
+                        @click="restoreDismissedAlert(alert._id)"
+                        class="p-2 rounded-xl text-emerald-600 hover:bg-emerald-50 transition-all"
+                        title="Restaurer"
+                      >
+                        <RotateCcw class="w-4 h-4" />
+                      </button>
+                      <button
+                        @click="permanentDeleteDismissed(alert._id)"
+                        class="p-2 rounded-xl text-rose-500 hover:bg-rose-50 transition-all"
+                        title="Supprimer definitivement"
+                      >
+                        <Trash2 class="w-4 h-4" />
+                      </button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+            <div v-else class="p-16 text-center space-y-4">
+              <Trash2 class="w-12 h-12 text-slate-200 mx-auto stroke-1" />
+              <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                {{ dismissedAlertSearch || dismissedAlertFilter ? 'Aucun resultat' : 'La corbeille est vide' }}
+              </p>
             </div>
           </CardContent>
         </Card>

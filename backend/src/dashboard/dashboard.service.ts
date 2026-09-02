@@ -1,6 +1,6 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import * as bcrypt from 'bcrypt';
 import { Car, CarDocument } from '../car/schemas/car.schema';
 import { Contrat, ContratDocument } from '../contrat/schemas/contrat.schema';
@@ -468,7 +468,12 @@ export class DashboardService {
     return alerts.filter((a) => !dismissedKeys.has(a.key));
   }
 
-  async dismissAlert(actorId: string, key: string, password: string) {
+  async dismissAlert(
+    actorId: string,
+    key: string,
+    password: string,
+    alertData?: { code?: string; type?: string; message?: string; metadata?: Record<string, any> },
+  ) {
     if (!key || typeof key !== 'string') {
       throw new UnauthorizedException('Alerte invalide.');
     }
@@ -482,8 +487,99 @@ export class DashboardService {
     }
     await this.dismissedAlertModel.updateOne(
       { key },
-      { $set: { key, dismissedBy: actorId } },
+      {
+        $set: {
+          key,
+          dismissedBy: actorId,
+          code: alertData?.code || '',
+          type: alertData?.type || '',
+          message: alertData?.message || '',
+          metadata: alertData?.metadata || {},
+        },
+      },
       { upsert: true },
     );
+  }
+
+  async bulkDismissAlerts(
+    actorId: string,
+    alertKeys: Array<{ key: string; code?: string; type?: string; message?: string; metadata?: Record<string, any> }>,
+    password: string,
+  ) {
+    if (!alertKeys?.length) {
+      throw new UnauthorizedException('Aucune alerte selectionnee.');
+    }
+    const user = await this.usersService.findById(actorId);
+    if (!user) {
+      throw new UnauthorizedException('Utilisateur introuvable.');
+    }
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      throw new UnauthorizedException('Mot de passe incorrect.');
+    }
+    const ops = alertKeys.map((a) => ({
+      updateOne: {
+        filter: { key: a.key },
+        update: {
+          $set: {
+            key: a.key,
+            dismissedBy: new Types.ObjectId(actorId),
+            code: a.code || '',
+            type: a.type || '',
+            message: a.message || '',
+            metadata: a.metadata || {},
+          },
+        },
+        upsert: true,
+      },
+    }));
+    await this.dismissedAlertModel.bulkWrite(ops as any);
+    return { dismissed: alertKeys.length };
+  }
+
+  async getDismissedAlerts(code?: string) {
+    const filter: any = {};
+    if (code) filter.code = code;
+    return this.dismissedAlertModel
+      .find(filter)
+      .sort({ createdAt: -1 })
+      .populate('dismissedBy', 'firstName lastName')
+      .exec();
+  }
+
+  async restoreAlert(id: string) {
+    const deleted = await this.dismissedAlertModel.findByIdAndDelete(id).exec();
+    if (!deleted) {
+      throw new UnauthorizedException('Alerte introuvable.');
+    }
+    return { restored: true, key: deleted.key };
+  }
+
+  async permanentDeleteAlert(id: string) {
+    const deleted = await this.dismissedAlertModel.findByIdAndDelete(id).exec();
+    if (!deleted) {
+      throw new UnauthorizedException('Alerte introuvable.');
+    }
+    return { deleted: true };
+  }
+
+  async bulkRestoreAlerts(ids: string[]) {
+    if (!ids?.length) {
+      throw new UnauthorizedException('Aucune alerte selectionnee.');
+    }
+    const result = await this.dismissedAlertModel
+      .deleteMany({ _id: { $in: ids.map((id) => new Types.ObjectId(id)) } })
+      .exec();
+    return { restored: result.deletedCount };
+  }
+
+  async bulkPermanentDeleteAlerts(ids: string[]) {
+    if (!ids?.length) {
+      throw new UnauthorizedException('Aucune alerte selectionnee.');
+    }
+    const result = await this.dismissedAlertModel
+      .deleteMany({ _id: { $in: ids.map((id) => new Types.ObjectId(id)) } })
+      .exec();
+    return { deleted: result.deletedCount };
   }
 }

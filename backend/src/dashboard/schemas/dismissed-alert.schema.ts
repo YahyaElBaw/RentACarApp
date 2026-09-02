@@ -8,6 +8,18 @@ export class DismissedAlert {
 
   @Prop({ type: Types.ObjectId, ref: 'User' })
   dismissedBy: Types.ObjectId;
+
+  @Prop({ default: '' })
+  code: string;
+
+  @Prop({ default: '' })
+  type: string;
+
+  @Prop({ default: '' })
+  message: string;
+
+  @Prop({ type: Object, default: {} })
+  metadata: Record<string, any>;
 }
 
 export type DismissedAlertDocument = DismissedAlert & Document;
