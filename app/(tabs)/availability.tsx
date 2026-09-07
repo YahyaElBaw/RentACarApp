@@ -92,10 +92,11 @@ export default function AvailabilityScreen() {
         contratApi.getAll(),
       ]);
 
+      const occupiedStatuses = ['cancelled', 'terminé', 'clôturé', 'converted'];
       const occupations = [
         ...allRes.map((r: any) => ({ ...r, type: 'reservation' })),
         ...allContrats.map((c: any) => ({ ...c, type: 'contract' })),
-      ].filter((occ: any) => occ.status !== 'cancelled' && occ.status !== 'closed');
+      ].filter((occ: any) => !occupiedStatuses.includes(occ.status));
 
       const filtered = allCars.filter((car: any) => {
         const carOccupations = occupations.filter(
