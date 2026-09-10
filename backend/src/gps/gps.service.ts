@@ -334,15 +334,6 @@ export class GpsService {
       { upsert: true },
     );
 
-    void this.gpsHistoryModel.create({
-      carId: car._id,
-      lat: dto.lat,
-      lng: dto.lng,
-      speed: dto.speed ?? 0,
-      provider: dto.provider ?? '',
-      positionAt,
-    });
-
     const speed = dto.speed ?? 0;
     const limit = await this.getSpeedAlertLimit();
     this.logger.debug(
@@ -487,67 +478,6 @@ export class GpsService {
   async deleteMileageAlert(id: string): Promise<{ deleted: boolean }> {
     const result = await this.mileageAlertModel.findByIdAndDelete(id).exec();
     return { deleted: !!result };
-  }
-
-  async getHistory(
-    carId: string,
-    from?: string,
-    to?: string,
-    limit = 10000,
-  ): Promise<{ lat: number; lng: number; speed: number; positionAt: Date }[]> {
-    const query: any = { carId: new Types.ObjectId(carId) };
-    if (from || to) {
-      query.positionAt = {};
-      if (from) query.positionAt.$gte = new Date(from);
-      if (to) query.positionAt.$lte = new Date(to);
-    }
-    return this.gpsHistoryModel
-      .find(query)
-      .sort({ positionAt: 1 })
-      .limit(Math.min(Math.max(limit, 1), 50000))
-      .select({ lat: 1, lng: 1, speed: 1, positionAt: 1, _id: 0 })
-      .lean()
-      .exec();
-  }
-
-  async getHistoryStats(
-    carId: string,
-    from?: string,
-    to?: string,
-  ): Promise<{
-    totalDistance: number;
-    avgSpeed: number;
-    topSpeed: number;
-    pointCount: number;
-  }> {
-    const positions = await this.getHistory(carId, from, to, 50000);
-    if (positions.length < 2) {
-      return { totalDistance: 0, avgSpeed: 0, topSpeed: 0, pointCount: positions.length };
-    }
-    let totalMeters = 0;
-    let speedSum = 0;
-    let speedCount = 0;
-    let topSpeed = 0;
-    for (let i = 1; i < positions.length; i++) {
-      totalMeters += haversineMeters(
-        positions[i - 1].lat,
-        positions[i - 1].lng,
-        positions[i].lat,
-        positions[i].lng,
-      );
-      const spd = positions[i].speed;
-      if (spd > 0) {
-        speedSum += spd;
-        speedCount++;
-        if (spd > topSpeed) topSpeed = spd;
-      }
-    }
-    return {
-      totalDistance: Math.round((totalMeters / 1000) * 10) / 10,
-      avgSpeed: speedCount > 0 ? Math.round(speedSum / speedCount) : 0,
-      topSpeed,
-      pointCount: positions.length,
-    };
   }
 
   async exportToCloudinary(

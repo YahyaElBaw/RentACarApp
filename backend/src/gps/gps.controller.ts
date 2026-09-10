@@ -115,27 +115,6 @@ export class GpsController {
     return this.gpsService.getKmToday();
   }
 
-  @UseGuards(JwtAuthGuard)
-  @Get('history/:carId')
-  getHistory(
-    @Param('carId') carId: string,
-    @Query('from') from?: string,
-    @Query('to') to?: string,
-    @Query('limit') limit?: string,
-  ) {
-    return this.gpsService.getHistory(carId, from, to, Number(limit) || 10000);
-  }
-
-  @UseGuards(JwtAuthGuard)
-  @Get('history/:carId/stats')
-  getHistoryStats(
-    @Param('carId') carId: string,
-    @Query('from') from?: string,
-    @Query('to') to?: string,
-  ) {
-    return this.gpsService.getHistoryStats(carId, from, to);
-  }
-
   // Sync endpoint for external cron jobs or Vercel Crons
   @Get('sync')
   async syncGps() {
