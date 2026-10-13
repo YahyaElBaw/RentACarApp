@@ -1,6 +1,6 @@
 {
   "name": "djerba-rent-a-car",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "main": "main.js",
   "scripts": {
     "backend:dev": "cd backend && npm run start:dev",
