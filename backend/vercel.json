@@ -17,10 +17,6 @@
   ],
   "crons": [
     {
-      "path": "/ping",
-      "schedule": "*/5 * * * *"
-    },
-    {
       "path": "/gps/sync",
       "schedule": "0 3 * * *"
     }
