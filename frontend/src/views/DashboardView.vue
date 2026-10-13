@@ -712,6 +712,7 @@ import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { dashboardApi, contratApi, reservationApi, carApi, getImageUrl, authApi } from '@/api'
 import { useAuthStore } from '@/stores/auth'
+import { useDataCacheStore } from '@/stores/dataCache'
 import {
   Car as CarIcon, FileText, Users, Calendar, Wallet,
   TrendingUp, CheckCircle2,
@@ -1305,20 +1306,25 @@ const loadCalendarData = async () => {
   }
 }
 
-const loadDashboardData = async () => {
-  try {
-    // Fire external rates in background (non-blocking)
-    fetchLiveRates()
+const cacheStore = useDataCacheStore()
 
-    const dashData = await dashboardApi.getStats(getPeriodRange())
-    stats.value = dashData.kpis || {}
-    alerts.value = dashData.alerts || []
-    todayActions.value = dashData.todayActions || []
-    history.value = dashData.history || []
-    setTimeout(() => {
-      startCountUp('totalCars', stats.value.totalCars || 0)
-      startCountUp('availableCars', stats.value.availableCars || 0)
-    }, 400)
+const applyDashboardData = (dashData: any) => {
+  if (!dashData) return
+  stats.value = dashData.kpis || {}
+  alerts.value = dashData.alerts || []
+  todayActions.value = dashData.todayActions || []
+  history.value = dashData.history || []
+  setTimeout(() => {
+    startCountUp('totalCars', stats.value.totalCars || 0)
+    startCountUp('availableCars', stats.value.availableCars || 0)
+  }, 100)
+}
+
+const loadDashboardData = async (force = false) => {
+  try {
+    fetchLiveRates()
+    const dashData = await cacheStore.getDashboardData(getPeriodRange(), force)
+    applyDashboardData(dashData)
   } catch (err) {
     console.error('Failed to load dashboard data', err)
   }
@@ -1332,10 +1338,18 @@ watch(dashboardViewMode, (mode: string) => {
 })
 
 onMounted(async () => {
-  loading.value = true
   document.addEventListener('click', onDocClick)
-  await loadDashboardData()
-  loading.value = false
+  if (cacheStore.dashboardData) {
+    // Instant render from cache (0ms)
+    applyDashboardData(cacheStore.dashboardData)
+    loading.value = false
+    // Silent background refresh
+    loadDashboardData(true)
+  } else {
+    loading.value = true
+    await loadDashboardData()
+    loading.value = false
+  }
 })
 
 onUnmounted(() => {

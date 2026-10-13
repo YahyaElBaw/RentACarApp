@@ -357,51 +357,58 @@ export class ContratService implements OnModuleInit {
     return savedContrat;
   }
 
-  async findAll(filters: any = {}): Promise<ContratDocument[]> {
+  private async runStatusCheck(): Promise<void> {
     const now = new Date();
+    try {
+      // Auto-activate 'soon' contracts whose start time has passed
+      const toActivate = await this.contratModel
+        .find({
+          status: 'soon',
+          startDate: { $lte: now },
+        }, { _id: 1, car: 1 })
+        .lean()
+        .exec();
 
-    // Throttle auto-status transition checks (at most once every 60s) so read queries stay fast
+      if (toActivate.length > 0) {
+        const activateIds = toActivate.map(c => c._id);
+        const activateCarIds = toActivate.map(c => c.car).filter(Boolean);
+        await Promise.all([
+          this.contratModel.updateMany({ _id: { $in: activateIds } }, { $set: { status: 'active' } }).exec(),
+          this.carModel.updateMany({ _id: { $in: activateCarIds } }, { $set: { isAvailable: false } }).exec(),
+        ]);
+      }
+
+      // Auto-terminate 'active' contracts whose end date has passed
+      const toTerminate = await this.contratModel
+        .find({
+          status: 'active',
+          endDate: { $lte: now },
+        }, { _id: 1, car: 1 })
+        .lean()
+        .exec();
+
+      if (toTerminate.length > 0) {
+        const terminateIds = toTerminate.map(c => c._id);
+        const terminateCarIds = toTerminate.map(c => c.car).filter(Boolean);
+        await Promise.all([
+          this.contratModel.updateMany({ _id: { $in: terminateIds } }, { $set: { status: 'terminé' } }).exec(),
+          this.carModel.updateMany({ _id: { $in: terminateCarIds } }, { $set: { isAvailable: true } }).exec(),
+        ]);
+      }
+    } catch (err) {
+      console.error('Error during contract status auto-check:', err);
+    }
+  }
+
+  async findAll(filters: any = {}): Promise<ContratDocument[]> {
+    // Non-blocking throttled auto-status check (runs in background without delaying read response)
     if (Date.now() - this.lastStatusCheck > 60000) {
       this.lastStatusCheck = Date.now();
-      try {
-        // Auto-activate 'soon' contracts whose start time has passed
-        const toActivate = await this.contratModel
-          .find({
-            status: 'soon',
-            startDate: { $lte: now },
-          }, { _id: 1, car: 1 })
-          .lean()
-          .exec();
-
-        if (toActivate.length > 0) {
-          const activateIds = toActivate.map(c => c._id);
-          const activateCarIds = toActivate.map(c => c.car).filter(Boolean);
-          await Promise.all([
-            this.contratModel.updateMany({ _id: { $in: activateIds } }, { $set: { status: 'active' } }).exec(),
-            this.carModel.updateMany({ _id: { $in: activateCarIds } }, { $set: { isAvailable: false } }).exec(),
-          ]);
-        }
-
-        // Auto-terminate 'active' contracts whose end date has passed
-        const toTerminate = await this.contratModel
-          .find({
-            status: 'active',
-            endDate: { $lte: now },
-          }, { _id: 1, car: 1 })
-          .lean()
-          .exec();
-
-        if (toTerminate.length > 0) {
-          const terminateIds = toTerminate.map(c => c._id);
-          const terminateCarIds = toTerminate.map(c => c.car).filter(Boolean);
-          await Promise.all([
-            this.contratModel.updateMany({ _id: { $in: terminateIds } }, { $set: { status: 'terminé' } }).exec(),
-            this.carModel.updateMany({ _id: { $in: terminateCarIds } }, { $set: { isAvailable: true } }).exec(),
-          ]);
-        }
-      } catch (err) {
-        console.error('Error during throttled contract status auto-check:', err);
-      }
+      setImmediate(() => {
+        this.runStatusCheck().catch(err =>
+          console.error('Error in background status check:', err),
+        );
+      });
     }
 
     const query: any = { isDeleted: { $ne: true } };
@@ -416,8 +423,21 @@ export class ContratService implements OnModuleInit {
       ];
     }
 
+    // Fast lightweight summary projection for Compta / conflict checkers
+    if (filters.summary === 'true') {
+      return this.contratModel
+        .find(query)
+        .select('reference status startDate endDate totalAmount car clients client isPaid paymentMethod createdAt')
+        .populate({ path: 'car', select: 'brand model matricule' })
+        .populate({ path: 'clients', select: 'firstName lastName cin phone' })
+        .sort({ createdAt: -1 })
+        .lean()
+        .exec() as any;
+    }
+
     return this.contratModel
       .find(query)
+      .select('reference car clients client startDate endDate totalAmount depositAmount carDailyRate status createdBy notes startMileage returnMileage carStateAtReturn closureType closureNotes isPaid paymentMethod chequeNumber bankName reservation contractTaxValue tvaValue agency carburantLevel lieuDepart lieuRetour lot createdAt')
       .populate({
         path: 'car',
         select: 'brand model matricule color agence',

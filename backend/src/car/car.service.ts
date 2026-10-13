@@ -31,8 +31,8 @@ export class CarService {
     // Run all 3 queries in parallel: cars + reservations + contracts
     const [allCars, bookedByReservation, bookedByContract] = await Promise.all([
       this.carModel
-        .find({ disabled: false })
-        .select('-reservations -visites -vidanges -depenses -documents')
+        .find({ disabled: { $ne: true } })
+        .select('brand model matricule color dailyRate mileage isAvailable agence category departureDate nextTechnicalVisitDate nextOilChangeMileage insuranceDate disabled createdAt')
         .lean()
         .exec(),
       this.reservationModel
@@ -75,7 +75,7 @@ export class CarService {
 
     let cars = await this.carModel
       .find(query)
-      .select('-reservations -visites -vidanges -depenses -documents')
+      .select('brand model matricule color dailyRate mileage isAvailable agence category departureDate nextTechnicalVisitDate nextOilChangeMileage insuranceDate disabled createdAt')
       .populate('agence', 'name')
       .lean()
       .exec();

@@ -49,8 +49,9 @@ export class ContratController {
     @Query('reference') reference?: string,
     @Query('carId') carId?: string,
     @Query('clientId') clientId?: string,
+    @Query('summary') summary?: string,
   ) {
-    return this.contratService.findAll({ status, reference, carId, clientId });
+    return this.contratService.findAll({ status, reference, carId, clientId, summary });
   }
 
   @UseGuards(JwtAuthGuard)

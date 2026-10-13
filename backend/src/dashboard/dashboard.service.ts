@@ -356,28 +356,30 @@ export class DashboardService {
         .lean()
         .exec(),
       this.clientModel
-        .find({
-          disabled: { $ne: true },
-          $or: [
-            { cin: { $in: [null, ''] } },
-            { drivingLicense: { $in: [null, ''] } },
-            { birthday: null },
-            { address: { $in: [null, ''] } },
-            { cinFront: { $in: [null, ''] } },
-            {
-              $and: [
-                { idCardType: { $ne: 'passport' } },
-                { cinBack: { $in: [null, ''] } },
-              ],
-            },
-            { licenseFront: { $in: [null, ''] } },
-            { licenseBack: { $in: [null, ''] } },
-          ],
-        })
-        .select('firstName lastName disabled')
-        .limit(10)
+        .find({ disabled: { $ne: true } })
+        .select('firstName lastName cin drivingLicense birthday address cinFront idCardType cinBack licenseFront licenseBack disabled')
+        .limit(100)
         .lean()
-        .exec(),
+        .exec()
+        .then(clients => {
+          const incomplete: any[] = [];
+          for (const c of clients) {
+            const missing =
+              !c.cin ||
+              !c.drivingLicense ||
+              !c.birthday ||
+              !c.address ||
+              !c.cinFront ||
+              (c.idCardType !== 'passport' && !c.cinBack) ||
+              !c.licenseFront ||
+              !c.licenseBack;
+            if (missing) {
+              incomplete.push(c);
+              if (incomplete.length >= 10) break;
+            }
+          }
+          return incomplete;
+        }),
     ]);
 
     for (const car of cars) {

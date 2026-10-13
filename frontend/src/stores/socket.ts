@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { io, Socket } from 'socket.io-client';
 import { useAuthStore } from './auth';
+import { useDataCacheStore } from './dataCache';
 import { presenceApi } from '../api';
 
 export interface ActiveUser {
@@ -53,6 +54,16 @@ export const useSocketStore = defineStore('socket', () => {
     const events = ['contract:change', 'car:change', 'reservation:change', 'depense:change', 'user:login', 'gps:speed-alert', 'gps:km-alert', 'gps:position-update'];
     events.forEach((eventName) => {
       socket.value?.on(eventName, (payload: any) => {
+        // Auto-invalidate cache on mutation events
+        const cacheStore = useDataCacheStore();
+        if (eventName === 'car:change') cacheStore.invalidateCars();
+        else if (eventName === 'reservation:change') cacheStore.invalidateReservations();
+        else if (eventName === 'depense:change') cacheStore.invalidateDepenses();
+        else if (eventName === 'contract:change') {
+          cacheStore.invalidateContrats();
+          cacheStore.invalidateDashboard();
+        }
+
         const callbacks = listeners.get(eventName);
         if (callbacks) {
           callbacks.forEach((cb) => cb(payload));

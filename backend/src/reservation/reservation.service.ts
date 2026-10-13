@@ -147,6 +147,7 @@ export class ReservationService {
 
     const list = await this.reservationModel
       .find(query)
+      .select('startDate endDate status car clients client dailyRate notes createdAt contrat')
       .populate({ path: 'car', model: 'Car', select: 'brand model matricule color dailyRate' })
       .populate({ path: 'clients', model: 'Client', select: 'firstName lastName cin phone' })
       .populate({ path: 'contrat', model: 'Contrat', select: 'reference status' })

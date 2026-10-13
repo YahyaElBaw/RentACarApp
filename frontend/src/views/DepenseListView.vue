@@ -452,6 +452,7 @@ import {
 } from '@/components/ui/table';
 import { depenseApi, carApi, settingApi } from '../api';
 import { useSocketStore } from '@/stores/socket';
+import { useDataCacheStore } from '@/stores/dataCache';
 import { PasswordConfirmDialog } from '@/components/ui/password-dialog';
 import { usePasswordGuard, isPasswordError, LOCK_SECONDS } from '@/composables/usePasswordGuard';
 
@@ -602,11 +603,22 @@ watch(
   },
 );
 
-const loadDepenses = async () => {
-  loading.value = true;
+const cacheStore = useDataCacheStore();
+
+const loadDepenses = async (force = false) => {
+  if (cacheStore.depenses.length > 0 && !force) {
+    depenses.value = cacheStore.depenses;
+    loading.value = false;
+    cacheStore.silentRevalidateDepenses().then(() => {
+      depenses.value = cacheStore.depenses;
+    });
+    return;
+  }
+
+  loading.value = depenses.value.length === 0;
   try {
-    const res = await api.get('/depenses');
-    depenses.value = res.data;
+    const data = await cacheStore.getDepenses(force);
+    depenses.value = data || [];
   } catch (err) {
     console.error('Failed to load expenses', err);
   } finally {
@@ -617,9 +629,10 @@ const loadDepenses = async () => {
 const deleteDepense = async (id: string) => {
   if (!confirm('Souhaitez-vous vraiment supprimer ce frais ?')) return;
   try {
-    await api.delete(`/depenses/${id}`);
+    await depenseApi.delete(id);
     toast.add({ severity: 'success', summary: 'Dépense supprimée', detail: 'La dépense a été supprimée.', life: 3000 });
-    loadDepenses();
+    cacheStore.invalidateDepenses();
+    loadDepenses(true);
   } catch (err) {
     console.error('Failed to delete expense', err);
     toast.add({ severity: 'error', summary: 'Erreur', detail: 'Impossible de supprimer la dépense.', life: 3000 });
@@ -628,28 +641,40 @@ const deleteDepense = async (id: string) => {
 
 const loadCategories = async () => {
   try {
-    const settings: any = await settingApi.get();
-    if (Array.isArray(settings?.depenseCategories) && settings.depenseCategories.length > 0) {
-      categoryLabels.value = settings.depenseCategories;
+    const cats = await cacheStore.getDepenseCategories();
+    if (cats?.length) {
+      categoryLabels.value = cats;
     }
   } catch (err) {
-    // Non-admin or fetch failure -> keep default categories
     console.warn('Using default depense categories', err);
   }
 };
 
 onMounted(async () => {
   loadCategories();
-  await loadDepenses();
+  // Pre-load or read cached cars so vehicle info is immediately available
+  if (cacheStore.cars.length > 0) {
+    cars.value = cacheStore.cars;
+  } else {
+    cacheStore.getCars().then(list => { cars.value = list; });
+  }
+
+  if (cacheStore.depenses.length > 0) {
+    depenses.value = cacheStore.depenses;
+    loading.value = false;
+    loadDepenses(true);
+  } else {
+    await loadDepenses();
+  }
+
   unsubscribeSocket = socketStore.onEvent('depense:change', () => {
-    loadDepenses();
+    loadDepenses(true);
   });
 });
 
 onUnmounted(() => {
   if (unsubscribeSocket) unsubscribeSocket();
 });
-watch(filters, loadDepenses, { deep: true });
 
 const openForm = (depense?: any) => {
   pendingDepenses.value = [];

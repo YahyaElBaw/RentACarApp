@@ -2,6 +2,7 @@
 import { ref, onMounted, computed, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { contratApi, depenseApi, authApi } from '@/api/index'
+import { useDataCacheStore } from '@/stores/dataCache'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge/index'
 import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from '@/components/ui/table'
@@ -147,11 +148,30 @@ const totalDepenseFiltered = computed(() => {
 
 const netIncomeFiltered = computed(() => totalIncomeFiltered.value - totalDepenseFiltered.value)
 
-const fetchDashboardData = async () => {
+const cacheStore = useDataCacheStore()
+
+const fetchDashboardData = async (force = false) => {
+  // If cache is ready, load immediately
+  if (cacheStore.contratsSummary.length > 0 && cacheStore.depenses.length > 0 && !force) {
+    contrats.value = cacheStore.contratsSummary
+    depenses.value = cacheStore.depenses
+    loading.value = false
+    // Background refresh
+    Promise.all([
+      cacheStore.getContratsSummary(true),
+      cacheStore.getDepenses(true)
+    ]).then(([resContrats, resDepenses]) => {
+      contrats.value = resContrats
+      depenses.value = resDepenses
+    })
+    return
+  }
+
+  loading.value = contrats.value.length === 0
   try {
     const [resContrats, resDepenses] = await Promise.all([
-      contratApi.getAll(),
-      depenseApi.getAll()
+      cacheStore.getContratsSummary(force),
+      cacheStore.getDepenses(force)
     ])
     contrats.value = resContrats
     depenses.value = resDepenses

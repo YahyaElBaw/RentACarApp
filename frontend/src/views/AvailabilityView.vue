@@ -82,8 +82,8 @@
               </div>
 
               <div class="flex flex-col gap-4 max-h-[600px] overflow-y-auto no-scrollbar pr-2 py-1">
-                <!-- Skeletons when searching -->
-                <template v-if="searching">
+                <!-- Skeletons only when first searching and no cars loaded -->
+                <template v-if="searching && availableCars.length === 0">
                   <div 
                     v-for="i in 4" 
                     :key="'avail-skel-' + i"
@@ -100,7 +100,7 @@
 
                 <!-- Empty state when not searching -->
                 <div 
-                  v-else-if="filteredAvailableCars.length === 0" 
+                  v-else-if="!searching && filteredAvailableCars.length === 0" 
                   class="py-12 flex flex-col items-center justify-center text-center opacity-40 space-y-3"
                 >
                   <CarIcon class="w-12 h-12 stroke-1 text-slate-400" />
@@ -415,6 +415,7 @@
 import { ref, onMounted, computed, reactive, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useDataCacheStore } from '@/stores/dataCache'
 import { reservationApi, carApi, clientApi, getImageUrl } from '@/api'
 import { useToast } from 'primevue/usetoast'
 import { 
@@ -482,11 +483,14 @@ const filteredAvailableCars = computed(() => {
 
 const rates = ref({ EUR: 0.296, USD: 0.342 })
 
+const cacheStore = useDataCacheStore()
 let currentSearchId = 0
 let isMounted = false
 
-const searchAvailability = async () => {
-  searching.value = true
+const searchAvailability = async (force = false) => {
+  if (availableCars.value.length === 0) {
+    searching.value = true
+  }
   searched.value = true
   const searchId = ++currentSearchId
   const previousId = selectedCar.value?._id
@@ -495,10 +499,10 @@ const searchAvailability = async () => {
     const startIso = `${availabilitySearch.startDate}T${availabilitySearch.startTime}:00`
     const endIso = `${availabilitySearch.endDate}T${availabilitySearch.endTime}:00`
 
-    // Use dedicated backend endpoint with parallel queries
-    const cars = await carApi.getAvailableSearch(startIso, endIso)
+    // Use cached lookups via dataCacheStore
+    const cars = await cacheStore.getAvailableCars(startIso, endIso, force)
     if (searchId !== currentSearchId) return // Ignore stale responses
-    availableCars.value = (cars || []).filter((c: any) => !c.disabled)
+    availableCars.value = cars
 
     // Verify if previous selection is still valid
     if (previousId) {

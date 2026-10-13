@@ -4,6 +4,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { carApi, agenceApi, uploadApi, getImageUrl } from '@/api'
 import { formatDate } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth'
+import { useDataCacheStore } from '@/stores/dataCache'
 import { useSocketStore } from '@/stores/socket'
 import { usePasswordGuard, handlePasswordError } from '@/composables/usePasswordGuard'
 import { useToast } from 'primevue/usetoast'
@@ -94,12 +95,33 @@ const carForm = reactive({
   insuranceDate: ''
 })
 
-const loadCars = async () => {
-  loading.value = true
-  try {
-    const data = await carApi.getAll({ 
-      brand: filters.brand || undefined, 
+const cacheStore = useDataCacheStore()
+
+const loadCars = async (force = false) => {
+  if (filters.brand) {
+    loading.value = true
+    try {
+      const data = await carApi.getAll({ brand: filters.brand })
+      allCars.value = data || []
+    } finally {
+      loading.value = false
+    }
+    return
+  }
+
+  // If cars are already in cache, populate immediately
+  if (cacheStore.cars.length > 0 && !force) {
+    allCars.value = cacheStore.cars
+    loading.value = false
+    cacheStore.silentRevalidateCars().then(() => {
+      allCars.value = cacheStore.cars
     })
+    return
+  }
+
+  loading.value = allCars.value.length === 0
+  try {
+    const data = await cacheStore.getCars(force)
     allCars.value = data || []
   } catch (err) {
     console.error('Failed to load cars', err)
@@ -110,20 +132,28 @@ const loadCars = async () => {
 
 const loadAgences = async () => {
   try {
-    agences.value = await agenceApi.getAll()
+    agences.value = await cacheStore.getAgences()
   } catch (err) {
     console.error('Failed to load agences', err)
   }
 }
 
 onMounted(() => {
-  loadCars()
-  loadAgences()
+  // If cache is ready, display instantly (0ms)
+  if (cacheStore.cars.length > 0) {
+    allCars.value = cacheStore.cars
+    loading.value = false
+    loadCars(true) // background update
+    loadAgences()
+  } else {
+    Promise.all([loadCars(), loadAgences()])
+  }
+
   if (route.query.add === 'true') {
     openAddModal()
   }
   unsubscribeSocket = socketStore.onEvent('car:change', () => {
-    loadCars()
+    loadCars(true)
   })
 })
 

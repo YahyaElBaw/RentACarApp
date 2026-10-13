@@ -83,6 +83,7 @@ export class DepenseService {
     const query: any = carId ? { car: carId } : {};
     return this.depenseModel
       .find(query)
+      .select('_id date amount category description car createdAt')
       .populate('car', 'brand model matricule')
       .sort({ date: -1 })
       .lean()

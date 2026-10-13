@@ -1272,6 +1272,7 @@
 import { ref, onMounted, onUnmounted, reactive, computed, watch, nextTick } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
+import { useDataCacheStore } from '@/stores/dataCache';
 import { useSocketStore } from '@/stores/socket';
 import { clientApi, carApi, reservationApi, contratApi } from '../api';
 import {
@@ -1953,13 +1954,28 @@ const saveClientsChange = () => {
   });
 };
 
-// ─── Actions ──────────────────────────────────────────────────────────────────
+const cacheStore = useDataCacheStore();
 let loadReservationsSeq = 0;
-const loadReservations = async () => {
+const loadReservations = async (force = false) => {
   const seq = ++loadReservationsSeq;
-  loading.value = true;
+
+  // Instant render from cache if available
+  if (cacheStore.reservations.length > 0 && !force) {
+    reservations.value = cacheStore.reservations;
+    loading.value = false;
+    cacheStore.silentRevalidateReservations().then(() => {
+      if (seq === loadReservationsSeq && Array.isArray(cacheStore.reservations)) {
+        reservations.value = cacheStore.reservations;
+      }
+    });
+    return;
+  }
+
+  if (reservations.value.length === 0) {
+    loading.value = true;
+  }
   try {
-    const data = await reservationApi.getAll({ _t: Date.now() });
+    const data = await cacheStore.getReservations(force);
     if (seq === loadReservationsSeq && Array.isArray(data)) {
       reservations.value = data;
     }
@@ -2356,13 +2372,20 @@ const handleQuickAddCar = async () => {
 };
 
 onMounted(async () => {
-  await loadReservations();
+  if (cacheStore.reservations.length > 0) {
+    reservations.value = cacheStore.reservations;
+    loading.value = false;
+    loadReservations(true);
+  } else {
+    await loadReservations();
+  }
+
   unsubscribeSocket = socketStore.onEvent('reservation:change', (payload: any) => {
     const d = payload?.data;
     if (d?.action === 'deleted' && d?.id) {
       reservations.value = reservations.value.filter(r => r._id !== d.id);
     }
-    loadReservations();
+    loadReservations(true);
   });
   
   if (route.query.id) {
