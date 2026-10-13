@@ -28,6 +28,8 @@ import {
 import { Contrat, ContratSchema } from '../contrat/schemas/contrat.schema';
 import { Setting, SettingSchema } from '../setting/schemas/setting.schema';
 
+import { GpsLiveTrackerService } from './gps-live-tracker.service';
+
 @Module({
   imports: [
     MongooseModule.forFeature([
@@ -42,7 +44,12 @@ import { Setting, SettingSchema } from '../setting/schemas/setting.schema';
     CarModule,
   ],
   controllers: [GpsController],
-  providers: [GpsService, TraciPollerService, WinnouPollerService],
-  exports: [GpsService],
+  providers: [
+    GpsService,
+    TraciPollerService,
+    WinnouPollerService,
+    GpsLiveTrackerService,
+  ],
+  exports: [GpsService, GpsLiveTrackerService],
 })
 export class GpsModule {}

@@ -1,239 +1,328 @@
 <template>
-  <div ref="pageRoot" :class="['flex flex-col bg-gradient-to-br from-slate-50 via-indigo-50/30 to-slate-100 overflow-hidden', isFullScreen ? 'h-screen' : (isElectron ? 'h-[calc(100vh-7.375rem)]' : 'h-[calc(100vh-5rem)]')]">
-    <!-- Header (page-level controls) -->
-    <header v-if="!isFullScreen" class="shrink-0 px-4 md:px-10 pt-5 pb-4 flex items-center gap-4 flex-wrap">
-      <div class="min-w-0">
-        <h1 class="text-3xl md:text-4xl font-black tracking-tight text-slate-900 uppercase flex items-center gap-2.5 truncate">
-          Suivi <span class="text-indigo-600 italic">Flotte</span>
-          <span class="relative flex h-2.5 w-2.5 shrink-0">
-            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-            <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500 border border-white"></span>
-          </span>
-        </h1>
-        <p class="hidden md:block text-[8px] font-black text-slate-400 uppercase tracking-widest pl-0.5 truncate">
-          Tracker live · chaque seconde · dernière mise à jour {{ lastUpdateLabel }}
-        </p>
+  <div ref="pageRoot" :class="['flex flex-col bg-slate-950 overflow-hidden relative', isFullScreen ? 'h-screen' : (isElectron ? 'h-[calc(100vh-7.375rem)]' : 'h-[calc(100vh-5rem)]')]">
+    <!-- Header (Premium Glassmorphic HUD Header) -->
+    <header v-if="!isFullScreen" class="shrink-0 px-6 py-3.5 bg-white/95 backdrop-blur-xl border-b border-slate-200/80 shadow-xs flex items-center justify-between gap-4 flex-wrap z-[500]">
+      <!-- Left: Title & Live pulse -->
+      <div class="flex items-center gap-3.5">
+        <div class="w-11 h-11 rounded-2xl bg-gradient-to-br from-indigo-600 to-indigo-800 text-white flex items-center justify-center shadow-lg shadow-indigo-600/30 shrink-0">
+          <MapPinned class="w-6 h-6 stroke-[2.2]" />
+        </div>
+        <div>
+          <h1 class="text-xl font-black tracking-tight text-slate-900 uppercase flex items-center gap-2.5">
+            Suivi <span class="text-indigo-600 italic">Flotte GPS</span>
+            <span class="relative flex h-2.5 w-2.5 shrink-0">
+              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500 border border-white"></span>
+            </span>
+          </h1>
+          <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
+            Balises live temps réel &bull; Actualisé {{ lastUpdateLabel }}
+          </p>
+        </div>
       </div>
 
-      <div class="ml-auto flex items-center gap-2 md:gap-3 flex-wrap justify-end">
-        <!-- Following chip -->
-        <div v-if="followedCar" class="bg-indigo-600 text-white rounded-full pl-4 pr-2 py-2 shadow-lg shadow-indigo-600/25 flex items-center gap-2.5">
+      <!-- Center: Quick Live KPI Metrics -->
+      <div class="hidden lg:flex items-center gap-2 bg-slate-100/80 p-1.5 rounded-2xl border border-slate-200/60">
+        <div class="flex items-center gap-2 px-3 py-1 rounded-xl bg-white shadow-xs">
+          <span class="relative flex h-2 w-2">
+            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+          </span>
+          <span class="text-xs font-black text-slate-900 tabular-nums">{{ movingCars.length }}</span>
+          <span class="text-[9px] font-bold uppercase tracking-wider text-emerald-700">En Mouvement</span>
+        </div>
+
+        <div class="flex items-center gap-2 px-3 py-1 rounded-xl">
+          <span class="w-2 h-2 rounded-full bg-slate-400"></span>
+          <span class="text-xs font-black text-slate-800 tabular-nums">{{ idleCars.length }}</span>
+          <span class="text-[9px] font-bold uppercase tracking-wider text-slate-500">À l'Arrêt</span>
+        </div>
+
+        <div class="flex items-center gap-2 px-3 py-1 rounded-xl">
+          <span class="w-2 h-2 rounded-full bg-indigo-600"></span>
+          <span class="text-xs font-black text-slate-900 tabular-nums">{{ gpsPositions.length }}</span>
+          <span class="text-[9px] font-bold uppercase tracking-wider text-indigo-700">Total Suivis</span>
+        </div>
+      </div>
+
+      <!-- Right: Action Controls -->
+      <div class="ml-auto flex items-center gap-2.5 flex-wrap justify-end">
+        <!-- Following Active Chip -->
+        <div v-if="followedCar" class="bg-indigo-600 text-white rounded-2xl pl-3.5 pr-2 py-2 shadow-lg shadow-indigo-600/25 flex items-center gap-2.5 border border-indigo-400/40">
           <span class="relative flex h-2 w-2">
             <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-300 opacity-75"></span>
             <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-300"></span>
           </span>
-          <span class="text-[9px] font-black uppercase tracking-widest whitespace-nowrap">Suivi · {{ followedCar.matricule }}</span>
-          <button @click="stopFollowing" class="w-6 h-6 rounded-full bg-white/20 hover:bg-white/35 transition-colors flex items-center justify-center shrink-0">
+          <span class="text-[10px] font-black uppercase tracking-wider whitespace-nowrap">
+            Suivi · {{ followedCar.matricule }} ({{ Math.round(followedCar.speed || 0) }} km/h)
+          </span>
+          <button @click="stopFollowing" class="w-6 h-6 rounded-xl bg-white/20 hover:bg-white/35 transition-colors flex items-center justify-center shrink-0">
             <X class="w-3.5 h-3.5" />
           </button>
         </div>
 
-        <!-- Map style toggle -->
-        <div v-if="gpsPositions.length" class="bg-white rounded-full p-1 shadow-lg border border-slate-100 flex items-center gap-1">
+        <!-- Map Style Switcher -->
+        <div v-if="gpsPositions.length" class="bg-slate-100 rounded-2xl p-1 border border-slate-200/80 flex items-center gap-1">
           <button @click="mapStyle = 'satellite'"
-            :class="['flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[9px] font-black uppercase tracking-widest transition-all',
-              mapStyle === 'satellite' ? 'bg-slate-900 text-white shadow' : 'text-slate-500 hover:text-slate-900']">
+            :class="['flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all',
+              mapStyle === 'satellite' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900']">
             <Satellite class="w-3.5 h-3.5" /> Satellite
           </button>
           <button @click="mapStyle = 'plan'"
-            :class="['flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[9px] font-black uppercase tracking-widest transition-all',
-              mapStyle === 'plan' ? 'bg-slate-900 text-white shadow' : 'text-slate-500 hover:text-slate-900']">
+            :class="['flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all',
+              mapStyle === 'plan' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900']">
             <MapIcon class="w-3.5 h-3.5" /> Plan
           </button>
         </div>
 
-        <!-- Flotte rectangle button -->
+        <!-- Flotte Drawer Toggle -->
         <button @click="toggleList"
-          :class="['h-11 pl-4 pr-2.5 rounded-2xl font-black uppercase text-[9px] tracking-widest shadow-lg border flex items-center gap-2 active:scale-95 transition-all',
-            showList ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50']">
+          :class="['h-11 px-4 rounded-2xl font-black uppercase text-[10px] tracking-wider shadow-sm border flex items-center gap-2.5 active:scale-95 transition-all',
+            showList ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-800 border-slate-200 hover:bg-slate-50']">
           <CarIcon :class="['w-4 h-4', showList ? 'text-emerald-400' : 'text-indigo-600']" />
-          Flotte
-          <span class="min-w-[20px] h-5 px-1 rounded-lg bg-emerald-500 text-white text-[9px] font-black flex items-center justify-center">{{ gpsPositions.length }}</span>
+          <span>Flotte</span>
+          <span class="min-w-[22px] h-5 px-1.5 rounded-lg bg-indigo-600 text-white text-[10px] font-mono font-bold flex items-center justify-center">{{ gpsPositions.length }}</span>
         </button>
 
         <!-- Fullscreen -->
         <button @click="toggleFullScreen" :title="isFullScreen ? 'Quitter le plein écran' : 'Plein écran'"
-          class="w-11 h-11 rounded-2xl bg-white shadow-lg border border-slate-200 flex items-center justify-center hover:bg-slate-50 active:scale-95 transition-all shrink-0">
-          <component :is="isFullScreen ? Minimize2 : Maximize2" class="w-4 h-4 text-slate-600" />
+          class="w-11 h-11 rounded-2xl bg-white shadow-sm border border-slate-200 flex items-center justify-center hover:bg-slate-50 active:scale-95 transition-all shrink-0">
+          <component :is="isFullScreen ? Minimize2 : Maximize2" class="w-4 h-4 text-slate-700" />
         </button>
 
         <!-- Refresh -->
-        <button @click="fetchGpsPositions()" class="w-11 h-11 rounded-2xl bg-white shadow-lg border border-slate-200 flex items-center justify-center hover:bg-slate-50 active:scale-95 transition-all shrink-0">
-          <RefreshCw :class="['w-4 h-4 text-slate-600', loading ? 'animate-spin' : '']" />
+        <button @click="fetchGpsPositions()" class="w-11 h-11 rounded-2xl bg-white shadow-sm border border-slate-200 flex items-center justify-center hover:bg-slate-50 active:scale-95 transition-all shrink-0" title="Actualiser les balises">
+          <RefreshCw :class="['w-4 h-4 text-slate-700', loading ? 'animate-spin' : '']" />
         </button>
       </div>
     </header>
 
-    <!-- Map view area (sliders constrained here, below the top bar) -->
-    <div class="relative flex-1 min-h-0">
-      <main :class="['w-full h-full', isFullScreen ? '' : 'px-4 md:px-10 pb-6']">
-      <div :class="['relative w-full h-full bg-slate-900 z-0', isFullScreen ? 'overflow-hidden' : 'rounded-[2.5rem] overflow-hidden border-[3px] border-slate-200 shadow-2xl shadow-slate-300/40']">
-        <div ref="mapEl" class="absolute inset-0"></div>
+    <!-- Map View Area (Full edge-to-edge, smooth map container) -->
+    <div class="relative flex-1 min-h-0 w-full h-full">
+      <div ref="mapEl" class="absolute inset-0 z-0"></div>
 
-        <div v-if="loading" class="absolute inset-0 bg-white/70 backdrop-blur-sm flex items-center justify-center z-10">
-          <LoaderIcon class="w-10 h-10 animate-spin text-indigo-600" />
-        </div>
-        <div v-else-if="!gpsPositions.length" class="absolute inset-0 bg-slate-50/95 backdrop-blur-sm flex flex-col items-center justify-center gap-3 z-10">
-          <MapPin class="w-14 h-14 text-slate-300 stroke-1" />
-          <p class="text-[9px] font-black uppercase tracking-widest text-slate-400">Aucune position GPS pour le moment</p>
-          <p class="text-[9px] font-bold uppercase tracking-widest text-slate-300">Vérifiez l'IMEI ou la plaque des véhicules</p>
-        </div>
+      <!-- Loading Overlay -->
+      <div v-if="loading" class="absolute inset-0 bg-white/70 backdrop-blur-sm flex items-center justify-center z-10">
+        <LoaderIcon class="w-10 h-10 animate-spin text-indigo-600" />
+      </div>
 
-        <!-- ── Exit fullscreen floating button ────────────────────────────── -->
-        <button v-if="isFullScreen" @click="toggleFullScreen"
-          class="absolute top-4 right-4 z-[500] w-11 h-11 rounded-2xl bg-white/90 backdrop-blur-md shadow-xl border border-slate-200 flex items-center justify-center hover:bg-white active:scale-95 transition-all">
-          <Minimize2 class="w-4 h-4 text-slate-700" />
+      <!-- Empty State -->
+      <div v-else-if="!gpsPositions.length" class="absolute inset-0 bg-slate-50/95 backdrop-blur-sm flex flex-col items-center justify-center gap-3 z-10">
+        <MapPin class="w-14 h-14 text-slate-300 stroke-1" />
+        <p class="text-xs font-black uppercase tracking-widest text-slate-600">Aucune position GPS reçue</p>
+        <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400">Vérifiez la configuration des trackers ou balises</p>
+      </div>
+
+      <!-- Exit Fullscreen Floating Button -->
+      <button v-if="isFullScreen" @click="toggleFullScreen"
+        class="absolute top-4 right-4 z-[500] w-11 h-11 rounded-2xl bg-white/90 backdrop-blur-md shadow-xl border border-slate-200 flex items-center justify-center hover:bg-white active:scale-95 transition-all">
+        <Minimize2 class="w-4 h-4 text-slate-700" />
+      </button>
+
+      <!-- Online / En mouvement — bottom-left widget -->
+      <div v-if="movingCars.length" class="absolute left-4 bottom-4 z-[450] w-[240px] flex flex-col gap-2 items-stretch">
+        <button v-for="p in movingCarsPreview" :key="p.carId" @click="selectOnlineCar(p)"
+          class="group bg-white/95 backdrop-blur-md rounded-2xl pl-2.5 pr-3 py-2 shadow-xl shadow-slate-900/10 border border-slate-100 flex items-center gap-2.5 text-left transition-all hover:border-emerald-300 hover:shadow-2xl active:scale-[0.97]">
+          <span class="w-8 h-8 rounded-xl flex items-center justify-center shrink-0" :style="{ background: colorFor(p) }">
+            <span v-html="carIconSvg(colorFor(p))"></span>
+          </span>
+          <span class="min-w-0 flex-1">
+            <span class="block text-[10px] font-black text-slate-900 uppercase tracking-wider leading-none truncate">{{ p.matricule }}</span>
+            <span class="flex items-center gap-1.5 mt-1">
+              <span class="text-[9px] font-black tabular-nums text-slate-900 font-mono">{{ Math.round(p.speed || 0) }} km/h</span>
+            </span>
+          </span>
+          <span class="relative flex h-2 w-2 shrink-0">
+            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+          </span>
         </button>
 
-        <!-- ── Online / En mouvement — bottom-left widget ─────────────────── -->
-        <div v-if="movingCars.length" class="absolute left-4 bottom-4 z-[450] w-[230px] flex flex-col gap-2 items-stretch">
-          <button v-for="p in movingCarsPreview" :key="p.carId" @click="selectOnlineCar(p)"
-            class="group bg-white/95 backdrop-blur-md rounded-2xl pl-2.5 pr-3 py-2 shadow-xl shadow-slate-900/10 border border-slate-100 flex items-center gap-2.5 text-left transition-all hover:border-emerald-300 hover:shadow-2xl active:scale-[0.97]">
-            <span class="w-8 h-8 rounded-xl flex items-center justify-center shrink-0" :style="{ background: colorFor(p) }">
-              <span v-html="carIconSvg(colorFor(p))"></span>
-            </span>
-            <span class="min-w-0 flex-1">
-              <span class="block text-[10px] font-black text-slate-900 uppercase tracking-wider leading-none truncate">{{ p.matricule }}</span>
-              <span class="flex items-center gap-1.5 mt-1">
-                <span class="text-[9px] font-black tabular-nums text-slate-900">{{ Math.round(p.speed || 0) }} km/h</span>
-              </span>
-            </span>
-            <span class="relative flex h-2 w-2 shrink-0">
-              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-            </span>
-          </button>
-
-          <button v-if="movingCars.length > 3" @click="showMovingSheet = true"
-            class="bg-slate-900/90 backdrop-blur-md text-white rounded-2xl px-3.5 py-2.5 shadow-xl flex items-center justify-center gap-2 text-[9px] font-black uppercase tracking-widest transition-all hover:bg-slate-900 active:scale-[0.97]">
-            Voir tout · {{ movingCars.length }}
-            <ChevronUp class="w-3.5 h-3.5" />
-          </button>
-        </div>
-
-        <!-- ── Suivi — compteur de vitesse (coin bas-droite) ──────────────── -->
-        <transition enter-active-class="transition-all duration-300 ease-out" enter-from-class="opacity-0 translate-y-4 scale-95" enter-to-class="opacity-100 translate-y-0 scale-100"
-          leave-active-class="transition-all duration-200 ease-in" leave-from-class="opacity-100 translate-y-0 scale-100" leave-to-class="opacity-0 translate-y-4 scale-95">
-          <div v-if="followedCar" class="absolute right-4 bottom-4 z-[450]">
-            <div class="relative bg-slate-900/90 backdrop-blur-md text-white rounded-[1.75rem] p-4 pr-12 shadow-2xl shadow-black/40 border border-white/10 flex items-center gap-4">
-              <button @click.stop="stopFollowing" title="Ne plus suivre"
-                class="absolute top-3 right-3 w-7 h-7 rounded-full bg-white/10 hover:bg-white/25 transition-colors flex items-center justify-center shrink-0">
-                <X class="w-3.5 h-3.5" />
-              </button>
-
-              <div class="relative w-[84px] h-[84px] shrink-0">
-                <svg viewBox="0 0 100 100" class="w-full h-full" style="transform: rotate(135deg)">
-                  <circle cx="50" cy="50" r="41" fill="none" stroke="rgba(255,255,255,0.14)" stroke-width="9" stroke-linecap="round" :stroke-dasharray="`${gaugeLen} ${gaugeCirc}`" />
-                  <circle cx="50" cy="50" r="41" fill="none" :stroke="followGaugeColor" stroke-width="9" stroke-linecap="round"
-                    class="transition-all duration-700 ease-out" :stroke-dasharray="`${gaugeLen * followGaugeFrac} ${gaugeCirc}`" />
-                </svg>
-                <div class="absolute inset-0 flex flex-col items-center justify-center">
-                  <span class="text-[26px] font-black tabular-nums leading-none">{{ Math.round(followedCar.speed || 0) }}</span>
-                  <span class="text-[7px] font-black uppercase tracking-widest text-white/45 mt-1">km/h</span>
-                </div>
-              </div>
-
-              <div class="min-w-0 pr-1">
-                <p class="text-sm font-black uppercase tracking-wider leading-none truncate">{{ followedCar.matricule }}</p>
-                <p class="text-[8px] font-bold uppercase tracking-widest text-white/40 truncate mt-1">{{ followedCar.brand }} {{ followedCar.model }}</p>
-                <div class="flex items-center gap-1.5 mt-2.5">
-                  <span v-if="!isStale(followedCar)" class="relative flex h-1.5 w-1.5 shrink-0">
-                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span class="relative inline-flex rounded-full h-1.5 w-1.5" :class="(followedCar.speed || 0) > 2 ? 'bg-emerald-400' : 'bg-rose-400'"></span>
-                  </span>
-                  <span class="text-[8px] font-black uppercase tracking-widest whitespace-nowrap" :class="isStale(followedCar) ? 'text-slate-400' : 'text-white/70'">
-                    {{ isStale(followedCar) ? 'Inactif · vu à' : 'Vu à' }} {{ timeLabel(followedCar) }}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </transition>
-
-        <!-- ── Bottom slider (all moving cars) ────────────────────────────── -->
-        <transition enter-active-class="transition-transform duration-300 ease-out" enter-from-class="translate-y-full" enter-to-class="translate-y-0"
-          leave-active-class="transition-transform duration-250 ease-in" leave-from-class="translate-y-0" leave-to-class="translate-y-full">
-          <div v-if="showMovingSheet" class="absolute inset-x-0 bottom-0 z-[550] bg-white rounded-t-[2rem] shadow-2xl border-t border-slate-200 flex flex-col max-h-[62%]">
-            <div class="shrink-0 pt-3 pb-2 flex justify-center">
-              <span class="w-10 h-1.5 rounded-full bg-slate-200"></span>
-            </div>
-            <div class="shrink-0 px-6 pb-3 flex items-center gap-3">
-              <div class="min-w-0">
-                <p class="text-sm font-black uppercase italic tracking-tighter text-slate-900 leading-tight">
-                  En <span class="text-emerald-500">Mouvement</span>
-                </p>
-                <p class="text-[8px] font-black uppercase tracking-widest text-slate-400 mt-0.5">{{ movingCars.length }} véhicule(s) actif(s)</p>
-              </div>
-              <button @click="showMovingSheet = false" class="ml-auto w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 transition-colors flex items-center justify-center shrink-0">
-                <X class="w-4 h-4 text-slate-500" />
-              </button>
-            </div>
-            <div class="flex-1 overflow-y-auto no-scrollbar px-4 pb-5 pt-1 space-y-2">
-              <button v-for="p in movingCars" :key="p.carId" @click="selectOnlineCar(p)"
-                :class="['w-full flex items-center gap-3 pl-3 pr-4 py-2.5 rounded-2xl border transition-all active:scale-[0.98]',
-                  String(selectedCar?._id) === String(p.carId) ? 'border-indigo-400 bg-indigo-50' : 'border-slate-100 hover:border-emerald-200 hover:bg-slate-50']">
-                <span class="w-8 h-8 rounded-xl flex items-center justify-center shrink-0" :style="{ background: colorFor(p) }">
-                  <span v-html="carIconSvg(colorFor(p))"></span>
-                </span>
-                <span class="text-left min-w-0 flex-1">
-                  <span class="block text-[11px] font-black text-slate-900 uppercase tracking-wider leading-none truncate">{{ p.matricule }}</span>
-                  <span class="block text-[8px] font-bold text-slate-400 mt-1 truncate">{{ p.brand }} {{ p.model }}</span>
-                </span>
-                <span class="text-[10px] font-black tabular-nums text-slate-900 shrink-0">{{ Math.round(p.speed || 0) }} km/h</span>
-                <span class="relative flex h-2 w-2 shrink-0">
-                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                </span>
-              </button>
-            </div>
-          </div>
-        </transition>
-
+        <button v-if="movingCars.length > 3" @click="showMovingSheet = true"
+          class="bg-slate-900/90 backdrop-blur-md text-white rounded-2xl px-3.5 py-2.5 shadow-xl flex items-center justify-center gap-2 text-[9px] font-black uppercase tracking-widest transition-all hover:bg-slate-900 active:scale-[0.97]">
+          Voir tout · {{ movingCars.length }}
+          <ChevronUp class="w-3.5 h-3.5" />
+        </button>
       </div>
-    </main>
+
+      <!-- Suivi — compteur de vitesse (coin bas-droite) -->
+      <transition enter-active-class="transition-all duration-300 ease-out" enter-from-class="opacity-0 translate-y-4 scale-95" enter-to-class="opacity-100 translate-y-0 scale-100"
+        leave-active-class="transition-all duration-200 ease-in" leave-from-class="opacity-100 translate-y-0 scale-100" leave-to-class="opacity-0 translate-y-4 scale-95">
+        <div v-if="followedCar" class="absolute right-4 bottom-4 z-[450]">
+          <div class="relative bg-slate-900/90 backdrop-blur-md text-white rounded-[1.75rem] p-4 pr-12 shadow-2xl shadow-black/40 border border-white/10 flex items-center gap-4">
+            <button @click.stop="stopFollowing" title="Ne plus suivre"
+              class="absolute top-3 right-3 w-7 h-7 rounded-full bg-white/10 hover:bg-white/25 transition-colors flex items-center justify-center shrink-0">
+              <X class="w-3.5 h-3.5" />
+            </button>
+
+            <div class="relative w-[84px] h-[84px] shrink-0">
+              <svg viewBox="0 0 100 100" class="w-full h-full" style="transform: rotate(135deg)">
+                <circle cx="50" cy="50" r="41" fill="none" stroke="rgba(255,255,255,0.14)" stroke-width="9" stroke-linecap="round" :stroke-dasharray="`${gaugeLen} ${gaugeCirc}`" />
+                <circle cx="50" cy="50" r="41" fill="none" :stroke="followGaugeColor" stroke-width="9" stroke-linecap="round"
+                  class="transition-all duration-700 ease-out" :stroke-dasharray="`${gaugeLen * followGaugeFrac} ${gaugeCirc}`" />
+              </svg>
+              <div class="absolute inset-0 flex flex-col items-center justify-center">
+                <span class="text-[26px] font-black tabular-nums leading-none font-mono">{{ Math.round(followedCar.speed || 0) }}</span>
+                <span class="text-[7px] font-black uppercase tracking-widest text-white/45 mt-1">km/h</span>
+              </div>
+            </div>
+
+            <div class="min-w-0 pr-1">
+              <p class="text-sm font-black uppercase tracking-wider leading-none truncate">{{ followedCar.matricule }}</p>
+              <p class="text-[8px] font-bold uppercase tracking-widest text-white/40 truncate mt-1">{{ followedCar.brand }} {{ followedCar.model }}</p>
+              <div class="flex items-center gap-1.5 mt-2.5">
+                <span v-if="!isStale(followedCar)" class="relative flex h-1.5 w-1.5 shrink-0">
+                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span class="relative inline-flex rounded-full h-1.5 w-1.5" :class="(followedCar.speed || 0) > 2 ? 'bg-emerald-400' : 'bg-rose-400'"></span>
+                </span>
+                <span class="text-[8px] font-black uppercase tracking-widest whitespace-nowrap" :class="isStale(followedCar) ? 'text-slate-400' : 'text-white/70'">
+                  {{ isStale(followedCar) ? 'Inactif · vu à' : 'Vu à' }} {{ timeLabel(followedCar) }}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </transition>
+
+      <!-- Bottom slider (all moving cars) -->
+      <transition enter-active-class="transition-transform duration-300 ease-out" enter-from-class="translate-y-full" enter-to-class="translate-y-0"
+        leave-active-class="transition-transform duration-250 ease-in" leave-from-class="translate-y-0" leave-to-class="translate-y-full">
+        <div v-if="showMovingSheet" class="absolute inset-x-0 bottom-0 z-[550] bg-white rounded-t-[2rem] shadow-2xl border-t border-slate-200 flex flex-col max-h-[62%]">
+          <div class="shrink-0 pt-3 pb-2 flex justify-center">
+            <span class="w-10 h-1.5 rounded-full bg-slate-200"></span>
+          </div>
+          <div class="shrink-0 px-6 pb-3 flex items-center gap-3">
+            <div class="min-w-0">
+              <p class="text-sm font-black uppercase italic tracking-tighter text-slate-900 leading-tight">
+                En <span class="text-emerald-500">Mouvement</span>
+              </p>
+              <p class="text-[8px] font-black uppercase tracking-widest text-slate-400 mt-0.5">{{ movingCars.length }} véhicule(s) actif(s)</p>
+            </div>
+            <button @click="showMovingSheet = false" class="ml-auto w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 transition-colors flex items-center justify-center shrink-0">
+              <X class="w-4 h-4 text-slate-500" />
+            </button>
+          </div>
+          <div class="flex-1 overflow-y-auto no-scrollbar px-4 pb-5 pt-1 space-y-2">
+            <button v-for="p in movingCars" :key="p.carId" @click="selectOnlineCar(p)"
+              :class="['w-full flex items-center gap-3 pl-3 pr-4 py-2.5 rounded-2xl border transition-all active:scale-[0.98]',
+                String(selectedCar?._id) === String(p.carId) ? 'border-indigo-400 bg-indigo-50' : 'border-slate-100 hover:border-emerald-200 hover:bg-slate-50']">
+              <span class="w-8 h-8 rounded-xl flex items-center justify-center shrink-0" :style="{ background: colorFor(p) }">
+                <span v-html="carIconSvg(colorFor(p))"></span>
+              </span>
+              <span class="text-left min-w-0 flex-1">
+                <span class="block text-[11px] font-black text-slate-900 uppercase tracking-wider leading-none truncate">{{ p.matricule }}</span>
+                <span class="block text-[8px] font-bold text-slate-400 mt-1 truncate">{{ p.brand }} {{ p.model }}</span>
+              </span>
+              <span class="text-[10px] font-black tabular-nums text-slate-900 shrink-0 font-mono">{{ Math.round(p.speed || 0) }} km/h</span>
+              <span class="relative flex h-2 w-2 shrink-0">
+                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+            </button>
+          </div>
+        </div>
+      </transition>
 
       <!-- Right slider (car list) -->
       <transition enter-active-class="transition-transform duration-300 ease-out" enter-from-class="translate-x-full" enter-to-class="translate-x-0"
         leave-active-class="transition-transform duration-200 ease-in" leave-from-class="translate-x-0" leave-to-class="translate-x-full">
-        <div v-if="showList" class="absolute top-0 bottom-0 right-0 z-[600] w-[340px] max-w-[88vw] bg-white shadow-2xl border-l border-slate-200 flex flex-col">
-        <div class="flex items-center justify-between px-5 pt-5 pb-1 shrink-0">
-          <span class="text-xs font-black uppercase tracking-widest text-slate-900 flex items-center gap-2">
-            <CarIcon class="w-4 h-4 text-indigo-600" /> Flotte
-          </span>
-          <button @click="showList = false" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 transition-colors flex items-center justify-center">
-            <X class="w-4 h-4 text-slate-500" />
-          </button>
-        </div>
-        <p class="px-5 pb-3 text-[8px] font-black uppercase tracking-widest text-slate-400">{{ gpsPositions.length }} véhicule(s) suivis</p>
+        <div v-if="showList" class="absolute top-0 bottom-0 right-0 z-[600] w-[380px] max-w-[92vw] bg-white shadow-2xl border-l border-slate-200 flex flex-col">
+          <!-- Drawer Header -->
+          <div class="p-5 bg-gradient-to-r from-slate-900 to-indigo-950 text-white flex items-center justify-between shrink-0">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-2xl bg-indigo-600 flex items-center justify-center text-white shadow-lg">
+                <CarIcon class="w-5 h-5" />
+              </div>
+              <div>
+                <h2 class="text-sm font-black uppercase tracking-wider text-white">Flotte Véhicules</h2>
+                <p class="text-[10px] font-bold text-indigo-300 uppercase tracking-widest">{{ gpsPositions.length }} véhicules suivis</p>
+              </div>
+            </div>
+            <button @click="showList = false" class="w-8 h-8 rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all">
+              <X class="w-4 h-4" />
+            </button>
+          </div>
 
-        <div class="flex-1 overflow-y-auto no-scrollbar px-3 pb-4 space-y-2">
-          <button v-for="p in sortedPositions" :key="p.carId" @click="selectFromList(p)"
-            :class="['w-full flex items-center gap-3 pl-3 pr-4 py-2.5 rounded-2xl border transition-all active:scale-[0.98]',
-              String(selectedCar?._id) === String(p.carId) ? 'border-indigo-400 bg-indigo-50' : 'border-slate-100 hover:border-indigo-200 hover:bg-slate-50']">
-            <span class="w-8 h-8 rounded-xl flex items-center justify-center shrink-0" :style="{ background: colorFor(p) }">
-              <span v-html="carIconSvg(colorFor(p))"></span>
-            </span>
-            <span class="text-left min-w-0 flex-1">
-              <span class="block text-[11px] font-black text-slate-900 uppercase tracking-wider leading-none truncate">{{ p.matricule }}</span>
-              <span class="flex items-center gap-2 mt-1">
-                <span class="text-[10px] font-black tabular-nums text-slate-900">{{ Math.round(p.speed || 0) }} km/h</span>
-                <span :class="['text-[7px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-md border', statusClass(p)]">{{ statusLabel(p) }}</span>
+          <!-- Drawer Search & Filter Toolbar -->
+          <div class="p-3.5 border-b border-slate-100 bg-slate-50 space-y-2.5 shrink-0">
+            <div class="relative w-full">
+              <Search class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input 
+                v-model="listSearchQuery"
+                type="text"
+                placeholder="Rechercher par matricule ou modèle..."
+                class="w-full h-9 pl-9 pr-8 bg-white rounded-xl text-xs font-bold text-slate-800 outline-none border border-slate-200 focus:border-indigo-600 transition-all placeholder:text-slate-400"
+              />
+              <button v-if="listSearchQuery" @click="listSearchQuery = ''" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                <X class="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <!-- Filter Pills -->
+            <div class="grid grid-cols-4 gap-1">
+              <button 
+                @click="listFilterTab = 'all'" 
+                :class="['py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all', listFilterTab === 'all' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200']"
+              >
+                Tous ({{ gpsPositions.length }})
+              </button>
+              <button 
+                @click="listFilterTab = 'moving'" 
+                :class="['py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all', listFilterTab === 'moving' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200']"
+              >
+                En route ({{ movingCars.length }})
+              </button>
+              <button 
+                @click="listFilterTab = 'parked'" 
+                :class="['py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all', listFilterTab === 'parked' ? 'bg-slate-800 text-white shadow-sm' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200']"
+              >
+                Arrêt ({{ idleCars.length }})
+              </button>
+              <button 
+                @click="listFilterTab = 'rented'" 
+                :class="['py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all', listFilterTab === 'rented' ? 'bg-amber-600 text-white shadow-sm' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200']"
+              >
+                Loués
+              </button>
+            </div>
+          </div>
+
+          <!-- Car Cards List -->
+          <div class="flex-1 overflow-y-auto no-scrollbar p-3 space-y-2">
+            <button 
+              v-for="p in filteredPositions" 
+              :key="p.carId" 
+              @click="selectFromList(p)"
+              :class="['w-full flex items-center gap-3 p-3 rounded-2xl border transition-all text-left active:scale-[0.98]',
+                String(selectedCar?._id) === String(p.carId) ? 'border-indigo-500 bg-indigo-50/70 shadow-sm' : 'border-slate-100 hover:border-indigo-200 hover:bg-slate-50/80 bg-white shadow-xs']"
+            >
+              <span class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-sm" :style="{ background: colorFor(p) }">
+                <span v-html="carIconSvg(colorFor(p))"></span>
               </span>
-            </span>
-            <span v-if="p.rental" class="w-2 h-2 rounded-full bg-indigo-500 shrink-0" title="Loué"></span>
-          </button>
-          <p v-if="!gpsPositions.length" class="text-[9px] font-black uppercase tracking-widest text-slate-300 px-3 py-6 text-center">Aucun véhicule</p>
-        </div>
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center justify-between gap-1">
+                  <span class="block text-xs font-black text-slate-900 uppercase tracking-wider leading-none truncate">{{ p.matricule }}</span>
+                  <span :class="['text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border shrink-0', statusClass(p)]">{{ statusLabel(p) }}</span>
+                </div>
+                <div class="flex items-center justify-between gap-1 mt-1.5">
+                  <span class="block text-[10px] font-bold text-slate-500 truncate">{{ p.brand }} {{ p.model }}</span>
+                  <span class="text-xs font-black tabular-nums text-slate-900 shrink-0 font-mono">{{ Math.round(p.speed || 0) }} <span class="text-[8px] font-bold text-slate-400">km/h</span></span>
+                </div>
+              </div>
+              <span v-if="p.rental" class="w-2.5 h-2.5 rounded-full bg-indigo-600 shrink-0" title="Contrat actif"></span>
+            </button>
+            <p v-if="!filteredPositions.length" class="text-[10px] font-black uppercase tracking-widest text-slate-400 px-3 py-10 text-center">Aucun véhicule trouvé</p>
+          </div>
 
-        <div class="shrink-0 px-5 py-4 border-t border-slate-100 space-y-2 bg-slate-50/60">
-          <p class="text-[8px] font-black uppercase tracking-widest text-slate-400">Légende</p>
-          <div v-for="item in legend" :key="item.label" class="flex items-center gap-2.5">
-            <span class="w-3 h-3 rounded-full border-2 border-white shadow" :style="{ background: item.color }"></span>
-            <span class="text-[8px] font-black uppercase tracking-widest text-slate-500">{{ item.label }}</span>
+          <!-- Drawer Footer Legend -->
+          <div class="shrink-0 px-5 py-3 border-t border-slate-100 flex items-center justify-between bg-slate-50/80 text-[9px] font-black uppercase tracking-wider text-slate-500">
+            <div v-for="item in legend" :key="item.label" class="flex items-center gap-1.5">
+              <span class="w-2.5 h-2.5 rounded-full border border-white shadow-xs" :style="{ background: item.color }"></span>
+              <span>{{ item.label }}</span>
+            </div>
           </div>
         </div>
-      </div>
-    </transition>
+      </transition>
 
       <!-- Right slider (car details) -->
       <transition enter-active-class="transition-transform duration-300 ease-out" enter-from-class="translate-x-full" enter-to-class="translate-x-0"
@@ -430,7 +519,7 @@ import {
   RefreshCw, Loader2 as LoaderIcon, MapPin,
   X, LocateFixed, PauseCircle, Satellite, Map as MapIcon,
   FileText, Car as CarIcon, Users, ChevronRight, ChevronUp,
-  Maximize2, Minimize2, Gauge
+  Maximize2, Minimize2, Gauge, MapPinned, Search
 } from 'lucide-vue-next'
 import { gpsApi, carApi } from '@/api'
 import { useAuthStore } from '@/stores/auth'
@@ -475,6 +564,8 @@ let leafletMap: L.Map | null = null
 let markersGroup: L.LayerGroup | null = null
 let gpsTimer: any = null
 let kmTodayTimer: any = null
+let pingTimer: any = null
+let trackingClientId = ''
 let didFitBounds = false
 
 const mapStyle = ref<'satellite' | 'plan'>('satellite')
@@ -536,12 +627,42 @@ const sortedPositions = computed(() =>
   [...gpsPositions.value].sort((a, b) => String(a.matricule).localeCompare(String(b.matricule)))
 )
 
-// ─── Online (en mouvement) — bottom-left widget + bottom sheet ──────────────
-const showMovingSheet = ref(false)
+const listSearchQuery = ref('')
+const listFilterTab = ref<'all' | 'moving' | 'parked' | 'rented'>('all')
+
 const isMoving = (p: any) => !isStale(p) && (p.speed || 0) > 2
 const movingCars = computed(() =>
   gpsPositions.value.filter(isMoving).sort((a, b) => (b.speed || 0) - (a.speed || 0))
 )
+const idleCars = computed(() =>
+  gpsPositions.value.filter((p) => isStale(p) || (p.speed || 0) <= 2)
+)
+
+const filteredPositions = computed(() => {
+  let list = [...gpsPositions.value]
+  if (listFilterTab.value === 'moving') {
+    list = list.filter((p) => !isStale(p) && (p.speed || 0) > 2)
+  } else if (listFilterTab.value === 'parked') {
+    list = list.filter((p) => !isStale(p) && (p.speed || 0) <= 2)
+  } else if (listFilterTab.value === 'rented') {
+    list = list.filter((p) => !!p.rental)
+  }
+
+  if (listSearchQuery.value.trim()) {
+    const q = listSearchQuery.value.trim().toLowerCase()
+    list = list.filter((p) => {
+      const mat = (p.matricule || '').toLowerCase()
+      const brand = (p.brand || '').toLowerCase()
+      const model = (p.model || '').toLowerCase()
+      return mat.includes(q) || brand.includes(q) || model.includes(q)
+    })
+  }
+
+  return list.sort((a, b) => String(a.matricule).localeCompare(String(b.matricule)))
+})
+
+// ─── Online (en mouvement) — bottom-left widget + bottom sheet ──────────────
+const showMovingSheet = ref(false)
 const movingCarsPreview = computed(() => movingCars.value.slice(0, 3))
 watch(movingCars, (list) => {
   if (!list.length) showMovingSheet.value = false
@@ -798,6 +919,16 @@ onMounted(async () => {
     setTimeout(() => leafletMap?.invalidateSize(), 150)
   }
   document.addEventListener('fullscreenchange', syncFullScreen)
+
+  // Start live GPS poller on backend only while viewing Suivi Flotte
+  trackingClientId = `viewer-${Math.random().toString(36).substring(2, 9)}-${Date.now()}`
+  gpsApi.startTracking(trackingClientId).catch((err) => {
+    console.error('Failed to start GPS tracking on backend', err)
+  })
+  pingTimer = setInterval(() => {
+    gpsApi.pingTracking(trackingClientId).catch(() => {})
+  }, 5000)
+
   await Promise.all([fetchGpsPositions(), fetchKmToday()])
   gpsTimer = setInterval(() => fetchGpsPositions(), REFRESH_MS)
   kmTodayTimer = setInterval(() => fetchKmToday(), KM_REFRESH_MS)
@@ -805,8 +936,12 @@ onMounted(async () => {
 
 onUnmounted(() => {
   document.removeEventListener('fullscreenchange', syncFullScreen)
+  if (pingTimer) clearInterval(pingTimer)
   if (gpsTimer) clearInterval(gpsTimer)
   if (kmTodayTimer) clearInterval(kmTodayTimer)
+  if (trackingClientId) {
+    gpsApi.stopTracking(trackingClientId).catch(() => {})
+  }
   if (leafletMap) {
     leafletMap.remove()
     leafletMap = null

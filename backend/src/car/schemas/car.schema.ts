@@ -87,3 +87,5 @@ export const CarSchema = SchemaFactory.createForClass(Car);
 
 CarSchema.index({ brand: 1 });
 CarSchema.index({ isAvailable: 1 });
+CarSchema.index({ disabled: 1 });
+CarSchema.index({ disabled: 1, isAvailable: 1 });

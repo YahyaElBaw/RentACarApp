@@ -47,60 +47,138 @@
 
 @layer base {
   :root {
-    --background: 220 33% 98%; /* Studio Ice White */
-    --foreground: 224 71.4% 4.1%;
+    --background: 220 33% 98%;
+    --foreground: 222 47% 11%;
     --card: 0 0% 100%;
-    --card-foreground: 224 71.4% 4.1%;
+    --card-foreground: 222 47% 11%;
     --popover: 0 0% 100%;
-    --popover-foreground: 224 71.4% 4.1%;
-    --primary: 243.4 75.4% 58.6%;
-    --primary-foreground: 210 20% 98%;
-    --secondary: 220 14.3% 95.9%;
-    --secondary-foreground: 220.9 39.3% 11%;
-    --muted: 220 14.3% 95.9%;
-    --muted-foreground: 220 12% 45%;
-    --accent: 220 14.3% 95.9%;
-    --accent-foreground: 220.9 39.3% 11%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 20% 98%;
-    --border: 220 13% 91%;
-    --input: 220 13% 91%;
-    --ring: 243.4 75.4% 58.6%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 238 82% 59%; /* Royal Indigo */
+    --primary-foreground: 210 40% 98%;
+    --secondary: 220 20% 96%;
+    --secondary-foreground: 222 47% 14%;
+    --muted: 220 18% 95%;
+    --muted-foreground: 220 14% 46%;
+    --accent: 226 100% 97%;
+    --accent-foreground: 238 82% 59%;
+    --destructive: 350 89% 60%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 220 16% 91%;
+    --input: 220 16% 91%;
+    --ring: 238 82% 59%;
     --radius: 1.25rem;
     
-    --glass-bg: rgba(255, 255, 255, 0.7);
-    --glass-border: rgba(255, 255, 255, 0.4);
-    --glass-shadow: rgba(0, 0, 0, 0.03);
+    --glass-bg: rgba(255, 255, 255, 0.78);
+    --glass-border: rgba(255, 255, 255, 0.6);
+    --glass-shadow: rgba(15, 23, 42, 0.06);
     
-    --primary-glow: 243.4 75.4% 58.6% / 0.15;
+    --primary-glow: 238 82% 59% / 0.18;
   }
 
   * {
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
-    font-feature-settings: "rlig" 1, "calt" 1;
-    transition: background-color 0.6s cubic-bezier(0.4, 0, 0.2, 1), 
-                color 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+    @apply bg-background text-foreground font-sans antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11", "rlig" 1, "calt" 1;
     overflow-x: hidden;
     scroll-behavior: smooth;
   }
 }
 
-.animate-in {
-  animation: fadeIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
+/* ── Custom Sleek Scrollbar ─────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.4);
+  border-radius: 9999px;
+  transition: background 0.2s ease;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.7);
 }
 
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(15px); }
+/* ── Glassmorphism & Surface Utilities ─────────────────────────────── */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  box-shadow: 0 20px 50px -15px rgba(15, 23, 42, 0.08);
+}
+
+.glass-header {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  border-bottom: 1px solid rgba(226, 232, 240, 0.8);
+}
+
+.glass-modal {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 25px 70px -15px rgba(15, 23, 42, 0.2), 0 0 0 1px rgba(226, 232, 240, 0.5);
+}
+
+.premium-card {
+  @apply bg-card text-card-foreground border border-border/80 rounded-[2rem] shadow-sm;
+  transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.premium-card:hover {
+  @apply shadow-xl shadow-primary/5 -translate-y-1 border-primary/25;
+}
+
+/* ── Micro-Interactions & Glow ─────────────────────────────────────── */
+.hover-lift {
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease;
+}
+.hover-lift:hover {
+  transform: translateY(-2px);
+}
+.hover-lift:active {
+  transform: translateY(0);
+}
+
+.glow-indigo {
+  box-shadow: 0 10px 30px -8px rgba(79, 70, 229, 0.35);
+}
+
+.glow-emerald {
+  box-shadow: 0 10px 30px -8px rgba(16, 185, 129, 0.35);
+}
+
+.glow-rose {
+  box-shadow: 0 10px 30px -8px rgba(244, 63, 94, 0.35);
+}
+
+.gradient-title {
+  background: linear-gradient(135deg, #0f172a 0%, #334155 70%, #475569 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* ── Smooth Keyframes & Animations ─────────────────────────────────── */
+.animate-in {
+  animation: smoothFadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes smoothFadeIn {
+  from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
 .animate-draw {
   stroke-dasharray: 400;
   stroke-dashoffset: 400;
-  animation: draw 2.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: draw 2.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 @keyframes draw {
@@ -108,20 +186,11 @@
   to { stroke-dashoffset: 0; }
 }
 
-.premium-glass {
-  background: var(--glass-bg);
-  backdrop-filter: blur(24px) saturate(180%);
-  border: 1px solid var(--glass-border);
-  box-shadow: 0 10px 40px -10px var(--glass-shadow);
+@keyframes pulseGlow {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.08); }
 }
 
-.premium-card {
-  @apply bg-card text-card-foreground border border-border shadow-sm;
-  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+.pulse-glow {
+  animation: pulseGlow 2.5s infinite ease-in-out;
 }
-
-.premium-card:hover {
-  @apply shadow-xl shadow-primary/5 -translate-y-1 border-primary/20;
-}
-
-

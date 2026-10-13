@@ -32,7 +32,7 @@ const authStore = useAuthStore()
 const socketStore = useSocketStore()
 const toast = useToast()
 const guard = usePasswordGuard()
-const cars = ref<any[]>([])
+const allCars = ref<any[]>([])
 const agences = ref<any[]>([])
 const loading = ref(true)
 const showForm = ref(false)
@@ -46,8 +46,29 @@ let unsubscribeSocket: Function | null = null
 const currentPage = ref(1)
 const pageSize = 10
 
+const filters = reactive({
+  brand: '',
+  availableOnly: null as boolean | null
+})
+
+const availableCarsCount = computed(() => allCars.value.filter(c => c.isAvailable).length)
+const rentedCarsCount = computed(() => allCars.value.filter(c => !c.isAvailable).length)
+const totalCarsCount = computed(() => allCars.value.length)
+
+const filteredCars = computed(() => {
+  if (filters.availableOnly === true) {
+    return allCars.value.filter(c => c.isAvailable)
+  }
+  if (filters.availableOnly === false) {
+    return allCars.value.filter(c => !c.isAvailable)
+  }
+  return allCars.value
+})
+
+const cars = computed(() => filteredCars.value)
+
 const sortedCars = computed(() => {
-  return [...cars.value];
+  return [...filteredCars.value];
 });
 
 const totalCarPages = computed(() => Math.ceil(sortedCars.value.length / pageSize))
@@ -56,10 +77,6 @@ const paginatedCars = computed(() => {
   return sortedCars.value.slice(start, start + pageSize)
 })
 
-const filters = reactive({
-  brand: '',
-  availableOnly: null as boolean | null
-})
 const searchOpen = ref(false)
 const addOpen = ref(false)
 
@@ -81,10 +98,9 @@ const loadCars = async () => {
   loading.value = true
   try {
     const data = await carApi.getAll({ 
-      brand: filters.brand, 
-      isAvailable: filters.availableOnly === null ? undefined : filters.availableOnly
+      brand: filters.brand || undefined, 
     })
-    cars.value = data
+    allCars.value = data || []
   } catch (err) {
     console.error('Failed to load cars', err)
   } finally {
@@ -111,11 +127,21 @@ onMounted(() => {
   })
 })
 
+let brandFilterTimeout: any = null
+
 onUnmounted(() => {
   if (unsubscribeSocket) unsubscribeSocket()
+  if (brandFilterTimeout) clearTimeout(brandFilterTimeout)
 })
-watch(() => filters.brand, () => { currentPage.value = 1; loadCars() })
-watch(() => filters.availableOnly, () => { currentPage.value = 1; loadCars() })
+
+watch(() => filters.brand, () => {
+  currentPage.value = 1
+  if (brandFilterTimeout) clearTimeout(brandFilterTimeout)
+  brandFilterTimeout = setTimeout(() => {
+    loadCars()
+  }, 300)
+})
+watch(() => filters.availableOnly, () => { currentPage.value = 1 })
 
 const saveCar = async () => {
   submitting.value = true
@@ -319,54 +345,178 @@ const executeDelete = async () => {
 
 const getStatusBadge = (car: any) => {
   return car.isAvailable 
-    ? { label: 'DISPONIBLE', class: 'bg-emerald-500/10  text-emerald-500  border-emerald-500/20 ' }
-    : { label: 'LOUÉ', class: 'bg-rose-500/10  text-rose-500  border-rose-500/20 ' }
+    ? { label: 'DISPONIBLE', class: 'bg-emerald-50 text-emerald-600 border-emerald-200 shadow-2xs font-black' }
+    : { label: 'LOUÉ', class: 'bg-rose-50 text-rose-600 border-rose-200 shadow-2xs font-black' }
 }
 </script>
 
 <template>
-  <div class="car-list-container space-y-12 p-8 max-w-7xl mx-auto">
-    <!-- Header & Integrated Action Bar -->
-    <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-8">
-      <div class="space-y-2">
-        <h1 class="text-4xl font-black tracking-tight text-slate-900 uppercase">Gestion <span class="text-indigo-600">de la Flotte</span></h1>
-        <p class="text-slate-400 font-bold uppercase text-[10px] tracking-[0.3em] pl-1">Inventaire Technique & Disponibilité</p>
+  <div class="car-list-container space-y-8 p-6 sm:p-8 lg:p-10 max-w-7xl mx-auto">
+    <!-- 1. Header Section -->
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-5">
+      <div class="space-y-1">
+        <div class="flex items-center gap-3">
+          <div class="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-lg shadow-indigo-600/20">
+            <CarIcon class="w-6 h-6 stroke-[2.2]" />
+          </div>
+          <div>
+            <h1 class="text-2xl sm:text-3xl font-black uppercase tracking-tight text-slate-900">
+              Parc <span class="text-indigo-600">Véhicules</span>
+            </h1>
+            <p class="text-[10px] uppercase tracking-widest font-bold text-slate-400">
+              Inventaire technique, disponibilité temps réel & tarification
+            </p>
+          </div>
+        </div>
       </div>
 
-      <div class="flex flex-wrap items-center gap-3">
-        <div class="group relative h-12 w-12 transition-all duration-300 overflow-hidden rounded-2xl bg-white border-2 border-slate-200 hover:border-indigo-400 flex items-center cursor-text active:scale-95 hover:shadow-xl hover:shadow-indigo-200/50"
-          :class="searchOpen ? 'w-80 border-indigo-500' : 'w-12'"
-          @mouseenter="searchOpen = true"
-          @mouseleave="searchOpen = false"
-          @focusin="searchOpen = true"
-          @focusout="searchOpen = false">
-          <div class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none">
-            <Search class="w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-colors duration-300" />
-          </div>
-          <input
-            v-model="filters.brand"
-            placeholder="Rechercher par marque ou matricule..."
-            :class="[searchOpen ? 'opacity-100' : 'opacity-0', 'h-full w-full pl-10 pr-3 bg-transparent border-0 outline-none text-xs font-bold text-slate-900 placeholder:text-slate-400 transition-opacity duration-300']"
-          />
-        </div>
-
-        <Button v-if="authStore.isAdmin" @click="openAddModal" @mouseenter="addOpen = true" @mouseleave="addOpen = false" class="group relative h-12 w-12 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-black shadow-2xl shadow-indigo-200 transition-all duration-300 overflow-hidden flex items-center justify-start active:scale-95 hover:scale-105 hover:-translate-y-0.5 hover:shadow-indigo-400/40">
-          <div class="absolute inset-y-0 left-0 flex items-center pl-3.5">
-            <Plus class="w-4 h-4 stroke-[3] transition-transform duration-300 group-hover:rotate-90 group-hover:scale-110" />
-          </div>
-          <span :class="[addOpen ? 'opacity-100' : 'opacity-0', 'whitespace-nowrap transition-all duration-300 pl-10 pr-4 uppercase tracking-widest text-[10px]']">Ajouter un Véhicule</span>
+      <div class="flex items-center gap-3">
+        <Button 
+          v-if="authStore.isAdmin" 
+          @click="openAddModal" 
+          class="h-11 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase text-[10px] tracking-widest shadow-lg shadow-indigo-600/20 flex items-center gap-2 active:scale-95 transition-all"
+        >
+          <Plus class="w-4 h-4 stroke-[3]" /> Nouveau Véhicule
         </Button>
       </div>
     </div>
 
+    <!-- 2. KPI Summary Bar (Clickable Filter Tabs) -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div 
+        @click="filters.availableOnly = null"
+        :class="[
+          'p-5 rounded-3xl bg-white border shadow-xs space-y-1.5 cursor-pointer transition-all',
+          filters.availableOnly === null ? 'border-indigo-500 ring-2 ring-indigo-500/10' : 'border-slate-200/80 hover:border-slate-300'
+        ]"
+      >
+        <div class="flex items-center justify-between text-slate-400">
+          <span class="text-[10px] font-black uppercase tracking-wider text-slate-500">Total Flotte</span>
+          <div class="w-8 h-8 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center font-bold">
+            <CarIcon class="w-4 h-4" />
+          </div>
+        </div>
+        <div class="text-2xl font-black text-slate-900 font-mono">
+          {{ totalCarsCount }} <span class="text-xs font-bold text-slate-400">véhicules</span>
+        </div>
+        <div class="text-[10px] font-bold text-slate-400">
+          Ensemble du parc automobile
+        </div>
+      </div>
+
+      <div 
+        @click="filters.availableOnly = true"
+        :class="[
+          'p-5 rounded-3xl bg-white border shadow-xs space-y-1.5 cursor-pointer transition-all',
+          filters.availableOnly === true ? 'border-emerald-500 ring-2 ring-emerald-500/10' : 'border-slate-200/80 hover:border-slate-300'
+        ]"
+      >
+        <div class="flex items-center justify-between text-slate-400">
+          <span class="text-[10px] font-black uppercase tracking-wider text-slate-500">Disponibles</span>
+          <div class="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+          </div>
+        </div>
+        <div class="text-2xl font-black text-emerald-600 font-mono">
+          {{ availableCarsCount }} <span class="text-xs font-bold text-slate-400">véhicules</span>
+        </div>
+        <div class="text-[10px] font-bold text-emerald-600">
+          Prêts pour location immédiate
+        </div>
+      </div>
+
+      <div 
+        @click="filters.availableOnly = false"
+        :class="[
+          'p-5 rounded-3xl bg-white border shadow-xs space-y-1.5 cursor-pointer transition-all',
+          filters.availableOnly === false ? 'border-rose-500 ring-2 ring-rose-500/10' : 'border-slate-200/80 hover:border-slate-300'
+        ]"
+      >
+        <div class="flex items-center justify-between text-slate-400">
+          <span class="text-[10px] font-black uppercase tracking-wider text-slate-500">Loués / En Contrat</span>
+          <div class="w-8 h-8 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center">
+            <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
+          </div>
+        </div>
+        <div class="text-2xl font-black text-rose-600 font-mono">
+          {{ rentedCarsCount }} <span class="text-xs font-bold text-slate-400">véhicules</span>
+        </div>
+        <div class="text-[10px] font-bold text-rose-600">
+          Actuellement sur la route
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. Dedicated Filters Toolbar -->
+    <div class="p-4 sm:p-5 rounded-3xl bg-white border border-slate-200/80 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <!-- Search Input -->
+      <div class="relative flex-1 max-w-md">
+        <Search class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+        <input
+          v-model="filters.brand"
+          placeholder="Rechercher par marque, modèle ou matricule..."
+          class="w-full h-11 pl-10 pr-9 bg-slate-50 hover:bg-slate-100/60 focus:bg-white rounded-xl text-xs font-bold text-slate-900 outline-none border border-slate-200 focus:border-indigo-600 transition-all placeholder:text-slate-400"
+        />
+        <button 
+          v-if="filters.brand" 
+          @click="filters.brand = ''" 
+          class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+        >
+          <X class="w-3.5 h-3.5" />
+        </button>
+      </div>
+
+      <!-- Availability Filter Tabs -->
+      <div class="flex items-center gap-1.5 p-1 bg-slate-100 rounded-2xl border border-slate-200/60">
+        <button
+          @click="filters.availableOnly = null"
+          :class="[
+            'px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer',
+            filters.availableOnly === null
+              ? 'bg-white text-slate-900 shadow-sm'
+              : 'text-slate-500 hover:text-slate-900'
+          ]"
+        >
+          <span>Tous</span>
+          <span class="px-1.5 py-0.5 rounded-full text-[9px] font-mono font-bold bg-slate-200 text-slate-700">{{ totalCarsCount }}</span>
+        </button>
+        <button
+          @click="filters.availableOnly = true"
+          :class="[
+            'px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer',
+            filters.availableOnly === true
+              ? 'bg-white text-emerald-700 shadow-sm'
+              : 'text-slate-500 hover:text-emerald-700'
+          ]"
+        >
+          <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+          <span>Disponibles</span>
+          <span class="px-1.5 py-0.5 rounded-full text-[9px] font-mono font-bold bg-emerald-100 text-emerald-800">{{ availableCarsCount }}</span>
+        </button>
+        <button
+          @click="filters.availableOnly = false"
+          :class="[
+            'px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer',
+            filters.availableOnly === false
+              ? 'bg-white text-rose-700 shadow-sm'
+              : 'text-slate-500 hover:text-rose-700'
+          ]"
+        >
+          <span class="w-2 h-2 rounded-full bg-rose-500"></span>
+          <span>Loués</span>
+          <span class="px-1.5 py-0.5 rounded-full text-[9px] font-mono font-bold bg-rose-100 text-rose-800">{{ rentedCarsCount }}</span>
+        </button>
+      </div>
+    </div>
+
     <!-- Main Table Card (Glass Design) -->
-    <Card class="border border-slate-200/50 shadow-[0_20px_60px_rgba(15,23,42,0.08)] [0_20px_60px_rgba(0,0,0,0.3)] bg-white/70 backdrop-blur-3xl overflow-hidden rounded-[2.5rem]">
+    <Card class="border border-slate-200/70 shadow-[0_20px_50px_-20px_rgba(15,23,42,0.07)] bg-white/95 backdrop-blur-2xl overflow-hidden rounded-[2.5rem]">
       <CardContent class="p-0">
         <div class="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow class="bg-slate-50/50 border-b border-slate-100">
-                <TableHead class="pl-10 py-6 text-slate-400 font-black text-[9px] tracking-[0.3em] uppercase">VÉHICULE & MODÈLE</TableHead>
+                <TableHead class="pl-10 py-6 text-slate-400 font-black text-[9px] tracking-[0.3em] uppercase">VÉHICULE &amp; MODÈLE</TableHead>
                 <TableHead class="text-slate-400 font-black text-[9px] tracking-[0.3em] uppercase">MATRICULE / COULEUR</TableHead>
                 <TableHead class="text-slate-400 font-black text-[9px] tracking-[0.3em] uppercase">AGENCE</TableHead>
                 <TableHead class="text-slate-400 font-black text-[9px] tracking-[0.3em] uppercase text-center">KM / ÉTAT</TableHead>
@@ -380,13 +530,11 @@ const getStatusBadge = (car: any) => {
                 v-for="car in paginatedCars" 
                 :key="car._id"
                 @click="router.push(`/cars/${car._id}`)"
-                :class="[
-                  'group border-slate-100 transition-all duration-500 cursor-pointer hover:bg-indigo-50/40 relative active:scale-[0.998]'
-                ]"
+                class="group border-b border-slate-100/80 transition-all duration-300 cursor-pointer hover:bg-indigo-50/30 relative"
               >
                 <TableCell class="pl-10 py-7">
                   <div class="flex flex-col gap-1">
-                    <span class="font-black text-slate-900 group-hover:text-indigo-600 :text-indigo-400 transition-colors tracking-tight text-base uppercase italic">{{ car.brand }} {{ car.model }}</span>
+                    <span class="font-black text-slate-900 group-hover:text-indigo-600 transition-colors tracking-tight text-base uppercase italic">{{ car.brand }} {{ car.model }}</span>
                     <span class="text-[9px] font-black text-indigo-400/80 uppercase tracking-widest leading-none">Dernière Maintenance: {{ formatDate(car.departureDate) }}</span>
                   </div>
                 </TableCell>
@@ -425,12 +573,12 @@ const getStatusBadge = (car: any) => {
                 </TableCell>
 
                 <TableCell v-if="authStore.isAdmin" class="pr-10 text-right">
-                  <div class="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all translate-x-4 group-hover:translate-x-0 duration-500">
+                  <div class="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all translate-x-4 group-hover:translate-x-0 duration-300">
                     <Button 
                       variant="secondary" 
                       size="icon" 
                       @click.stop="deleteCar(car)"
-                      class="h-11 w-11 text-slate-400 hover:text-rose-500 :text-rose-400 hover:bg-rose-500/10 :bg-rose-900/40 rounded-xl"
+                      class="h-10 w-10 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors border border-transparent hover:border-rose-100"
                     >
                       <Trash class="w-4 h-4 stroke-[2.5]" />
                     </Button>
@@ -438,7 +586,39 @@ const getStatusBadge = (car: any) => {
                 </TableCell>
               </TableRow>
               
-              <TableRow v-if="cars.length === 0 && !loading">
+              <!-- Skeleton Loading Rows -->
+              <template v-if="loading">
+                <TableRow v-for="i in 5" :key="'car-skel-' + i" class="animate-pulse border-b border-slate-100/80">
+                  <TableCell class="pl-10 py-7">
+                    <div class="space-y-2">
+                      <div class="h-4 bg-slate-200/80 rounded w-36"></div>
+                      <div class="h-3 bg-slate-100 rounded w-28"></div>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div class="space-y-2">
+                      <div class="h-4 bg-slate-200/80 rounded w-20"></div>
+                      <div class="h-3 bg-slate-100 rounded w-14"></div>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div class="h-4 bg-slate-200/80 rounded w-20"></div>
+                  </TableCell>
+                  <TableCell class="text-center">
+                    <div class="h-4 bg-slate-200/80 rounded w-16 mx-auto"></div>
+                  </TableCell>
+                  <TableCell class="text-center">
+                    <div class="h-5 bg-slate-200/80 rounded w-14 mx-auto"></div>
+                  </TableCell>
+                  <TableCell class="text-center">
+                    <div class="h-6 bg-slate-100 rounded-full w-24 mx-auto"></div>
+                  </TableCell>
+                  <TableCell v-if="authStore.isAdmin" class="pr-10 text-right">
+                    <div class="h-10 w-10 bg-slate-100 rounded-xl ml-auto"></div>
+                  </TableCell>
+                </TableRow>
+              </template>
+              <TableRow v-else-if="cars.length === 0">
                 <TableCell :colspan="authStore.isAdmin ? 7 : 6" class="h-60 text-center">
                   <div class="flex flex-col items-center gap-4 opacity-30">
                     <CarIcon class="w-16 h-16 stroke-[1]" />
@@ -449,15 +629,15 @@ const getStatusBadge = (car: any) => {
             </TableBody>
           </Table>
         </div>
-        <div v-if="sortedCars.length > pageSize" class="flex items-center justify-between px-10 py-5 border-t border-slate-100 bg-slate-50/50">
+        <div v-if="sortedCars.length > pageSize" class="flex items-center justify-between px-10 py-5 border-t border-slate-100/80 bg-slate-50/60 backdrop-blur-sm">
           <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">
             Page {{ currentPage }} / {{ totalCarPages }} — {{ sortedCars.length }} résultats
           </p>
           <div class="flex items-center gap-2">
-            <Button variant="outline" size="sm" :disabled="currentPage <= 1" @click="currentPage--" class="h-9 px-4 rounded-xl font-black text-[10px] uppercase tracking-widest border-slate-200 disabled:opacity-30">
+            <Button variant="outline" size="sm" :disabled="currentPage <= 1" @click="currentPage--" class="h-9 px-4 rounded-xl font-black text-[10px] uppercase tracking-widest border-slate-200 hover:bg-white hover:text-indigo-600 transition-all disabled:opacity-30">
               <ChevronLeft class="w-4 h-4 mr-1" /> Précédent
             </Button>
-            <Button variant="outline" size="sm" :disabled="currentPage >= totalCarPages" @click="currentPage++" class="h-9 px-4 rounded-xl font-black text-[10px] uppercase tracking-widest border-slate-200 disabled:opacity-30">
+            <Button variant="outline" size="sm" :disabled="currentPage >= totalCarPages" @click="currentPage++" class="h-9 px-4 rounded-xl font-black text-[10px] uppercase tracking-widest border-slate-200 hover:bg-white hover:text-indigo-600 transition-all disabled:opacity-30">
               Suivant <ChevronRight class="w-4 h-4 ml-1" />
             </Button>
           </div>
@@ -713,11 +893,12 @@ const getStatusBadge = (car: any) => {
       v-model:open="showSecurityModal"
       v-model:password="adminPassword"
       title="Confirmation"
-      subtitle="Requise"
-      description="Autorisation de suppression définitive du véhicule"
+      subtitle="Suppression"
+      description="Autorisation de suppression définitive du véhicule."
       placeholder="Mot de passe admin..."
-      confirm-label="Confirmer"
+      confirm-label="Supprimer le véhicule"
       loading-label="Suppression..."
+      variant="danger"
       :loading="submitting"
       @confirm="executeDelete"
     />

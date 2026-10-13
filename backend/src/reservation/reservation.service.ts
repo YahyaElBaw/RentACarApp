@@ -147,23 +147,65 @@ export class ReservationService {
 
     const list = await this.reservationModel
       .find(query)
-      .populate({ path: 'car', model: 'Car' })
-      .populate({ path: 'clients', model: 'Client' })
-      .populate('contrat')
+      .populate({ path: 'car', model: 'Car', select: 'brand model matricule color dailyRate' })
+      .populate({ path: 'clients', model: 'Client', select: 'firstName lastName cin phone' })
+      .populate({ path: 'contrat', model: 'Contrat', select: 'reference status' })
+      .sort({ createdAt: -1 })
       .lean()
       .exec();
 
+    // Collect any unpopulated client IDs to batch-fetch in 1 single query
+    const missingClientIds = new Set<string>();
     for (const res of list as any[]) {
-      await this.normalizeClientData(res);
-      const firstClient = res.clients?.[0];
+      const rawClients = res.clients && Array.isArray(res.clients) && res.clients.length > 0
+        ? res.clients
+        : res.client ? [res.client] : [];
+      for (const c of rawClients) {
+        if (c && (typeof c !== 'object' || !c.lastName)) {
+          const id = typeof c === 'object' ? c._id?.toString() : c.toString();
+          if (id) missingClientIds.add(id);
+        }
+      }
+    }
+
+    let clientsMap = new Map<string, any>();
+    if (missingClientIds.size > 0) {
+      try {
+        const fetched = await this.clientModel
+          .find({ _id: { $in: Array.from(missingClientIds) } })
+          .select('firstName lastName cin phone')
+          .lean()
+          .exec();
+        for (const cl of fetched) {
+          clientsMap.set(cl._id.toString(), cl);
+        }
+      } catch (err) {
+        console.error('Failed to batch load clients for reservations', err);
+      }
+    }
+
+    // In-memory assignment: 0 extra network calls!
+    for (const res of list as any[]) {
+      const rawClients = res.clients && Array.isArray(res.clients) && res.clients.length > 0
+        ? res.clients
+        : res.client ? [res.client] : [];
+
+      const normalized: any[] = [];
+      for (const c of rawClients) {
+        if (c && typeof c === 'object' && c.lastName) {
+          normalized.push(c);
+        } else if (c) {
+          const id = typeof c === 'object' ? c._id?.toString() : c.toString();
+          const found = clientsMap.get(id);
+          if (found) normalized.push(found);
+        }
+      }
+      res.clients = normalized;
+      const firstClient = normalized[0];
       res.clientName = firstClient
-        ? `${firstClient.lastName} ${firstClient.firstName}`
-            .trim()
-            .toUpperCase()
+        ? `${firstClient.lastName} ${firstClient.firstName}`.trim().toUpperCase()
         : '—';
-      res.clientPhone = firstClient
-        ? firstClient.phone || 'Pas de tél'
-        : 'Pas de tél';
+      res.clientPhone = firstClient ? firstClient.phone || 'Pas de tél' : 'Pas de tél';
       res.clientCin = firstClient ? firstClient.cin || '—' : '—';
     }
     return list;

@@ -1,85 +1,133 @@
 <template>
-  <div class="reservation-list-container space-y-10 p-8 max-w-7xl mx-auto">
-    <!-- Header & Integrated Action Bar -->
-    <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-8">
-      <div class="space-y-2">
-        <h1 class="text-4xl font-black tracking-tight text-slate-900 uppercase italic">Registre des <span class="text-indigo-600">Réservations</span></h1>
-        <p class="text-slate-400 font-bold uppercase text-[10px] tracking-[0.3em] pl-1">Planification &amp; Flux Opérationnel</p>
+  <div class="reservation-list-container space-y-8 p-6 sm:p-8 lg:p-10 max-w-7xl mx-auto">
+    <!-- 1. Header Section -->
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-5">
+      <div class="space-y-1">
+        <div class="flex items-center gap-3">
+          <div class="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-lg shadow-indigo-600/20">
+            <Calendar class="w-6 h-6 stroke-[2.2]" />
+          </div>
+          <div>
+            <h1 class="text-2xl sm:text-3xl font-black uppercase tracking-tight text-slate-900">
+              Registre des <span class="text-indigo-600">Réservations</span>
+            </h1>
+            <p class="text-[10px] uppercase tracking-widest font-bold text-slate-400">
+              Planification, gestion des demandes & conversion en contrats
+            </p>
+          </div>
+        </div>
       </div>
 
-      <div class="flex flex-wrap items-center gap-3">
-        <!-- Status filter tabs (icon only, expand on hover) -->
-        <div class="group relative h-12 transition-all duration-300 overflow-hidden rounded-2xl bg-slate-100 border-2 border-slate-200/50 hover:border-indigo-300 flex items-center active:scale-95"
-          :class="filterOpen ? 'w-72' : 'w-12'"
-          @mouseenter="filterOpen = true"
-          @mouseleave="filterOpen = false">
-          <div class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none">
-            <Filter class="w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-colors duration-300 group-hover:rotate-[-20deg] group-hover:scale-110" />
-            <span v-if="activeTab !== 'all'" class="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-indigo-500 rounded-full"></span>
-          </div>
-          <div :class="[filterOpen ? 'opacity-100' : 'opacity-0', 'pl-11 pr-2 flex items-center gap-1 whitespace-nowrap transition-opacity duration-300']">
-            <button
-              v-for="tab in statusTabs"
-              :key="tab.value"
-              @click="activeTab = tab.value"
-              :class="['px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all', activeTab === tab.value ? 'bg-white shadow-md text-indigo-600' : 'text-slate-400 hover:text-slate-600']"
-            >{{ tab.label }}</button>
-          </div>
-        </div>
-
-        <div class="group relative h-12 w-12 transition-all duration-300 overflow-hidden rounded-2xl bg-white border-2 border-slate-200 hover:border-indigo-400 flex items-center cursor-text active:scale-95 hover:shadow-xl hover:shadow-indigo-200/50"
-          :class="searchOpen ? 'w-80 border-indigo-500' : 'w-12'"
-          @mouseenter="searchOpen = true"
-          @mouseleave="searchOpen = false"
-          @focusin="searchOpen = true"
-          @focusout="searchOpen = false">
-          <div class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none">
-            <Search class="w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-colors duration-300" />
-          </div>
-          <input
-            v-model="filters.query"
-            placeholder="Client ou Véhicule..."
-            :class="[searchOpen ? 'opacity-100' : 'opacity-0', 'h-full w-full pl-10 pr-3 bg-transparent border-0 outline-none text-xs font-bold text-slate-900 placeholder:text-slate-400 transition-opacity duration-300']"
-          />
-        </div>
-
-        <Button @click="openForm" @mouseenter="addOpen = true" @mouseleave="addOpen = false" class="group relative h-12 w-12 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-black shadow-2xl shadow-indigo-200 transition-all duration-300 overflow-hidden flex items-center justify-start active:scale-95 hover:scale-105 hover:-translate-y-0.5 hover:shadow-indigo-400/40">
-          <div class="absolute inset-y-0 left-0 flex items-center pl-3.5">
-            <Plus class="w-4 h-4 stroke-[3] transition-transform duration-300 group-hover:rotate-90 group-hover:scale-110" />
-          </div>
-          <span :class="[addOpen ? 'opacity-100' : 'opacity-0', 'whitespace-nowrap transition-all duration-300 pl-10 pr-4 uppercase tracking-widest text-[10px]']">Nouvelle</span>
+      <div class="flex items-center gap-3">
+        <Button 
+          @click="openForm" 
+          class="h-11 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase text-[10px] tracking-widest shadow-lg shadow-indigo-600/20 flex items-center gap-2 active:scale-95 transition-all"
+        >
+          <Plus class="w-4 h-4 stroke-[3]" /> Nouvelle Réservation
         </Button>
       </div>
     </div>
 
-    <!-- Stats Bar -->
-    <div class="grid grid-cols-3 gap-4">
-      <div class="bg-white/70 border border-slate-100 rounded-2xl p-5 flex items-center gap-4 shadow-sm">
-        <div class="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center">
-          <Clock class="w-5 h-5 text-amber-500" />
+    <!-- 2. KPI Summary Bar (Clickable Filter Tabs) -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div 
+        @click="activeTab = 'pending'"
+        :class="[
+          'p-5 rounded-3xl bg-white border shadow-xs space-y-1.5 cursor-pointer transition-all',
+          activeTab === 'pending' ? 'border-amber-500 ring-2 ring-amber-500/10' : 'border-slate-200/80 hover:border-slate-300'
+        ]"
+      >
+        <div class="flex items-center justify-between text-slate-400">
+          <span class="text-[10px] font-black uppercase tracking-wider text-slate-500">En Attente</span>
+          <div class="w-8 h-8 rounded-xl bg-amber-50 text-amber-500 flex items-center justify-center font-bold">
+            <Clock class="w-4 h-4" />
+          </div>
         </div>
-        <div>
-          <p class="text-[9px] font-black uppercase tracking-widest text-slate-400">En Attente</p>
-          <p class="text-2xl font-black text-slate-900">{{ pendingCount }}</p>
+        <div class="text-2xl font-black text-amber-600 font-mono">
+          {{ pendingCount }}
+        </div>
+        <div class="text-[10px] font-bold text-amber-600">
+          En attente de confirmation
         </div>
       </div>
-      <div class="bg-white/70 border border-slate-100 rounded-2xl p-5 flex items-center gap-4 shadow-sm">
-        <div class="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center">
-          <CheckCircle2 class="w-5 h-5 text-emerald-500" />
+
+      <div 
+        @click="activeTab = 'confirmed'"
+        :class="[
+          'p-5 rounded-3xl bg-white border shadow-xs space-y-1.5 cursor-pointer transition-all',
+          activeTab === 'confirmed' ? 'border-emerald-500 ring-2 ring-emerald-500/10' : 'border-slate-200/80 hover:border-slate-300'
+        ]"
+      >
+        <div class="flex items-center justify-between text-slate-400">
+          <span class="text-[10px] font-black uppercase tracking-wider text-slate-500">Confirmées</span>
+          <div class="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+            <CheckCircle2 class="w-4 h-4" />
+          </div>
         </div>
-        <div>
-          <p class="text-[9px] font-black uppercase tracking-widest text-slate-400">Confirmées</p>
-          <p class="text-2xl font-black text-slate-900">{{ confirmedCount }}</p>
+        <div class="text-2xl font-black text-emerald-600 font-mono">
+          {{ confirmedCount }}
+        </div>
+        <div class="text-[10px] font-bold text-emerald-600">
+          Prêtes pour émission contrat
         </div>
       </div>
-      <div class="bg-white/70 border border-slate-100 rounded-2xl p-5 flex items-center gap-4 shadow-sm">
-        <div class="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center">
-          <FileText class="w-5 h-5 text-indigo-500" />
+
+      <div 
+        @click="activeTab = 'converted'"
+        :class="[
+          'p-5 rounded-3xl bg-white border shadow-xs space-y-1.5 cursor-pointer transition-all',
+          activeTab === 'converted' ? 'border-indigo-500 ring-2 ring-indigo-500/10' : 'border-slate-200/80 hover:border-slate-300'
+        ]"
+      >
+        <div class="flex items-center justify-between text-slate-400">
+          <span class="text-[10px] font-black uppercase tracking-wider text-slate-500">Converties en Contrat</span>
+          <div class="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+            <FileText class="w-4 h-4" />
+          </div>
         </div>
-        <div>
-          <p class="text-[9px] font-black uppercase tracking-widest text-slate-400">En Contrat</p>
-          <p class="text-2xl font-black text-slate-900">{{ convertedCount }}</p>
+        <div class="text-2xl font-black text-indigo-600 font-mono">
+          {{ convertedCount }}
         </div>
+        <div class="text-[10px] font-bold text-indigo-600">
+          Contrats formellement générés
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. Dedicated Filters Toolbar -->
+    <div class="p-4 sm:p-5 rounded-3xl bg-white border border-slate-200/80 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <!-- Search Input -->
+      <div class="relative flex-1 max-w-md">
+        <Search class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+        <input 
+          v-model="filters.query" 
+          placeholder="Rechercher par client ou véhicule..." 
+          class="w-full h-11 pl-10 pr-9 bg-slate-50 hover:bg-slate-100/60 focus:bg-white rounded-xl text-xs font-bold text-slate-900 outline-none border border-slate-200 focus:border-indigo-600 transition-all placeholder:text-slate-400"
+        />
+        <button 
+          v-if="filters.query" 
+          @click="filters.query = ''" 
+          class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+        >
+          <X class="w-3.5 h-3.5" />
+        </button>
+      </div>
+
+      <!-- Status Filter Tabs -->
+      <div class="flex items-center gap-1.5 p-1 bg-slate-100 rounded-2xl border border-slate-200/60">
+        <button
+          v-for="tab in statusTabs"
+          :key="tab.value"
+          @click="activeTab = tab.value"
+          :class="[
+            'px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer',
+            activeTab === tab.value
+              ? 'bg-white text-indigo-700 shadow-sm'
+              : 'text-slate-500 hover:text-slate-900'
+          ]"
+        >
+          {{ tab.label }}
+        </button>
       </div>
     </div>
 
@@ -206,7 +254,44 @@
                 </TableCell>
               </TableRow>
 
-              <TableRow v-if="filteredReservations.length === 0 && !loading">
+              <!-- Skeleton Loading Rows -->
+              <template v-if="loading">
+                <TableRow v-for="i in 5" :key="'res-skel-' + i" class="animate-pulse border-slate-100">
+                  <TableCell class="pl-10 py-6">
+                    <div class="space-y-2">
+                      <div class="h-4 bg-slate-200/80 rounded w-28"></div>
+                      <div class="h-3 bg-slate-100 rounded w-36"></div>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div class="flex items-center gap-3">
+                      <div class="w-9 h-9 rounded-xl bg-slate-200/80"></div>
+                      <div class="space-y-1.5">
+                        <div class="h-4 bg-slate-200/80 rounded w-28"></div>
+                        <div class="h-2.5 bg-slate-100 rounded w-16"></div>
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div class="flex items-center gap-3">
+                      <div class="w-9 h-9 rounded-xl bg-slate-200/80"></div>
+                      <div class="space-y-1.5">
+                        <div class="h-4 bg-slate-200/80 rounded w-24"></div>
+                        <div class="h-2.5 bg-slate-100 rounded w-14"></div>
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell class="text-center">
+                    <div class="h-6 bg-slate-100 rounded-full w-20 mx-auto"></div>
+                  </TableCell>
+                  <TableCell v-if="authStore.isAdmin" class="pr-10 text-right">
+                    <div class="h-9 w-24 bg-slate-100 rounded-xl ml-auto"></div>
+                  </TableCell>
+                </TableRow>
+              </template>
+
+              <!-- Empty State -->
+              <TableRow v-else-if="filteredReservations.length === 0">
                 <TableCell :colspan="authStore.isAdmin ? 5 : 4" class="h-60 text-center">
                   <div class="flex flex-col items-center gap-4 opacity-30">
                     <CalendarX class="w-16 h-16 stroke-[1]" />
@@ -772,7 +857,33 @@
         </div>
 
         <form @submit.prevent="submitReservation()" class="flex-1 overflow-y-auto no-scrollbar flex flex-col min-h-0">
-          <div class="px-8 py-7 space-y-7 flex-1">
+
+          <!-- Loading skeleton while resources fetch in background -->
+          <div v-if="formResourcesLoading" class="px-8 py-7 space-y-5 flex-1">
+            <div class="space-y-3">
+              <div class="h-3 w-24 bg-slate-100 rounded-full animate-pulse"></div>
+              <div class="h-12 bg-slate-100 rounded-xl animate-pulse"></div>
+              <div class="h-12 bg-slate-100 rounded-xl animate-pulse"></div>
+            </div>
+            <div class="space-y-3">
+              <div class="h-3 w-32 bg-slate-100 rounded-full animate-pulse"></div>
+              <div class="grid grid-cols-2 gap-4">
+                <div class="h-12 bg-slate-100 rounded-xl animate-pulse"></div>
+                <div class="h-12 bg-slate-100 rounded-xl animate-pulse"></div>
+                <div class="h-12 bg-slate-100 rounded-xl animate-pulse"></div>
+                <div class="h-12 bg-slate-100 rounded-xl animate-pulse"></div>
+              </div>
+            </div>
+            <div class="space-y-3">
+              <div class="h-3 w-20 bg-slate-100 rounded-full animate-pulse"></div>
+              <div class="h-12 bg-slate-100 rounded-xl animate-pulse"></div>
+            </div>
+            <div class="pt-4 text-center">
+              <p class="text-[9px] font-black uppercase tracking-[0.3em] text-slate-300">Chargement des données...</p>
+            </div>
+          </div>
+
+          <div v-else class="px-8 py-7 space-y-7 flex-1">
 
             <!-- ── Locataires ─────────────────────────────────────── -->
             <div class="space-y-4">
@@ -1040,7 +1151,7 @@
                 <p v-if="editStatus === 'converted'" class="text-[9px] font-bold text-amber-500 italic -mt-1">Le statut « Contrat » ouvrira la sélection d'un contrat existant après l'enregistrement.</p>
               </div>
             </transition>
-          </div>
+           </div>
 
           <!-- Footer -->
           <div class="border-t border-slate-100 px-8 py-5 bg-slate-50/60 flex items-center gap-3 shrink-0 sticky bottom-0">
@@ -1865,7 +1976,11 @@ const openDetail = (res: any) => {
   selectedReservation.value = res;
 };
 
+// Tracks whether form dropdown data is still being fetched
+const formResourcesLoading = ref(false);
+
 const ensureFormResources = async () => {
+  formResourcesLoading.value = true;
   const tasks: Promise<any>[] = [];
   if (clients.value.length === 0 || cars.value.length === 0) {
     tasks.push(
@@ -1883,10 +1998,12 @@ const ensureFormResources = async () => {
     await Promise.all(tasks);
   } catch (err) {
     console.error('Failed to load resources', err);
+  } finally {
+    formResourcesLoading.value = false;
   }
 };
 
-const openForm = async () => {
+const openForm = () => {
   editingReservationId.value = null;
   form.client = '';
   form.client2 = '';
@@ -1898,16 +2015,15 @@ const openForm = async () => {
   form.dailyRate = 0;
   form.notes = '';
 
-  await ensureFormResources();
+  // Show dialog immediately — load resources in background
   showForm.value = true;
+  ensureFormResources();
 };
 
-const openEditReservation = async (res: any) => {
+const openEditReservation = (res: any) => {
   if (!res) return;
   selectedReservation.value = res;
   editingReservationId.value = res._id;
-
-  await ensureFormResources();
 
   const s = splitDateTime(res.startDate);
   const e = splitDateTime(res.endDate);
@@ -1924,7 +2040,9 @@ const openEditReservation = async (res: any) => {
   form.notes = res.notes || '';
   editStatus.value = res.status || 'pending';
 
+  // Show dialog immediately — load resources in background
   showForm.value = true;
+  ensureFormResources();
 };
 
 const submitReservation = async (force = false) => {
@@ -2164,22 +2282,22 @@ const proceedToContract = () => {
   showContractRefDialog.value = false;
 };
 
-const openAssignCarDialog = async () => {
+const openAssignCarDialog = () => {
   assignCarMode.value = 'assign';
   assignCarInput.value = '';
-  if (cars.value.length === 0) {
-    cars.value = await carApi.getAll();
-  }
   showAssignCarDialog.value = true;
+  if (cars.value.length === 0) {
+    carApi.getAll().then(list => { cars.value = list; });
+  }
 };
 
-const openChangeCarDialog = async () => {
+const openChangeCarDialog = () => {
   assignCarMode.value = 'change';
   assignCarInput.value = selectedReservation.value?.car?._id || '';
-  if (cars.value.length === 0) {
-    cars.value = await carApi.getAll();
-  }
   showAssignCarDialog.value = true;
+  if (cars.value.length === 0) {
+    carApi.getAll().then(list => { cars.value = list; });
+  }
 };
 
 const proceedToAssignAndConfirm = () => {

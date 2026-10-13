@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { contratApi, carApi, clientApi, settingApi, getImageUrl, agenceApi } from '@/api';
+import { contratApi, carApi, clientApi, settingApi, getImageUrl, agenceApi, lotContratApi } from '@/api';
 import { formatDate } from '@/lib/utils';
+import CarnetDetailModal from '@/components/CarnetDetailModal.vue';
 import { 
   ArrowLeft, Download, 
   Car, Calendar, Phone, 
@@ -11,7 +12,7 @@ import {
   ChevronRight, ClipboardList,
   ShieldAlert, Lock, Eye, EyeOff, Printer,
   ChevronDown, User, MapPin, Fuel,
-  CalendarClock, Banknote, NotepadText, X
+  CalendarClock, Banknote, NotepadText, X, BookOpen, Edit, Trash2
 } from 'lucide-vue-next';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -34,6 +35,32 @@ const contrat = ref<any>(null);
 const loading = ref(true);
 const cloturing = ref(false);
 const deleting = ref(false);
+
+// Carnet Management Modal (optional quick view)
+const showCarnetModal = ref(false);
+const selectedCarnet = ref<any>(null);
+
+const openCarnetModal = async () => {
+  if (contrat.value?.lot) {
+    selectedCarnet.value = typeof contrat.value.lot === 'object' ? contrat.value.lot : null;
+    showCarnetModal.value = true;
+    return;
+  }
+  try {
+    const lots = await lotContratApi.getAll();
+    const refNum = parseInt(String(contrat.value.reference).replace(/\D/g, ''), 10);
+    const matched = lots.find((l: any) => refNum >= l.startNumber && refNum <= l.endNumber);
+    if (matched) {
+      selectedCarnet.value = matched;
+      showCarnetModal.value = true;
+      return;
+    }
+  } catch (err) {}
+};
+
+const onCarnetUpdated = async () => {
+  await fetchContrat();
+};
 
 // Deletion State
 const showDeleteDialog = ref(false);
@@ -102,11 +129,25 @@ const editForm = ref({
   carburantLevel: 50,
   lieuDepart: 'Djerba',
   lieuRetour: 'Djerba',
+  lot: '',
   password: '',
 });
 
 const agencies = ref<string[]>([]);
+const availableLots = ref<any[]>([]);
 const skipCarWatch = ref(false);
+
+const selectedLotInfo = computed(() => {
+  if (!editForm.value.lot) return null;
+  return availableLots.value.find((l: any) => l._id === editForm.value.lot) || null;
+});
+
+const isRefWithinSelectedLot = computed(() => {
+  if (!selectedLotInfo.value || !contrat.value?.reference) return null;
+  const num = parseInt(String(contrat.value.reference).replace(/\D/g, ''), 10);
+  if (isNaN(num)) return null;
+  return num >= selectedLotInfo.value.startNumber && num <= selectedLotInfo.value.endNumber;
+});
 
 const openEditDialog = async () => {
   editError.value = '';
@@ -143,6 +184,7 @@ const openEditDialog = async () => {
       carburantLevel: contrat.value.carburantLevel ?? 50,
       lieuDepart: contrat.value.lieuDepart || 'Djerba',
       lieuRetour: contrat.value.lieuRetour || 'Djerba',
+      lot: contrat.value.lot?._id || (typeof contrat.value.lot === 'string' ? contrat.value.lot : ''),
       password: '',
     };
     
@@ -154,18 +196,30 @@ const openEditDialog = async () => {
   showEditDialog.value = true;
   
   try {
-    const [carsData, clientsData, settingsData] = await Promise.all([
+    const [carsData, clientsData, settingsData, lotsData] = await Promise.all([
       carApi.getAll(),
       clientApi.getAll(),
-      settingApi.get()
+      settingApi.get(),
+      lotContratApi.getAll().catch(() => [])
     ]);
     cars.value = carsData.filter((c: any) => !c.disabled);
     clients.value = clientsData.filter((c: any) => !c.disabled);
+    availableLots.value = lotsData || [];
     if (settingsData?.agencies) {
       agencies.value = settingsData.agencies;
     }
+    // Auto-select matching carnet if not already assigned
+    if (!editForm.value.lot && contrat.value?.reference) {
+      const refNum = parseInt(String(contrat.value.reference).replace(/\D/g, ''), 10);
+      if (!isNaN(refNum)) {
+        const matched = availableLots.value.find((l: any) => refNum >= l.startNumber && refNum <= l.endNumber);
+        if (matched) {
+          editForm.value.lot = matched._id;
+        }
+      }
+    }
   } catch (err) {
-    console.error('Erreur lors du chargement des voitures/clients:', err);
+    console.error('Erreur lors du chargement des voitures/clients/lots:', err);
   }
 };
 
@@ -248,6 +302,7 @@ const submitEdit = async (force = false) => {
       ...editForm.value,
       startDate: new Date(`${editForm.value.startDate}T${editForm.value.startTime}:00`).toISOString(),
       endDate: new Date(`${editForm.value.endDate}T${editForm.value.endTime}:00`).toISOString(),
+      lot: editForm.value.lot || null,
       force: force
     };
     const updated = await contratApi.update(contrat.value._id, payload);
@@ -420,11 +475,27 @@ const fetchAgences = async () => {
 };
 
 onMounted(async () => {
-  await fetchContrat();
-  await fetchAgences();
+  await Promise.all([fetchContrat(), fetchAgences()]);
   if (missingReturnMileage.value && authStore.isAdmin) {
-    returnMileageInput.value = contrat.value.car?.mileage || 0;
+    returnMileageInput.value = contrat.value?.car?.mileage || 0;
     showReturnMileageAlert.value = true;
+  }
+  if (route.query.edit === 'true' || route.query.edit === '1') {
+    openEditDialog();
+  }
+});
+
+watch(() => route.query.edit, (val) => {
+  if ((val === 'true' || val === '1') && contrat.value && !showEditDialog.value) {
+    openEditDialog();
+  }
+});
+
+watch(showEditDialog, (isOpen) => {
+  if (!isOpen && (route.query.edit === 'true' || route.query.edit === '1')) {
+    const q = { ...route.query };
+    delete q.edit;
+    router.replace({ query: q });
   }
 });
 
@@ -656,36 +727,76 @@ const submitCloture = async () => {
     <template v-else-if="contrat">
       <div class="space-y-8">
         
-        <!-- HEADER SECTION -->
-        <div class="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white border border-border shadow-sm p-8 rounded-[2.5rem] relative overflow-hidden">
-           <div class="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full blur-3xl -mr-16 -mt-16"></div>
-           <div class="flex items-center gap-6 relative z-10">
-              <Button variant="ghost" size="icon" @click="router.back()" class="h-12 w-12 rounded-2xl">
-                 <ArrowLeft class="w-6 h-6" />
+        <!-- HEADER SECTION (Modern HUD Card) -->
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-6 bg-white border border-slate-200/80 shadow-xs p-6 sm:p-8 rounded-[2rem] relative overflow-hidden">
+           <div class="flex items-center gap-4 sm:gap-5 relative z-10 min-w-0">
+              <Button variant="secondary" size="icon" @click="router.back()" class="h-12 w-12 rounded-2xl bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-700 shadow-xs transition-all active:scale-95 shrink-0">
+                 <ArrowLeft class="w-5 h-5" />
               </Button>
-              <div class="space-y-1">
-                 <h1 class="text-4xl font-black tracking-tighter uppercase leading-none italic">
-                    Contrat <span class="text-primary">{{ contrat.reference }}</span>
-                 </h1>
-                 <div class="flex items-center gap-3">
+              <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-600 to-indigo-800 text-white flex items-center justify-center shadow-lg shadow-indigo-600/25 shrink-0">
+                 <ClipboardList class="w-6 h-6 stroke-[2.2]" />
+              </div>
+              <div class="space-y-1.5 min-w-0">
+                 <div class="flex items-center gap-3 flex-wrap">
+                    <h1 class="text-2xl sm:text-3xl font-black tracking-tight uppercase leading-none italic text-slate-900">
+                       Contrat <span class="text-indigo-600">#{{ contrat.reference }}</span>
+                    </h1>
                     <Badge :class="['px-3 py-1 text-[9px] font-black tracking-[0.2em] border rounded-full uppercase', getStatusBadge(contrat).class]">
                        {{ getStatusBadge(contrat).label }}
                     </Badge>
-                    <Badge v-if="contrat.isPaid" class="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 px-3 py-1 text-[9px] font-black tracking-[0.2em] border rounded-full uppercase">
+                    <Badge v-if="contrat.isPaid" class="bg-emerald-50 text-emerald-700 border-emerald-200/80 px-3 py-1 text-[9px] font-black tracking-[0.2em] border rounded-full uppercase">
                        Payé
                     </Badge>
-                    <Badge v-else class="bg-amber-500/10 text-amber-500 border-amber-500/20 px-3 py-1 text-[9px] font-black tracking-[0.2em] border rounded-full uppercase">
+                    <Badge v-else class="bg-amber-50 text-amber-700 border-amber-200/80 px-3 py-1 text-[9px] font-black tracking-[0.2em] border rounded-full uppercase">
                        En attente
                     </Badge>
+                    <Badge v-if="contrat.lot" @click="openCarnetModal" class="cursor-pointer hover:bg-indigo-100 bg-indigo-50 text-indigo-700 border-indigo-200 px-3 py-1 text-[9px] font-black tracking-[0.2em] border rounded-full uppercase flex items-center gap-1.5 transition-all shadow-2xs" title="Cliquer pour voir les détails du carnet">
+                       <BookOpen class="w-3 h-3 text-indigo-600" />
+                       Carnet: {{ contrat.lot.name || 'Lot' }}
+                    </Badge>
                  </div>
+                 <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                    Dossier de location &bull; Créé le {{ formatDate(contrat.createdAt) }}
+                 </p>
               </div>
            </div>
-           <div class="relative z-10 flex items-center gap-3">
-              <Button @click="openPrintModal" class="h-12 px-6 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black uppercase tracking-widest text-[10px] flex items-center gap-2 shadow-lg shadow-indigo-600/20">
-                <Printer class="w-4 h-4" /> Imprimer Contrat
+           <div class="relative z-10 flex items-center gap-2 sm:gap-2.5 shrink-0 flex-nowrap overflow-x-auto max-w-full pb-1 lg:pb-0">
+              <!-- Modifier -->
+              <Button 
+                v-if="authStore.isAdmin && (contrat.status !== 'terminé' && contrat.status !== 'clôturé' || authStore.isSuperAdmin)"
+                @click="openEditDialog" 
+                class="h-11 px-4 sm:px-5 bg-indigo-600 hover:bg-indigo-700 text-white border border-indigo-600 rounded-xl font-black uppercase tracking-wider text-[10px] inline-flex items-center justify-center gap-2 shrink-0 shadow-sm shadow-indigo-600/20 active:scale-95 transition-all"
+              >
+                <Edit class="w-4 h-4 stroke-[2.2] shrink-0" />
+                <span>Modifier</span>
               </Button>
-              <Button @click="downloadPdf" variant="outline" class="h-12 px-6 border-2 border-border rounded-xl font-black uppercase tracking-widest text-[10px] flex items-center gap-2">
-                <Download class="w-4 h-4" /> PDF
+
+              <!-- Imprimer -->
+              <Button 
+                @click="openPrintModal" 
+                class="h-11 px-4 sm:px-5 bg-slate-900 hover:bg-slate-800 text-white border border-slate-900 rounded-xl font-black uppercase tracking-wider text-[10px] inline-flex items-center justify-center gap-2 shrink-0 shadow-sm active:scale-95 transition-all"
+              >
+                <Printer class="w-4 h-4 stroke-[2.2] shrink-0" />
+                <span>Imprimer</span>
+              </Button>
+
+              <!-- PDF -->
+              <Button 
+                @click="downloadPdf" 
+                class="h-11 px-4 sm:px-5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-xl font-black uppercase tracking-wider text-[10px] inline-flex items-center justify-center gap-2 shrink-0 shadow-2xs active:scale-95 transition-all"
+              >
+                <Download class="w-4 h-4 stroke-[2.2] shrink-0" />
+                <span>PDF</span>
+              </Button>
+
+              <!-- Supprimer -->
+              <Button 
+                v-if="authStore.isAdmin" 
+                @click="openDeleteDialog" 
+                class="h-11 px-4 sm:px-5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 font-black uppercase tracking-wider text-[10px] inline-flex items-center justify-center gap-2 shrink-0 shadow-2xs active:scale-95 transition-all"
+              >
+                <Trash2 class="w-4 h-4 stroke-[2.2] shrink-0" />
+                <span>Supprimer</span>
               </Button>
            </div>
         </div>
@@ -766,8 +877,19 @@ const submitCloture = async () => {
          <!-- MASTER CARD -->
          <Card class="bg-white border text-foreground border-border shadow-2xl rounded-[3rem] overflow-hidden">
             <!-- Card Header -->
-            <div class="px-8 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-               <h3 class="text-[10px] font-black uppercase tracking-[0.3em] text-primary">Dossier de Location</h3>
+            <div class="px-8 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+               <div class="flex items-center gap-3">
+                  <div class="w-2.5 h-2.5 rounded-full bg-indigo-600"></div>
+                  <h3 class="text-[10px] font-black uppercase tracking-[0.3em] text-slate-800">Dossier de Location</h3>
+               </div>
+               <Button 
+                 v-if="authStore.isAdmin && contrat.status === 'active'"
+                 @click="showCloseDialog = true" 
+                 class="h-10 px-5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black uppercase tracking-wider text-[10px] inline-flex items-center gap-2 shadow-sm shadow-emerald-600/20 active:scale-95 transition-all"
+               >
+                 <CheckCircle2 class="w-4 h-4 stroke-[2.2] shrink-0" />
+                 <span>Clôturer le Contrat</span>
+               </Button>
             </div>
             
             <CardContent class="p-0">
@@ -917,33 +1039,7 @@ const submitCloture = async () => {
             </CardContent>
          </Card>
 
-         <!-- ACTION FOOTER SECTION -->
-         <div class="flex flex-col md:flex-row justify-end gap-4 mt-8">
-            <Button 
-               v-if="authStore.isAdmin && contrat.status === 'active'" 
-               @click="showCloseDialog = true" 
-               class="h-16 px-8 md:w-[300px] bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl font-black uppercase text-xs tracking-widest shadow-lg shadow-emerald-500/20 transition-transform active:scale-95"
-            >
-               Clôturer
-            </Button>
-            
-            <Button 
-               v-if="authStore.isAdmin && (contrat.status !== 'terminé' && contrat.status !== 'clôturé' || authStore.isSuperAdmin)" 
-               @click="openEditDialog" 
-               class="h-16 px-8 md:w-[200px] bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black uppercase text-xs tracking-widest shadow-lg shadow-indigo-600/20 gap-3 active:scale-95"
-            >
-               <ClipboardList class="w-4 h-4"/> Modifier
-            </Button>
-            
-            <Button 
-               v-if="authStore.isAdmin" 
-               @click="openDeleteDialog" 
-               variant="destructive" 
-               class="h-16 px-8 md:w-[200px] rounded-2xl font-black uppercase text-xs tracking-widest shadow-lg shadow-destructive/20 gap-3 active:scale-95"
-            >
-               <ShieldAlert class="w-4 h-4"/> Supprimer
-            </Button>
-         </div>
+
 
       </div>
       <!-- DIALOGS -->
@@ -962,7 +1058,7 @@ const submitCloture = async () => {
       />
 
       <!-- EDIT CONTRAT DIALOG -->
-      <Dialog v-model:open="showEditDialog">
+      <Dialog v-if="showEditDialog" v-model:open="showEditDialog">
          <DialogContent hideClose class="max-w-3xl bg-white border-border shadow-3xl rounded-[2.5rem] p-0 overflow-hidden text-foreground max-h-[92vh] flex flex-col">
             <DialogHeader class="px-10 py-8 bg-gradient-to-br from-indigo-600 via-indigo-600 to-violet-600 text-white relative shrink-0 overflow-hidden">
                <div class="absolute top-0 right-0 w-40 h-40 bg-white/10 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none"></div>
@@ -1025,6 +1121,57 @@ const submitCloture = async () => {
                               </option>
                            </select>
                            <ChevronDown class="w-4 h-4 text-slate-400 pointer-events-none absolute right-4 top-1/2 -translate-y-1/2" />
+                        </div>
+                     </div>
+                  </div>
+               </div>
+
+               <!-- Carnet de Contrats (Lot) -->
+               <div class="bg-indigo-50/40 border border-indigo-100 rounded-2xl p-6 relative overflow-hidden">
+                  <div class="flex items-center justify-between mb-5">
+                     <div class="flex items-center gap-3">
+                        <div class="w-9 h-9 rounded-xl bg-indigo-600/10 text-indigo-600 flex items-center justify-center shrink-0">
+                           <BookOpen class="w-4 h-4" />
+                        </div>
+                        <div>
+                           <h4 class="text-[10px] font-black uppercase tracking-[0.25em] text-slate-800">Carnet de Contrat (Lot)</h4>
+                           <p class="text-[9px] text-slate-500 font-bold uppercase tracking-wider mt-0.5">Liaison avec la souche carnet</p>
+                        </div>
+                     </div>
+                     <Badge v-if="contrat.lot" class="bg-indigo-600/10 text-indigo-700 border-indigo-200 text-[8px] font-black uppercase tracking-wider">
+                        Carnet Actuel : {{ contrat.lot.name || 'Lié' }}
+                     </Badge>
+                  </div>
+
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-5 items-start">
+                     <div class="space-y-2">
+                        <label class="form-label">Sélectionner un carnet</label>
+                        <div class="relative">
+                           <select v-model="editForm.lot" class="form-field form-field-select">
+                              <option value="">-- Aucun carnet (Détaché) --</option>
+                              <option v-for="lot in availableLots" :key="lot._id" :value="lot._id">
+                                 {{ lot.name }} [{{ lot.startNumber }} - {{ lot.endNumber }}] ({{ lot.status }})
+                              </option>
+                           </select>
+                           <ChevronDown class="w-4 h-4 text-slate-400 pointer-events-none absolute right-4 top-1/2 -translate-y-1/2" />
+                        </div>
+                     </div>
+
+                     <div class="space-y-2">
+                        <label class="form-label">Contrôle de conformité</label>
+                        <div v-if="selectedLotInfo" class="p-3.5 rounded-xl border text-xs" :class="isRefWithinSelectedLot ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-800' : 'bg-amber-500/10 border-amber-500/20 text-amber-800'">
+                           <div class="flex items-center gap-2 font-black uppercase text-[9px] tracking-wider">
+                              <CheckCircle2 v-if="isRefWithinSelectedLot" class="w-4 h-4 text-emerald-600 shrink-0" />
+                              <AlertCircle v-else class="w-4 h-4 text-amber-600 shrink-0" />
+                              <span>{{ isRefWithinSelectedLot ? 'Intervalle respecté' : 'Hors intervalle' }}</span>
+                           </div>
+                           <p class="text-[10px] mt-1 text-slate-600 font-medium">
+                              Réf: <strong class="font-bold">#{{ contrat.reference }}</strong> | Plage carnet: <strong class="font-bold">[{{ selectedLotInfo.startNumber }} - {{ selectedLotInfo.endNumber }}]</strong>
+                           </p>
+                        </div>
+                        <div v-else class="p-3.5 rounded-xl border border-dashed border-slate-200 bg-white/70 text-slate-400 text-xs flex items-center gap-2.5">
+                           <AlertCircle class="w-4 h-4 shrink-0 text-slate-400" />
+                           <span class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Aucun carnet sélectionné</span>
                         </div>
                      </div>
                   </div>
@@ -1190,7 +1337,7 @@ const submitCloture = async () => {
         @confirm="confirmEditPassword"
       />
 
-      <Dialog v-model:open="showCloseDialog">
+      <Dialog v-if="showCloseDialog" v-model:open="showCloseDialog">
          <DialogContent class="max-w-xl bg-white border-border shadow-3xl rounded-[3rem] p-0 overflow-hidden text-foreground max-h-[90vh] flex flex-col">
             <DialogHeader class="p-10 bg-slate-900 text-white">
                <div class="flex items-center gap-5">
@@ -1225,7 +1372,7 @@ const submitCloture = async () => {
       </Dialog>
 
       <!-- RETURN MILEAGE ALERT DIALOG -->
-      <Dialog v-model:open="showReturnMileageAlert">
+      <Dialog v-if="showReturnMileageAlert" v-model:open="showReturnMileageAlert">
          <DialogContent class="max-w-lg bg-white border-border shadow-3xl rounded-[3rem] p-0 overflow-hidden text-foreground" @interact-outside.prevent @pointer-down-outside.prevent>
             <DialogHeader class="p-10 bg-red-50 border-b border-red-100">
                <div class="flex items-center gap-5">
@@ -1258,7 +1405,7 @@ const submitCloture = async () => {
       </Dialog>
 
       <!-- CAR INFORMATION MODAL -->
-      <Dialog v-model:open="showCarModal">
+      <Dialog v-if="showCarModal" v-model:open="showCarModal">
          <DialogContent class="max-w-xl bg-white border-border shadow-3xl rounded-[3rem] p-0 overflow-hidden text-foreground max-h-[90vh] flex flex-col">
             <DialogHeader class="p-10 bg-emerald-600 text-white relative">
                <div class="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-3xl -mr-16 -mt-16"></div>
@@ -1295,7 +1442,7 @@ const submitCloture = async () => {
       </Dialog>
 
       <!-- CLIENT INFORMATION MODAL -->
-      <Dialog v-model:open="showClientModal">
+      <Dialog v-if="showClientModal" v-model:open="showClientModal">
          <DialogContent class="max-w-2xl bg-white border-border shadow-3xl rounded-[3rem] p-0 overflow-hidden text-foreground max-h-[90vh] flex flex-col">
             <DialogHeader class="p-10 bg-primary text-white relative shrink-0">
                <div class="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-3xl -mr-16 -mt-16"></div>
@@ -1385,7 +1532,7 @@ const submitCloture = async () => {
       </Dialog>
 
       <!-- IMAGE LIGHTBOX DIALOG -->
-      <Dialog v-model:open="showImageModal">
+      <Dialog v-if="showImageModal" v-model:open="showImageModal">
          <DialogContent 
             class="max-w-[95vw] max-h-[95vh] bg-black/95 border-none shadow-none p-0 overflow-hidden flex items-center justify-center select-none" 
          >
@@ -1424,7 +1571,7 @@ const submitCloture = async () => {
       </Dialog>
 
       <!-- PRINT CONTRACT MODAL -->
-      <Dialog v-model:open="showPrintModal">
+      <Dialog v-if="showPrintModal" v-model:open="showPrintModal">
         <DialogContent class="sm:max-w-5xl bg-white text-slate-900 border-none shadow-3xl rounded-[2.5rem] p-0 overflow-hidden max-h-[95vh] flex flex-col no-print-dialog">
           <DialogHeader class="p-6 bg-indigo-50 border-b border-indigo-100 flex flex-row items-center justify-between">
             <div class="flex items-center gap-3">
@@ -1491,6 +1638,16 @@ const submitCloture = async () => {
         </DialogContent>
       </Dialog>
 
+      <!-- Carnet & Contrats Management Modal (Oriented from Carnet to Contrat) -->
+      <CarnetDetailModal
+        v-if="showCarnetModal"
+        v-model:open="showCarnetModal"
+        :initial-lot="selectedCarnet"
+        :lot-id="selectedCarnet?._id"
+        initial-tab="contrats"
+        :edit-contrat-id="contrat?._id"
+        @updated="onCarnetUpdated"
+      />
     </template>
   </div>
 </template>

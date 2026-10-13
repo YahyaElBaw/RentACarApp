@@ -63,6 +63,7 @@ export class BookingConflictService {
     const contractQuery: any = {
       car: carId,
       status: { $in: ['active', 'soon'] },
+      isDeleted: { $ne: true },
       startDate: { $lt: end },
       endDate: { $gt: start },
     };

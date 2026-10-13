@@ -128,15 +128,19 @@ export class ClientService implements OnModuleInit {
 
       return this.clientModel
         .find({ ...baseQuery, $and: andConditions })
+        .select('-cinFront -cinBack -licenseFront -licenseBack')
         .populate('addedBy', 'firstName lastName')
         .sort({ totalRents: -1, lastName: 1 })
-        .exec();
+        .lean()
+        .exec() as any;
     }
     return this.clientModel
       .find(baseQuery)
+      .select('-cinFront -cinBack -licenseFront -licenseBack')
       .populate('addedBy', 'firstName lastName')
       .sort({ totalRents: -1, lastName: 1 })
-      .exec();
+      .lean()
+      .exec() as any;
   }
 
   async findOne(id: string): Promise<Client> {

@@ -31,6 +31,12 @@ export class DashboardController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Get('alerts')
+  getAlerts() {
+    return this.dashboardService.getAlerts();
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Post('alerts/dismiss')
   dismissAlert(@Req() req: any, @Body() body: any) {
     if (!body?.password) {

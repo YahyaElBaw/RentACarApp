@@ -35,7 +35,7 @@ export class Setting {
 
   @Prop({
     type: [String],
-    default: ['Mechanique', 'Vidange', 'Lavage', 'Depense Generale', 'Autre'],
+    default: ['Mechanique', 'Vidange', 'Lavage', 'Depense Generale', 'Timbre fiscal', 'Autre'],
   })
   depenseCategories: string[];
 }

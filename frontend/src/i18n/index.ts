@@ -15,6 +15,7 @@ const messages = {
       users: 'Personnel',
       accounting: 'Comptabilité',
       logs: 'Logs',
+      airport: 'Aéroport',
       undefined: 'RentACar'
     },
     dashboard: {

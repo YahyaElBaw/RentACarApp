@@ -6,7 +6,7 @@ import { formatDate } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth'
 import { useSocketStore } from '@/stores/socket'
 import { 
-  Plus, Search, FileText, Eye, Download, ChevronLeft, ChevronRight, Filter, X, Zap
+  Plus, Search, FileText, Eye, Download, ChevronLeft, ChevronRight, Filter, X, Zap, Edit
 } from 'lucide-vue-next'
 import { 
   Table, TableHeader, TableBody, TableHead, TableRow, TableCell 
@@ -68,7 +68,10 @@ const loadContrats = async () => {
   }
 }
 
+let filterDataLoaded = false
 const loadFilterData = async () => {
+  if (filterDataLoaded) return
+  filterDataLoaded = true
   try {
     const [carsData, clientsData] = await Promise.all([
       carApi.getAll(),
@@ -77,13 +80,17 @@ const loadFilterData = async () => {
     cars.value = carsData.filter((c: any) => !c.disabled)
     clients.value = clientsData.filter((c: any) => !c.disabled)
   } catch (err) {
+    filterDataLoaded = false
     console.error('Failed to load filter data', err)
   }
 }
 
+watch(showFilters, (open) => {
+  if (open) loadFilterData()
+})
+
 onMounted(() => {
   loadContrats()
-  loadFilterData()
   unsubscribeSocket = socketStore.onEvent('contract:change', () => {
     loadContrats()
   })
@@ -143,6 +150,11 @@ const filteredContrats = computed(() => {
   return result
 })
 
+const totalContratsCount = computed(() => contrats.value.length)
+const activeContratsCount = computed(() => contrats.value.filter(c => c.status === 'active').length)
+const soonContratsCount = computed(() => contrats.value.filter(c => c.status === 'soon').length)
+const closedContratsCount = computed(() => contrats.value.filter(c => c.status === 'terminé' || c.status === 'clôturé').length)
+
 const totalContratPages = computed(() => Math.ceil(filteredContrats.value.length / pageSize))
 const paginatedContrats = computed(() => {
   const start = (currentPage.value - 1) * pageSize
@@ -151,6 +163,10 @@ const paginatedContrats = computed(() => {
 
 const viewContrat = (id: string) => {
   router.push(`/contrats/${id}`)
+}
+
+const editContrat = (id: string) => {
+  router.push(`/contrats/${id}?edit=true`)
 }
 
 const downloadPdf = async (contrat: any) => {
@@ -212,73 +228,160 @@ const getStatusBadge = (contrat: any) => {
 </script>
 
 <template>
-  <div class="contrat-list-container space-y-12 p-8 max-w-7xl mx-auto">
-    <!-- Header & Integrated Search Bar -->
-    <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-8">
-      <div class="space-y-2">
-        <h1 class="text-4xl font-black tracking-tight text-slate-900 uppercase">Registre <span class="text-indigo-600 italic">des Contrats</span></h1>
-        <p class="text-slate-400 font-bold uppercase text-[10px] tracking-[0.3em] pl-1">Tableau de bord de gestion opérationnelle</p>
-      </div>
-
-      <div class="flex flex-wrap items-center gap-3">
-        <div class="relative">
-          <div v-if="!showSearch" @click="showSearch = true" class="group h-12 rounded-2xl bg-white border-2 border-slate-200 hover:border-indigo-400 cursor-pointer transition-all duration-300 w-12 hover:w-60 overflow-hidden flex items-center active:scale-95 hover:shadow-xl hover:shadow-indigo-200/50 hover:-translate-y-0.5 relative">
-            <div class="absolute inset-0 flex items-center pl-3">
-              <Search class="w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-colors duration-300 group-hover:scale-110" />
-            </div>
-            <span class="opacity-0 group-hover:opacity-100 whitespace-nowrap transition-all duration-300 pl-10 pr-4 text-[10px] font-black uppercase tracking-widest text-indigo-500">Rechercher...</span>
+  <div class="contrat-list-container space-y-8 p-6 sm:p-8 lg:p-10 max-w-7xl mx-auto">
+    <!-- 1. Header Section -->
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-5">
+      <div class="space-y-1">
+        <div class="flex items-center gap-3">
+          <div class="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-lg shadow-indigo-600/20">
+            <FileText class="w-6 h-6 stroke-[2.2]" />
           </div>
-          <div v-else class="flex items-center gap-2 animate-in fade-in slide-in-from-left-2 duration-200">
-            <div class="relative">
-              <div class="absolute inset-y-0 left-3 flex items-center pointer-events-none">
-                <Search class="w-4 h-4 text-indigo-600" />
-              </div>
-              <input 
-                ref="searchInputRef"
-                v-model="filters.reference" 
-                placeholder="Référence, Client, Véhicule..." 
-                class="h-12 pl-10 pr-4 w-64 rounded-2xl bg-white border-2 border-indigo-200 focus:border-indigo-500 outline-none font-bold text-xs text-slate-900 transition-all"
-                @keyup.escape="closeSearch"
-                @blur="!filters.reference && (showSearch = false)"
-              />
-            </div>
-            <div @click="closeSearch" class="h-12 w-12 flex items-center justify-center rounded-2xl bg-slate-100 hover:bg-slate-200 cursor-pointer transition-all">
-              <X class="w-4 h-4 text-slate-500" />
-            </div>
+          <div>
+            <h1 class="text-2xl sm:text-3xl font-black uppercase tracking-tight text-slate-900">
+              Registre <span class="text-indigo-600">des Contrats</span>
+            </h1>
+            <p class="text-[10px] uppercase tracking-widest font-bold text-slate-400">
+              Gestion des locations, éditions de contrats & états des lieux
+            </p>
           </div>
         </div>
+      </div>
 
+      <div class="flex items-center gap-2.5 flex-wrap">
+        <Button 
+          v-if="authStore.isSuperAdmin" 
+          @click="router.push('/contrats/new?force=1')" 
+          variant="outline"
+          class="h-11 px-4 rounded-xl border-amber-300 text-amber-700 bg-amber-50 hover:bg-amber-100 font-black uppercase text-[10px] tracking-wider flex items-center gap-2"
+          title="Création forcée — ignore les alertes de chevauchement"
+        >
+          <Zap class="w-4 h-4 stroke-[2.5]" /> Forcer
+        </Button>
+        <Button 
+          @click="router.push('/contrats/new')" 
+          class="h-11 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase text-[10px] tracking-widest shadow-lg shadow-indigo-600/20 flex items-center gap-2 active:scale-95 transition-all"
+        >
+          <Plus class="w-4 h-4 stroke-[3]" /> Nouveau Contrat
+        </Button>
+      </div>
+    </div>
+
+    <!-- 2. KPI Summary Bar (Clickable Filter Tabs) -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div 
+        @click="filters.status = ''"
+        :class="[
+          'p-5 rounded-3xl bg-white border shadow-xs space-y-1.5 cursor-pointer transition-all',
+          !filters.status ? 'border-indigo-500 ring-2 ring-indigo-500/10' : 'border-slate-200/80 hover:border-slate-300'
+        ]"
+      >
+        <div class="flex items-center justify-between text-slate-400">
+          <span class="text-[10px] font-black uppercase tracking-wider text-slate-500">Tous les Contrats</span>
+          <div class="w-8 h-8 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center font-bold">
+            <FileText class="w-4 h-4" />
+          </div>
+        </div>
+        <div class="text-2xl font-black text-slate-900 font-mono">
+          {{ totalContratsCount }}
+        </div>
+        <div class="text-[10px] font-bold text-slate-400">
+          Volume total enregistré
+        </div>
+      </div>
+
+      <div 
+        @click="filters.status = 'active'"
+        :class="[
+          'p-5 rounded-3xl bg-white border shadow-xs space-y-1.5 cursor-pointer transition-all',
+          filters.status === 'active' ? 'border-emerald-500 ring-2 ring-emerald-500/10' : 'border-slate-200/80 hover:border-slate-300'
+        ]"
+      >
+        <div class="flex items-center justify-between text-slate-400">
+          <span class="text-[10px] font-black uppercase tracking-wider text-slate-500">En Cours (Actifs)</span>
+          <div class="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+          </div>
+        </div>
+        <div class="text-2xl font-black text-emerald-600 font-mono">
+          {{ activeContratsCount }}
+        </div>
+        <div class="text-[10px] font-bold text-emerald-600">
+          Véhicules actuellement loués
+        </div>
+      </div>
+
+      <div 
+        @click="filters.status = 'soon'"
+        :class="[
+          'p-5 rounded-3xl bg-white border shadow-xs space-y-1.5 cursor-pointer transition-all',
+          filters.status === 'soon' ? 'border-blue-500 ring-2 ring-blue-500/10' : 'border-slate-200/80 hover:border-slate-300'
+        ]"
+      >
+        <div class="flex items-center justify-between text-slate-400">
+          <span class="text-[10px] font-black uppercase tracking-wider text-slate-500">À Venir</span>
+          <div class="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+            <span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span>
+          </div>
+        </div>
+        <div class="text-2xl font-black text-blue-600 font-mono">
+          {{ soonContratsCount }}
+        </div>
+        <div class="text-[10px] font-bold text-blue-600">
+          Départs programmés
+        </div>
+      </div>
+
+      <div 
+        @click="filters.status = 'clôturé'"
+        :class="[
+          'p-5 rounded-3xl bg-white border shadow-xs space-y-1.5 cursor-pointer transition-all',
+          filters.status === 'clôturé' ? 'border-slate-500 ring-2 ring-slate-500/10' : 'border-slate-200/80 hover:border-slate-300'
+        ]"
+      >
+        <div class="flex items-center justify-between text-slate-400">
+          <span class="text-[10px] font-black uppercase tracking-wider text-slate-500">Clôturés / Terminés</span>
+          <div class="w-8 h-8 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center">
+            <span class="w-2.5 h-2.5 rounded-full bg-slate-400"></span>
+          </div>
+        </div>
+        <div class="text-2xl font-black text-slate-700 font-mono">
+          {{ closedContratsCount }}
+        </div>
+        <div class="text-[10px] font-bold text-slate-500">
+          Restitutions effectuées
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. Dedicated Filters Toolbar -->
+    <div class="p-4 sm:p-5 rounded-3xl bg-white border border-slate-200/80 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <!-- Search Input -->
+      <div class="relative flex-1 max-w-md">
+        <Search class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+        <input 
+          v-model="filters.reference" 
+          placeholder="Rechercher par référence, client, véhicule..." 
+          class="w-full h-11 pl-10 pr-9 bg-slate-50 hover:bg-slate-100/60 focus:bg-white rounded-xl text-xs font-bold text-slate-900 outline-none border border-slate-200 focus:border-indigo-600 transition-all placeholder:text-slate-400"
+        />
+        <button 
+          v-if="filters.reference" 
+          @click="filters.reference = ''" 
+          class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+        >
+          <X class="w-3.5 h-3.5" />
+        </button>
+      </div>
+
+      <!-- Action & Advanced Filters Toggle -->
+      <div class="flex items-center gap-2">
         <Button 
           @click="showFilters = !showFilters" 
-          @mouseenter="hoverOpenFilter = true"
-          @mouseleave="hoverOpenFilter = false"
-          :class="'group relative h-12 rounded-2xl font-black uppercase text-[10px] tracking-widest border-2 transition-all duration-300 overflow-hidden flex items-center justify-start active:scale-95 hover:-translate-y-0.5 ' + (hoverOpenFilter ? 'w-44' : 'w-12') + ' ' + (showFilters ? 'bg-indigo-600 text-white border-indigo-600 shadow-xl shadow-indigo-600/20' : 'bg-white border-slate-200 text-slate-600 hover:border-indigo-400 hover:text-indigo-600 hover:shadow-xl hover:shadow-indigo-200/50')"
+          variant="outline"
+          class="h-11 px-4 rounded-xl border-slate-200 text-slate-700 hover:bg-slate-50 font-black uppercase text-[10px] tracking-wider flex items-center gap-2"
         >
-          <div class="absolute inset-y-0 left-0 flex items-center pl-3.5">
-            <Filter class="w-4 h-4 transition-transform duration-300 group-hover:rotate-[-20deg] group-hover:scale-110" />
-          </div>
-          <span :class="[hoverOpenFilter ? 'opacity-100' : 'opacity-0', 'whitespace-nowrap transition-all duration-300 pl-10 pr-4 flex items-center gap-2']">
-            Filtres
-            <span v-if="activeFilterCount > 0" class="w-5 h-5 bg-red-500 text-white rounded-full text-[9px] flex items-center justify-center transition-transform duration-300 group-hover:scale-110">{{ activeFilterCount }}</span>
-          </span>
-        </Button>
-
-        <Button @click="router.push('/contrats/new')" @mouseenter="hoverOpenNew = true" @mouseleave="hoverOpenNew = false" :class="'group relative h-12 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-black shadow-2xl shadow-indigo-200 transition-all duration-300 overflow-hidden flex items-center justify-start active:scale-95 hover:scale-105 hover:-translate-y-0.5 hover:shadow-indigo-400/40 ' + (hoverOpenNew ? 'w-48' : 'w-12')">
-          <div class="absolute inset-y-0 left-0 flex items-center pl-3.5">
-            <Plus class="w-4 h-4 stroke-[3] transition-transform duration-300 group-hover:rotate-90 group-hover:scale-110" />
-          </div>
-          <span :class="[hoverOpenNew ? 'opacity-100' : 'opacity-0', 'whitespace-nowrap transition-all duration-300 pl-10 pr-4 uppercase tracking-widest text-[10px]']">
-            Nouveau Contrat
-          </span>
-        </Button>
-
-        <Button v-if="authStore.isSuperAdmin" @click="router.push('/contrats/new?force=1')" @mouseenter="hoverOpenForce = true" @mouseleave="hoverOpenForce = false" :class="'group relative h-12 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white font-black shadow-2xl shadow-rose-200 transition-all duration-300 overflow-hidden flex items-center justify-start active:scale-95 hover:scale-105 hover:-translate-y-0.5 hover:shadow-rose-400/40 ' + (hoverOpenForce ? 'w-52' : 'w-12')" title="Création forcée — ignore les conflits de réservation (super admin uniquement)">
-          <div class="absolute inset-y-0 left-0 flex items-center pl-3.5">
-            <Zap class="w-4 h-4 stroke-[3] transition-transform duration-300 group-hover:rotate-[-15deg] group-hover:scale-110 group-hover:fill-amber-300" />
-          </div>
-          <span :class="[hoverOpenForce ? 'opacity-100' : 'opacity-0', 'whitespace-nowrap transition-all duration-300 pl-10 pr-4 uppercase tracking-widest text-[10px]']">
-            Forcer Création
-          </span>
+          <Filter class="w-4 h-4 text-slate-500" />
+          <span>Filtres avancés</span>
+          <span v-if="activeFilterCount > 0" class="w-5 h-5 bg-indigo-600 text-white rounded-full text-[9px] flex items-center justify-center">{{ activeFilterCount }}</span>
         </Button>
       </div>
     </div>
@@ -444,6 +547,7 @@ const getStatusBadge = (contrat: any) => {
                       variant="secondary" 
                       size="icon" 
                       @click.stop="viewContrat(contrat._id)"
+                      title="Voir le contrat"
                       class="h-11 w-11 bg-white shadow-lg text-slate-400 hover:text-indigo-600 :text-indigo-400 hover:bg-slate-50 :bg-slate-700 rounded-xl transition-all"
                     >
                       <Eye class="w-4 h-4 stroke-[2.5]" />
@@ -451,7 +555,17 @@ const getStatusBadge = (contrat: any) => {
                     <Button 
                       variant="secondary" 
                       size="icon" 
+                      @click.stop="editContrat(contrat._id)"
+                      title="Modifier le contrat"
+                      class="h-11 w-11 bg-white shadow-lg text-slate-400 hover:text-indigo-600 :text-indigo-400 hover:bg-slate-50 :bg-slate-700 rounded-xl transition-all"
+                    >
+                      <Edit class="w-4 h-4 stroke-[2.5]" />
+                    </Button>
+                    <Button 
+                      variant="secondary" 
+                      size="icon" 
                       @click.stop="downloadPdf(contrat)"
+                      title="Télécharger le PDF"
                       class="h-11 w-11 bg-white shadow-lg text-slate-400 hover:text-emerald-600 :text-emerald-400 hover:bg-slate-50 :bg-slate-700 rounded-xl transition-all"
                     >
                       <Download class="w-4 h-4 stroke-[2.5]" />
@@ -460,7 +574,41 @@ const getStatusBadge = (contrat: any) => {
                 </TableCell>
               </TableRow>
               
-              <TableRow v-if="filteredContrats.length === 0 && !loading">
+              <!-- Skeleton Loading Rows -->
+              <template v-if="loading">
+                <TableRow v-for="i in 5" :key="'contrat-skel-' + i" class="animate-pulse border-slate-100">
+                  <TableCell class="pl-10 py-7">
+                    <div class="space-y-2">
+                      <div class="h-4 bg-slate-200/80 rounded w-28"></div>
+                      <div class="h-3 bg-slate-100 rounded w-16"></div>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div class="space-y-2">
+                      <div class="h-4 bg-slate-200/80 rounded w-36"></div>
+                      <div class="h-3 bg-slate-100 rounded w-24"></div>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div class="space-y-2">
+                      <div class="h-4 bg-slate-200/80 rounded w-32"></div>
+                      <div class="h-3 bg-slate-100 rounded w-20"></div>
+                    </div>
+                  </TableCell>
+                  <TableCell class="text-center">
+                    <div class="h-8 bg-slate-100 rounded-2xl w-40 mx-auto"></div>
+                  </TableCell>
+                  <TableCell class="text-center">
+                    <div class="h-5 bg-slate-200/80 rounded w-20 mx-auto"></div>
+                  </TableCell>
+                  <TableCell v-if="authStore.isAdmin" class="pr-10 text-right">
+                    <div class="h-9 w-9 bg-slate-100 rounded-xl ml-auto"></div>
+                  </TableCell>
+                </TableRow>
+              </template>
+
+              <!-- Empty State -->
+              <TableRow v-else-if="filteredContrats.length === 0">
                 <TableCell :colspan="authStore.isAdmin ? 6 : 5" class="h-60 text-center">
                   <div class="flex flex-col items-center gap-4 opacity-30">
                     <FileText class="w-16 h-16 stroke-[1]" />

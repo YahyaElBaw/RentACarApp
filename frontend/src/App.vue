@@ -16,6 +16,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge/index'
 import TitleBar from '@/components/TitleBar.vue'
 import Toast from 'primevue/toast'
+import { PasswordConfirmDialog } from '@/components/ui/password-dialog'
 import { dashboardApi, vidangeApi, visiteApi, settingApi, userApi, gpsApi } from '@/api'
 import { onMounted, onUnmounted, reactive } from 'vue'
 import { useToast } from 'primevue/usetoast'
@@ -61,6 +62,24 @@ const menuItems = computed(() => {
   
   items.push({ label: 'menu.expenses', to: '/depenses', icon: Wallet });
   return items;
+})
+
+const currentRouteTitle = computed(() => {
+  const p = route.path
+  if (p === '/') return 'Tableau de Bord'
+  if (p.startsWith('/availability')) return 'Disponibilité'
+  if (p.startsWith('/cars')) return 'Parc Véhicules'
+  if (p.startsWith('/fleet-map')) return 'Suivi Flotte GPS'
+  if (p.startsWith('/contrats')) return 'Contrats'
+  if (p.startsWith('/clients')) return 'Clients'
+  if (p.startsWith('/reservations')) return 'Réservations'
+  if (p.startsWith('/comptabilite')) return 'Comptabilité'
+  if (p.startsWith('/depenses')) return 'Dépenses'
+  if (p.startsWith('/users')) return 'Personnel'
+  if (p.startsWith('/agences')) return 'Agences'
+  if (p.startsWith('/settings')) return 'Paramètres'
+  if (p.startsWith('/logs')) return 'Journaux d’Audit'
+  return 'RentACar'
 })
 
 const refreshApp = () => {
@@ -132,13 +151,12 @@ const fetchSettings = async () => {
 const fetchAlerts = async () => {
   if (!isAuthenticated.value) return
   try {
-    const stats = await dashboardApi.getStats()
-    alerts.value = stats.alerts || []
+    const data = await dashboardApi.getAlerts()
+    alerts.value = Array.isArray(data) ? data : data?.alerts || []
   } catch (err) {
     console.error('Failed to fetch alerts', err)
   }
-  await loadDismissedKeys()
-  await loadSpeedAlerts()
+  await Promise.all([loadDismissedKeys(), loadSpeedAlerts()])
 }
 
 // ── Speed alerts (GPS) ───────────────────────────────────────────────────────
@@ -288,6 +306,17 @@ const alertFilterCount = computed(() => {
     counts[code] = (counts[code] || 0) + 1
   }
   return counts
+})
+
+const sortedAlertFilterOptions = computed(() => {
+  const allOption = alertFilterOptions.find(f => f.key === 'all') || alertFilterOptions[0]
+  const otherOptions = alertFilterOptions.filter(f => f.key !== 'all')
+  const sortedOthers = [...otherOptions].sort((a, b) => {
+    const countA = alertFilterCount.value[a.key] || 0
+    const countB = alertFilterCount.value[b.key] || 0
+    return countB - countA
+  })
+  return [allOption, ...sortedOthers]
 })
 
 // Select mode
@@ -652,29 +681,36 @@ watch(() => vidangeForm.mileageAtChange, (newVal) => {
         @click="isMobileMenuOpen = false"
       ></div>
 
-      <!-- Premium Sidebar -->
+      <!-- Premium Glassmorphic Sidebar -->
       <aside 
         :class="[
-          'fixed left-0 z-50 w-72 flex flex-col transition-all duration-500 transform border-r bg-white border-border text-muted-foreground shadow-2xl xl:translate-x-0',
+          'fixed left-0 z-50 w-72 flex flex-col transition-all duration-300 transform border-r bg-white/95 backdrop-blur-2xl border-slate-200/80 text-slate-600 shadow-[0_20px_50px_rgba(15,23,42,0.06)] xl:translate-x-0',
           isElectron ? 'top-[38px] bottom-0' : 'inset-y-0',
           isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
         ]"
       >
-        <div class="p-8 flex items-center justify-between gap-3">
-          <div class="flex items-center gap-3 cursor-pointer" @click="refreshApp">
-            <div class="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shadow-lg shadow-primary/20">
-              <Car class="text-white w-6 h-6" />
+        <!-- Logo Branding Header -->
+        <div class="p-6 pb-4 flex items-center justify-between border-b border-slate-100">
+          <div class="flex items-center gap-3.5 cursor-pointer group" @click="refreshApp">
+            <div class="w-11 h-11 bg-gradient-to-tr from-indigo-600 via-primary to-violet-500 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-600/30 group-hover:scale-105 transition-transform duration-300">
+              <Car class="text-white w-6 h-6 stroke-[2.2]" />
             </div>
-            <span class="text-2xl font-black tracking-tighter text-slate-900">
-              Rent<span class="text-primary">A</span>Car
-            </span>
+            <div>
+              <span class="text-xl font-black tracking-tight text-slate-900 block leading-none">
+                Rent<span class="text-indigo-600 font-extrabold">A</span>Car
+              </span>
+              <span class="text-[9px] font-black uppercase tracking-[0.25em] text-slate-400 block mt-1">
+                v2.0.1
+              </span>
+            </div>
           </div>
-          <Button variant="ghost" size="icon" class="xl:hidden" @click="isMobileMenuOpen = false">
-             <X class="w-6 h-6" />
+          <Button variant="ghost" size="icon" class="xl:hidden rounded-xl text-slate-400 hover:text-slate-900" @click="isMobileMenuOpen = false">
+             <X class="w-5 h-5" />
           </Button>
         </div>
 
-        <nav class="flex-1 px-4 space-y-2 mt-4 overflow-y-auto no-scrollbar">
+        <!-- Navigation Links -->
+        <nav class="flex-1 px-4 py-4 space-y-1.5 overflow-y-auto no-scrollbar">
           <router-link 
             v-for="item in menuItems" 
             :key="item.to" 
@@ -682,100 +718,93 @@ watch(() => vidangeForm.mileageAtChange, (newVal) => {
             v-slot="{ isActive }"
           >
             <div :class="[
-              'flex items-center gap-4 px-4 py-3.5 rounded-xl font-bold transition-all duration-200 group', 
+              'flex items-center gap-3.5 px-4 py-3 rounded-2xl font-extrabold text-sm tracking-tight transition-all duration-200 group cursor-pointer', 
               isActive 
-                ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20 scale-[1.02]' 
-                : 'hover:bg-accent text-muted-foreground hover:text-foreground'
+                ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-lg shadow-indigo-600/25 scale-[1.01]' 
+                : 'hover:bg-slate-100/80 text-slate-600 hover:text-slate-900'
             ]">
-              <component :is="item.icon" :class="['w-5 h-5 transition-transform group-hover:scale-110', isActive ? 'text-primary-foreground' : 'text-muted-foreground/60 group-hover:text-primary']" />
-              <span>{{ t(item.label) }}</span>
-              <div v-if="isActive" class="ml-auto w-1.5 h-1.5 rounded-full bg-primary-foreground animate-pulse"></div>
+              <component :is="item.icon" :class="['w-5 h-5 transition-transform duration-200 group-hover:scale-110 shrink-0', isActive ? 'text-white' : 'text-slate-400 group-hover:text-indigo-600']" />
+              <span class="truncate">{{ t(item.label) }}</span>
+              <div v-if="isActive" class="ml-auto w-1.5 h-1.5 rounded-full bg-white shadow-xs animate-pulse"></div>
             </div>
           </router-link>
 
-          <!-- Admin Only Section -->
-          <div v-if="authStore.isAdmin" class="pt-8 pb-2 px-4 uppercase text-[10px] font-black tracking-[0.2em] text-slate-400">
-             Authority Control
-          </div>
-          <router-link 
-            v-if="authStore.isAdmin"
-            to="/users" 
-            v-slot="{ isActive }"
-          >
-            <div :class="[
-              'flex items-center gap-4 px-4 py-3.5 rounded-xl font-bold transition-all duration-200 group', 
-              isActive 
-                ? 'bg-destructive text-destructive-foreground shadow-lg shadow-destructive/20 scale-[1.02]' 
-                : 'hover:bg-accent text-muted-foreground hover:text-foreground'
-            ]">
-              <ShieldCheck :class="['w-5 h-5 transition-transform group-hover:scale-110', isActive ? 'text-white' : 'text-slate-500']" />
-              <span>Personnel</span>
+          <!-- Administration Section -->
+          <template v-if="authStore.isAdmin">
+            <div class="pt-6 pb-2 px-4 uppercase text-[9px] font-black tracking-[0.25em] text-slate-400 flex items-center gap-2">
+               <span>Administration</span>
+               <div class="h-px bg-slate-100 flex-1"></div>
             </div>
-          </router-link>
 
-          <router-link 
-            v-if="authStore.isAdmin"
-            to="/agences" 
-            v-slot="{ isActive }"
-          >
-            <div :class="[
-              'flex items-center gap-4 px-4 py-3.5 rounded-xl font-bold transition-all duration-200 group', 
-              isActive 
-                ? 'bg-destructive text-destructive-foreground shadow-lg shadow-destructive/20 scale-[1.02]' 
-                : 'hover:bg-accent text-muted-foreground hover:text-foreground'
-            ]">
-              <Building2 :class="['w-5 h-5 transition-transform group-hover:scale-110', isActive ? 'text-white' : 'text-slate-500']" />
-              <span>Agences</span>
-            </div>
-          </router-link>
+            <router-link to="/users" v-slot="{ isActive }">
+              <div :class="[
+                'flex items-center gap-3.5 px-4 py-3 rounded-2xl font-extrabold text-sm tracking-tight transition-all duration-200 group cursor-pointer', 
+                isActive 
+                  ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-lg shadow-indigo-600/25 scale-[1.01]' 
+                  : 'hover:bg-slate-100/80 text-slate-600 hover:text-slate-900'
+              ]">
+                <ShieldCheck :class="['w-5 h-5 transition-transform duration-200 group-hover:scale-110 shrink-0', isActive ? 'text-white' : 'text-slate-400 group-hover:text-indigo-600']" />
+                <span>Personnel</span>
+              </div>
+            </router-link>
 
-          <router-link 
-            to="/settings" 
-            v-slot="{ isActive }"
-          >
-            <div :class="[
-              'flex items-center gap-4 px-4 py-3.5 rounded-xl font-bold transition-all duration-200 group', 
-              isActive 
-                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20 scale-[1.02]' 
-                : 'hover:bg-accent text-muted-foreground hover:text-foreground'
-            ]">
-              <Settings :class="['w-5 h-5 transition-transform group-hover:scale-110', isActive ? 'text-white' : 'text-slate-500 group-hover:text-indigo-600']" />
-              <span>Paramètres</span>
-            </div>
-          </router-link>
+            <router-link to="/agences" v-slot="{ isActive }">
+              <div :class="[
+                'flex items-center gap-3.5 px-4 py-3 rounded-2xl font-extrabold text-sm tracking-tight transition-all duration-200 group cursor-pointer', 
+                isActive 
+                  ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-lg shadow-indigo-600/25 scale-[1.01]' 
+                  : 'hover:bg-slate-100/80 text-slate-600 hover:text-slate-900'
+              ]">
+                <Building2 :class="['w-5 h-5 transition-transform duration-200 group-hover:scale-110 shrink-0', isActive ? 'text-white' : 'text-slate-400 group-hover:text-indigo-600']" />
+                <span>Agences</span>
+              </div>
+            </router-link>
 
-          <router-link 
-            v-if="authStore.isSuperAdmin"
-            to="/logs" 
-            v-slot="{ isActive }"
-          >
-            <div :class="[
-              'flex items-center gap-4 px-4 py-3.5 rounded-xl font-bold transition-all duration-200 group', 
-              isActive 
-                ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/20 scale-[1.02]' 
-                : 'hover:bg-accent text-muted-foreground hover:text-foreground'
-            ]">
-              <ScrollText :class="['w-5 h-5 transition-transform group-hover:scale-110', isActive ? 'text-white' : 'text-slate-500 group-hover:text-amber-500']" />
-              <span>Logs</span>
-            </div>
-          </router-link>
+            <router-link to="/settings" v-slot="{ isActive }">
+              <div :class="[
+                'flex items-center gap-3.5 px-4 py-3 rounded-2xl font-extrabold text-sm tracking-tight transition-all duration-200 group cursor-pointer', 
+                isActive 
+                  ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-lg shadow-indigo-600/25 scale-[1.01]' 
+                  : 'hover:bg-slate-100/80 text-slate-600 hover:text-slate-900'
+              ]">
+                <Settings :class="['w-5 h-5 transition-transform duration-200 group-hover:scale-110 shrink-0', isActive ? 'text-white' : 'text-slate-400 group-hover:text-indigo-600']" />
+                <span>Paramètres</span>
+              </div>
+            </router-link>
+
+            <router-link v-if="authStore.isSuperAdmin" to="/logs" v-slot="{ isActive }">
+              <div :class="[
+                'flex items-center gap-3.5 px-4 py-3 rounded-2xl font-extrabold text-sm tracking-tight transition-all duration-200 group cursor-pointer', 
+                isActive 
+                  ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-lg shadow-indigo-600/25 scale-[1.01]' 
+                  : 'hover:bg-slate-100/80 text-slate-600 hover:text-slate-900'
+              ]">
+                <ScrollText :class="['w-5 h-5 transition-transform duration-200 group-hover:scale-110 shrink-0', isActive ? 'text-white' : 'text-slate-400 group-hover:text-indigo-600']" />
+                <span>Logs d'Audit</span>
+              </div>
+            </router-link>
+          </template>
         </nav>
 
-        <div class="px-6 py-2 space-y-3">
-          <div class="rounded-2xl p-4 flex items-center gap-3 border bg-muted/30 border-border">
-             <Avatar class="w-10 h-10 border border-border">
-                <AvatarFallback class="bg-primary/20 text-primary font-bold">
-                   {{ user?.lastName?.[0] }}
-                </AvatarFallback>
-             </Avatar>
-             <div class="flex-1 min-w-0">
-                <p class="text-sm font-bold truncate text-foreground">{{ user?.lastName }} {{ user?.firstName }}</p>
-                <Badge variant="outline" class="text-[9px] h-4 px-1.5 border-primary/30 text-primary uppercase font-black">
-                   {{ user?.role }}
-                </Badge>
+        <!-- User Profile Card in Sidebar Footer -->
+        <div class="p-4 border-t border-slate-100">
+          <div class="rounded-2xl p-3 flex items-center gap-3 border border-slate-200/70 bg-slate-50/80 shadow-xs">
+             <div class="relative">
+               <Avatar class="w-10 h-10 border border-white shadow-xs">
+                  <AvatarFallback class="bg-indigo-600 text-white font-black text-xs">
+                     {{ (user?.lastName?.[0] || 'U').toUpperCase() }}
+                  </AvatarFallback>
+               </Avatar>
+               <span class="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white"></span>
              </div>
-             <button @click="handleLogout" class="p-2 hover:bg-destructive/10 hover:text-destructive rounded-lg transition-colors group" title="Logout">
-                <LogOut class="w-5 h-5 transition-transform group-hover:scale-110 text-muted-foreground/50" />
+             <div class="flex-1 min-w-0">
+                <p class="text-xs font-black truncate text-slate-900">{{ user?.lastName }} {{ user?.firstName }}</p>
+                <span class="inline-block text-[9px] px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-extrabold uppercase tracking-wider mt-0.5">
+                   {{ roleLabel(user?.role) }}
+                </span>
+             </div>
+             <button @click="handleLogout" class="p-2 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-xl transition-all cursor-pointer group" title="Déconnexion">
+                <LogOut class="w-4 h-4 transition-transform group-hover:scale-110" />
              </button>
           </div>
         </div>
@@ -784,33 +813,37 @@ watch(() => vidangeForm.mileageAtChange, (newVal) => {
       <!-- Main Content Area -->
       <main class="flex-1 flex flex-col min-w-0 bg-background transition-colors duration-400 xl:pl-72">
         <!-- Top Navigation / Header -->
-        <header :class="['border-b flex items-center justify-between px-8 bg-white/50 backdrop-blur-md sticky z-30', isElectron ? 'top-[38px] h-20' : 'top-0 h-20']">
+        <header :class="['border-b border-slate-200/70 flex items-center justify-between px-8 bg-white/80 backdrop-blur-xl sticky z-30 shadow-xs', isElectron ? 'top-[38px] h-20' : 'top-0 h-20']">
            <div class="flex items-center gap-4">
-              <Button variant="ghost" size="icon" class="xl:hidden" @click="isMobileMenuOpen = true">
-                 <LayoutDashboard class="w-6 h-6" />
+              <Button variant="ghost" size="icon" class="xl:hidden rounded-xl text-slate-500 hover:bg-slate-100" @click="isMobileMenuOpen = true">
+                 <LayoutDashboard class="w-5 h-5" />
               </Button>
            </div>
            
-           <div class="flex items-center gap-4">
+           <div class="flex items-center gap-3.5">
                <!-- Active Operators Badge -->
                <div v-if="authStore.isSuperAdmin" @click="showOnlineUsersModal = true"
-                 class="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 font-black text-[11px] shadow-sm cursor-pointer hover:bg-emerald-500/20 hover:scale-[1.03] active:scale-95 transition-all">
-                 <span class="relative flex h-2.5 w-2.5">
+                 class="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-50 border border-emerald-200/60 text-emerald-700 font-black text-[10px] shadow-xs cursor-pointer hover:bg-emerald-100/70 hover:scale-[1.02] active:scale-95 transition-all">
+                 <span class="relative flex h-2 w-2">
                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                   <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                   <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                  </span>
-                 <span class="uppercase tracking-widest text-[9px] font-black">
-                    {{ socketStore.onlineCount }} Opérateur{{ socketStore.onlineCount !== 1 ? 's' : '' }} en ligne
+                 <span class="uppercase tracking-widest font-black">
+                    {{ socketStore.onlineCount }} Opérateur{{ socketStore.onlineCount !== 1 ? 's' : '' }}
                  </span>
                </div>
 
               <!-- Global Notification Bell -->
-              <button @click="showAlertsModal = true; loadDismissedKeys().then(() => fetchAlerts())" class="relative group outline-none hover:scale-105 active:scale-95 transition-all">
-                <div class="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center border border-slate-100 shadow-sm group-hover:bg-primary group-hover:border-primary transition-colors duration-300">
-                  <Bell :class="['w-5 h-5 transition-colors duration-300', alerts.length > 0 ? 'text-primary group-hover:text-white' : 'text-slate-400 group-hover:text-white']" />
+              <button 
+                @click="showAlertsModal = true; loadDismissedKeys().then(() => fetchAlerts())" 
+                class="relative group outline-none hover:scale-105 active:scale-95 transition-all cursor-pointer"
+                title="Notifications"
+              >
+                <div class="w-10 h-10 rounded-2xl bg-slate-100/80 flex items-center justify-center border border-slate-200/60 shadow-xs group-hover:bg-indigo-600 group-hover:border-indigo-600 transition-all duration-300">
+                  <Bell :class="['w-4 h-4 transition-colors duration-300', alerts.length > 0 ? 'text-indigo-600 group-hover:text-white' : 'text-slate-500 group-hover:text-white']" />
                 </div>
-                <div v-if="alerts.length" class="absolute -top-1 -right-1 w-4 h-4 bg-destructive rounded-full border-2 border-white flex items-center justify-center shadow-lg">
-                  <span class="text-[8px] font-black text-white leading-none tabular-nums mt-[1px]">{{ alerts.length }}</span>
+                <div v-if="alerts.length" class="absolute -top-1 -right-1 min-w-[1.25rem] h-5 px-1 bg-rose-600 rounded-full border-2 border-white flex items-center justify-center shadow-md">
+                  <span class="text-[9px] font-black text-white leading-none tabular-nums">{{ alerts.length }}</span>
                 </div>
               </button>
            </div>
@@ -839,34 +872,47 @@ watch(() => vidangeForm.mileageAtChange, (newVal) => {
           leave-from-class="translate-x-0 opacity-100" 
           leave-to-class="translate-x-full opacity-0"
        >
-          <div v-if="showAlertsModal" class="fixed inset-y-0 right-0 z-[100] w-full max-w-sm bg-white border-l border-slate-100 shadow-[-20px_0_60px_rgba(0,0,0,0.1)] flex flex-col p-8 overflow-hidden">
-             <button @click="showAlertsModal = false" class="absolute top-6 right-6 p-2 text-slate-300 hover:text-slate-600 hover:bg-slate-50 transition-colors rounded-full"><X class="w-5 h-5"/></button>
-             
-             <h2 class="text-2xl font-black text-slate-900 uppercase tracking-tight flex items-center gap-3 mb-4 shrink-0">
-               <span class="relative flex h-3 w-3">
-                 <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
-                 <span class="relative inline-flex rounded-full h-3 w-3 bg-destructive"></span>
-               </span>
-               Centre d'<span class="text-primary italic">Alertes</span>
-             </h2>
+          <div v-if="showAlertsModal" class="fixed inset-y-0 right-0 z-[100] w-full max-w-xl bg-white/95 backdrop-blur-2xl border-l border-slate-200/80 shadow-[-25px_0_70px_rgba(15,23,42,0.15)] flex flex-col p-7 overflow-hidden">
+             <!-- Header -->
+             <div class="flex items-center justify-between mb-4 shrink-0">
+               <div>
+                 <h2 class="text-xl font-black text-slate-900 uppercase tracking-tight flex items-center gap-2.5">
+                   <span class="relative flex h-2.5 w-2.5">
+                     <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                     <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-600"></span>
+                   </span>
+                   Centre d'<span class="text-indigo-600">Alertes</span>
+                 </h2>
+                 <p class="text-[9px] font-black text-slate-400 uppercase tracking-[0.25em] mt-0.5">Notifications & Rappels</p>
+               </div>
+               <button @click="showAlertsModal = false" class="p-2 text-slate-400 hover:text-slate-800 hover:bg-slate-100 transition-colors rounded-xl cursor-pointer">
+                 <X class="w-5 h-5"/>
+               </button>
+             </div>
 
              <!-- Filter Pills -->
-             <div class="flex gap-1.5 mb-3 shrink-0 overflow-x-auto no-scrollbar pb-1">
+             <div class="flex gap-2 mb-3.5 shrink-0 overflow-x-auto no-scrollbar pb-1">
                <button
-                 v-for="f in alertFilterOptions"
+                 v-for="f in sortedAlertFilterOptions"
                  :key="f.key"
                  @click="activeAlertFilter = f.key"
                  :class="[
-                   'px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest whitespace-nowrap transition-all flex items-center gap-1.5 shrink-0',
+                   'px-3.5 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest whitespace-nowrap transition-all flex items-center gap-2 shrink-0 cursor-pointer border',
                    activeAlertFilter === f.key
-                     ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200'
-                     : 'bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600'
+                     ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-600/25'
+                     : (alertFilterCount[f.key] || 0) > 0
+                       ? 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100 shadow-xs'
+                       : 'bg-slate-100/80 text-slate-400 border-transparent hover:bg-slate-200/70 hover:text-slate-700'
                  ]"
                >
-                 {{ f.label }}
+                 <span>{{ f.label }}</span>
                  <span :class="[
-                   'min-w-[16px] h-4 px-1 rounded-full text-[8px] font-black flex items-center justify-center',
-                   activeAlertFilter === f.key ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-500'
+                   'min-w-[18px] h-4.5 px-1.5 rounded-full text-[8px] font-black flex items-center justify-center tabular-nums transition-all',
+                   activeAlertFilter === f.key
+                     ? 'bg-white/20 text-white'
+                     : (alertFilterCount[f.key] || 0) > 0
+                       ? 'bg-indigo-600 text-white'
+                       : 'bg-slate-200/80 text-slate-400'
                  ]">{{ alertFilterCount[f.key] || 0 }}</span>
                </button>
              </div>
@@ -876,12 +922,12 @@ watch(() => vidangeForm.mileageAtChange, (newVal) => {
                <button
                  @click="toggleSelectMode"
                  :class="[
-                   'flex items-center gap-2 px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all',
-                   selectMode ? 'bg-indigo-100 text-indigo-700' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'
+                   'flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all cursor-pointer',
+                   selectMode ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100'
                  ]"
                >
                  <CheckSquare class="w-3.5 h-3.5" />
-                 {{ selectMode ? 'Annuler' : 'Selectionner' }}
+                 {{ selectMode ? 'Annuler' : 'Sélectionner' }}
                </button>
 
                <transition
@@ -895,7 +941,7 @@ watch(() => vidangeForm.mileageAtChange, (newVal) => {
                  <button
                    v-if="selectMode && selectedCount > 0"
                    @click="askBulkDismiss"
-                   class="flex items-center gap-2 px-4 py-1.5 rounded-xl bg-destructive text-white text-[9px] font-black uppercase tracking-widest shadow-lg shadow-destructive/20 hover:bg-destructive/90 transition-all"
+                   class="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-rose-600 text-white text-[9px] font-black uppercase tracking-widest shadow-md shadow-rose-600/25 hover:bg-rose-700 transition-all cursor-pointer"
                  >
                    <Trash2 class="w-3.5 h-3.5" />
                    Supprimer ({{ selectedCount }})
@@ -905,44 +951,53 @@ watch(() => vidangeForm.mileageAtChange, (newVal) => {
 
              <!-- Select All (in select mode) -->
              <div v-if="selectMode && filteredAlerts.length" class="flex items-center gap-2 mb-2 shrink-0 px-1">
-               <button @click="toggleSelectAll" class="flex items-center gap-2 text-[9px] font-black text-slate-400 uppercase tracking-widest hover:text-indigo-600 transition-colors">
+               <button @click="toggleSelectAll" class="flex items-center gap-2 text-[9px] font-black text-slate-400 uppercase tracking-widest hover:text-indigo-600 transition-colors cursor-pointer">
                  <component :is="allFilteredSelected ? CheckSquare : Square" class="w-4 h-4" />
-                 Tout selectionner
+                 Tout sélectionner
                </button>
              </div>
 
-             <div class="flex-1 overflow-y-auto no-scrollbar space-y-3 pb-10">
+             <!-- Alert List -->
+             <div class="flex-1 overflow-y-auto no-scrollbar space-y-2.5 pb-8">
                 <template v-if="filteredAlerts.length">
                    <div v-for="(alert, idx) in filteredAlerts" :key="alert.key || idx" 
                      @click="selectMode ? toggleAlertSelection(alert.key) : handleAlertClick(alert)"
                      :class="[
-                     'p-5 rounded-[1.5rem] border transition-all flex items-start gap-4 cursor-pointer',
-                     selectedAlertKeys.has(alert.key) ? 'bg-indigo-50 border-indigo-200 shadow-md shadow-indigo-100 scale-[1.01]' : 'hover:scale-[1.02]',
-                     !selectedAlertKeys.has(alert.key) && (alert.type === 'critique' || alert.type === 'urgent') ? 'bg-destructive/5 border-destructive/10 shadow-lg shadow-destructive/5' : '',
-                     !selectedAlertKeys.has(alert.key) && alert.type !== 'critique' && alert.type !== 'urgent' ? 'bg-muted/30 border-border shadow-sm' : '',
+                     'p-4 rounded-2xl border transition-all duration-200 flex items-start gap-3.5 cursor-pointer',
+                     selectedAlertKeys.has(alert.key) ? 'bg-indigo-50/80 border-indigo-200 shadow-sm' : 'hover:bg-slate-50 hover:shadow-xs',
+                     !selectedAlertKeys.has(alert.key) && (alert.type === 'critique' || alert.type === 'urgent') ? 'bg-rose-50/40 border-rose-100' : '',
+                     !selectedAlertKeys.has(alert.key) && alert.type !== 'critique' && alert.type !== 'urgent' ? 'bg-slate-50/50 border-slate-100' : '',
                    ]">
                       <!-- Checkbox (select mode) -->
-                      <button v-if="selectMode" @click.stop="toggleAlertSelection(alert.key)" class="shrink-0 mt-0.5">
-                        <component :is="selectedAlertKeys.has(alert.key) ? CheckSquare : Square" :class="['w-5 h-5', selectedAlertKeys.has(alert.key) ? 'text-indigo-600' : 'text-slate-300']" />
+                      <button v-if="selectMode" @click.stop="toggleAlertSelection(alert.key)" class="shrink-0 mt-0.5 cursor-pointer">
+                        <component :is="selectedAlertKeys.has(alert.key) ? CheckSquare : Square" :class="['w-4 h-4', selectedAlertKeys.has(alert.key) ? 'text-indigo-600' : 'text-slate-300']" />
                       </button>
 
-                      <AlertCircle :class="['w-5 h-5 shrink-0 mt-0.5', alert.type === 'critique' || alert.type === 'urgent' ? 'text-destructive' : 'text-amber-500']" />
+                      <div :class="[
+                        'w-8 h-8 rounded-xl flex items-center justify-center shrink-0 shadow-xs',
+                        alert.type === 'critique' || alert.type === 'urgent' ? 'bg-rose-100 text-rose-600' : 'bg-amber-100 text-amber-600'
+                      ]">
+                        <AlertCircle class="w-4 h-4 stroke-[2.2]" />
+                      </div>
+
                        <div class="space-y-1 flex-1 min-w-0">
-                          <p class="text-xs font-black text-foreground leading-tight">{{ alert.message }}</p>
-                          <p v-if="alert.alertAt" class="text-[9px] font-bold text-slate-400 mt-0.5 tabular-nums">{{ formatAlertDateTime(alert.alertAt) }}</p>
+                          <p class="text-xs font-bold text-slate-900 leading-snug">{{ alert.message }}</p>
+                          <p v-if="alert.alertAt" class="text-[9px] font-bold text-slate-400 tabular-nums">{{ formatAlertDateTime(alert.alertAt) }}</p>
                           <div class="flex items-center gap-2 mt-1">
-                            <span :class="['text-[8px] font-black uppercase tracking-[0.2em]', alert.type === 'critique' || alert.type === 'urgent' ? 'text-destructive' : 'text-amber-500']">{{ alert.type || 'Avertissement' }}</span>
-                            <span v-if="alert.code" class="text-[7px] font-black uppercase tracking-[0.15em] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">{{ alert.code }}</span>
+                            <span :class="['text-[8px] font-black uppercase tracking-[0.2em]', alert.type === 'critique' || alert.type === 'urgent' ? 'text-rose-600' : 'text-amber-600']">{{ alert.type || 'Avertissement' }}</span>
+                            <span v-if="alert.code" class="text-[7px] font-black uppercase tracking-[0.15em] px-1.5 py-0.5 rounded-full bg-slate-200/60 text-slate-600">{{ alert.code }}</span>
                           </div>
                        </div>
-                       <button v-if="authStore.isAdmin && alert.key && !selectMode" @click.stop="askDismissAlert(alert)" class="p-1.5 rounded-full hover:bg-white transition-colors shrink-0">
-                          <X class="w-3.5 h-3.5 text-slate-400 hover:text-destructive" />
+                       <button v-if="authStore.isAdmin && alert.key && !selectMode" @click.stop="askDismissAlert(alert)" class="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors shrink-0 cursor-pointer" title="Supprimer">
+                          <X class="w-3.5 h-3.5" />
                        </button>
                     </div>
                 </template>
-                <div v-else class="flex flex-col items-center justify-center py-20 opacity-30 text-center space-y-4">
-                   <CheckCircle2 class="w-12 h-12 text-foreground stroke-1" />
-                   <p class="text-[9px] font-black text-foreground uppercase tracking-[0.3em]">Tout est en ordre</p>
+                <div v-else class="flex flex-col items-center justify-center py-20 opacity-40 text-center space-y-3">
+                   <div class="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                     <CheckCircle2 class="w-6 h-6 stroke-[2]" />
+                   </div>
+                   <p class="text-[10px] font-black text-slate-600 uppercase tracking-[0.25em]">Aucune alerte en attente</p>
                 </div>
              </div>
           </div>
@@ -958,176 +1013,151 @@ watch(() => vidangeForm.mileageAtChange, (newVal) => {
           <div v-if="showAlertsModal" @click="showAlertsModal = false" class="fixed inset-0 bg-slate-900/10 backdrop-blur-[2px] z-[90]"></div>
        </transition>
     </Teleport>
-    <Dialog v-model:open="showDismissPwd">
-      <DialogContent class="sm:max-w-md bg-white border-border shadow-3xl rounded-[2rem] p-8 text-foreground z-[200]">
-        <DialogHeader class="space-y-1 text-left">
-          <DialogTitle class="text-xl font-black uppercase tracking-tight flex items-center gap-3">
-            <ShieldCheck class="w-5 h-5 text-indigo-600" />
-            Mot de passe requis
-          </DialogTitle>
-          <DialogDescription class="text-xs font-bold text-slate-400 uppercase tracking-widest">
-            {{ isBulkDismiss ? `Entrez votre mot de passe pour supprimer ${selectedCount} notification(s).` : 'Entrez votre mot de passe pour supprimer cette notification.' }}
-          </DialogDescription>
-        </DialogHeader>
-        <div class="mt-4 space-y-4">
-          <div class="relative">
-            <Input v-model="dismissPwd" :type="showDismissText ? 'text' : 'password'" placeholder="Mot de passe" class="h-12 bg-slate-50 border-slate-100 rounded-xl pr-10" @keydown.enter.prevent="confirmDismiss" />
-            <button type="button" @click="showDismissText = !showDismissText" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors">
-              <component :is="showDismissText ? EyeOffIcon : EyeIcon" class="w-4 h-4" />
-            </button>
-          </div>
-          <p v-if="dismissError" class="text-[11px] font-bold text-destructive">Mot de passe incorrect.</p>
-          <p v-if="dismissServerError" class="text-[11px] font-bold text-destructive">Erreur serveur. Reessayez.</p>
-          <div class="flex gap-3 pt-2">
-            <Button variant="outline" @click="cancelDismiss" class="flex-1 h-12 rounded-xl font-black uppercase text-xs tracking-widest border-slate-200">Annuler</Button>
-            <Button :disabled="dismissing || !dismissPwd" @click="confirmDismiss" class="flex-1 h-12 rounded-xl font-black uppercase text-xs tracking-widest bg-indigo-600 hover:bg-indigo-700 text-white">
-              <LoaderIcon v-if="dismissing" class="w-4 h-4 animate-spin mr-2" /> {{ isBulkDismiss ? `Supprimer (${selectedCount})` : 'Supprimer' }}
-            </Button>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+    <PasswordConfirmDialog
+      :open="showDismissPwd"
+      @update:open="(val: boolean) => { if (!val) cancelDismiss() }"
+      v-model:password="dismissPwd"
+      title="Sécurité"
+      subtitle="Autorisation Requise"
+      :description="isBulkDismiss ? `Entrez votre mot de passe pour supprimer ${selectedCount} notification(s).` : 'Entrez votre mot de passe pour supprimer cette notification.'"
+      :confirm-label="isBulkDismiss ? `Supprimer (${selectedCount})` : 'Supprimer'"
+      variant="danger"
+      :loading="dismissing"
+      :error="dismissError ? 'Mot de passe incorrect.' : (dismissServerError ? 'Erreur serveur. Réessayez.' : '')"
+      @confirm="confirmDismiss"
+    />
     <Dialog v-model:open="showOnlineUsersModal">
-      <DialogContent class="sm:max-w-md bg-white border-border shadow-3xl rounded-[3rem] p-0 overflow-hidden text-foreground">
-        <DialogHeader class="p-8 bg-emerald-600 text-white relative">
-          <div class="flex items-center gap-5 relative z-10">
-            <div class="w-14 h-14 bg-white/15 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-900/20">
-              <Radio class="w-7 h-7" />
+      <DialogContent class="sm:max-w-md bg-white/95 backdrop-blur-2xl border border-white/80 shadow-[0_25px_70px_-15px_rgba(15,23,42,0.25)] rounded-[2.5rem] p-0 overflow-hidden text-foreground">
+        <DialogHeader class="p-7 bg-gradient-to-r from-emerald-600 to-teal-600 text-white relative">
+          <div class="flex items-center gap-4 relative z-10">
+            <div class="w-13 h-13 bg-white/15 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-950/20">
+              <Radio class="w-6 h-6 stroke-[2.2]" />
             </div>
             <div>
-              <DialogTitle class="text-2xl font-black uppercase tracking-tighter">Opérateurs en ligne</DialogTitle>
-              <DialogDescription class="text-white/70 text-xs font-bold uppercase tracking-[0.2em] mt-1">
-                {{ socketStore.onlineCount }} connecté{{ socketStore.onlineCount !== 1 ? 's' : '' }}
+              <DialogTitle class="text-xl font-black uppercase tracking-tight">Opérateurs en Ligne</DialogTitle>
+              <DialogDescription class="text-white/80 text-[10px] font-black uppercase tracking-[0.2em] mt-0.5">
+                {{ socketStore.onlineCount }} connecté{{ socketStore.onlineCount !== 1 ? 's' : '' }} en temps réel
               </DialogDescription>
             </div>
           </div>
         </DialogHeader>
-        <div class="p-6 max-h-[60vh] overflow-y-auto no-scrollbar space-y-5">
+        <div class="p-6 max-h-[60vh] overflow-y-auto no-scrollbar space-y-4">
           <template v-if="directoryUsers.length">
             <div>
-              <p class="text-[9px] font-black uppercase tracking-[0.25em] text-emerald-600 mb-2.5 flex items-center gap-2">
+              <p class="text-[9px] font-black uppercase tracking-[0.25em] text-emerald-600 mb-2 flex items-center gap-2">
                 <span class="relative flex h-2 w-2">
                   <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                   <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                 </span>
                 En ligne — {{ onlineUsersCount }}
               </p>
-              <div class="space-y-2.5">
+              <div class="space-y-2">
                 <div v-for="u in directoryUsers.filter(x => x.online)" :key="u._id"
-                  class="flex items-center gap-4 p-4 rounded-[1.5rem] border border-emerald-100 bg-emerald-50/50 hover:bg-white hover:shadow-md transition-all">
-                  <Avatar class="w-11 h-11 shrink-0">
-                    <AvatarFallback class="bg-emerald-500/10 text-emerald-600 font-black text-sm">
+                  class="flex items-center gap-3.5 p-3.5 rounded-2xl border border-emerald-100 bg-emerald-50/40 hover:bg-white hover:shadow-xs transition-all">
+                  <Avatar class="w-10 h-10 shrink-0 border border-white shadow-xs">
+                    <AvatarFallback class="bg-emerald-500/15 text-emerald-700 font-black text-xs">
                       {{ (u.firstName || u.name || '?').charAt(0).toUpperCase() }}
                     </AvatarFallback>
                   </Avatar>
                   <div class="flex-1 min-w-0">
-                    <p class="text-sm font-black text-slate-900 truncate">{{ u.firstName }} {{ u.lastName }}</p>
-                    <p class="text-[10px] font-black uppercase tracking-wider mt-0.5 text-slate-400">{{ roleLabel(u.role) }}</p>
+                    <p class="text-xs font-black text-slate-900 truncate">{{ u.firstName }} {{ u.lastName }}</p>
+                    <p class="text-[9px] font-black uppercase tracking-wider text-slate-400 mt-0.5">{{ roleLabel(u.role) }}</p>
                   </div>
-                  <div class="flex items-center gap-2 text-emerald-600 text-[10px] font-black uppercase tracking-wider">
-                    <span class="relative flex h-2 w-2">
-                      <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                      <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                    </span>
-                    <span class="flex items-center gap-1" :title="devicesFor(u).map(d => d === 'phone' ? 'Connecté depuis un téléphone' : 'Connecté depuis un PC').join(', ')">
-                      <template v-for="(d, di) in devicesFor(u)" :key="d">
-                        <span v-if="di > 0" class="opacity-40">·</span>
-                        <Smartphone v-if="d === 'phone'" class="w-3.5 h-3.5" />
-                        <Monitor v-else class="w-3.5 h-3.5" />
-                        <span>{{ d === 'phone' ? 'Tél' : 'PC' }}</span>
-                      </template>
+                  <div class="flex items-center gap-1.5 text-emerald-600 text-[10px] font-black uppercase tracking-wider">
+                    <span class="flex items-center gap-1 bg-white px-2 py-1 rounded-lg border border-emerald-100 shadow-xs">
+                      <Smartphone v-if="devicesFor(u).includes('phone')" class="w-3 h-3" />
+                      <Monitor v-else class="w-3 h-3" />
+                      <span class="text-[9px]">{{ devicesFor(u).includes('phone') ? 'Tél' : 'PC' }}</span>
                     </span>
                   </div>
                 </div>
               </div>
             </div>
-            <div>
-              <p class="text-[9px] font-black uppercase tracking-[0.25em] text-slate-400 mb-2.5 flex items-center gap-2">
+            <div v-if="directoryUsers.length - onlineUsersCount > 0">
+              <p class="text-[9px] font-black uppercase tracking-[0.25em] text-slate-400 mb-2 flex items-center gap-2 pt-2">
                 <span class="inline-flex rounded-full h-2 w-2 bg-slate-300"></span>
                 Hors ligne — {{ directoryUsers.length - onlineUsersCount }}
               </p>
-              <div class="space-y-2.5">
+              <div class="space-y-2">
                 <div v-for="u in directoryUsers.filter(x => !x.online)" :key="u._id"
-                  class="flex items-center gap-4 p-4 rounded-[1.5rem] border border-slate-100 bg-slate-50/50 opacity-60 transition-all">
-                  <Avatar class="w-11 h-11 shrink-0">
-                    <AvatarFallback class="bg-slate-200 text-slate-500 font-black text-sm">
+                  class="flex items-center gap-3.5 p-3.5 rounded-2xl border border-slate-100 bg-slate-50/50 opacity-60 transition-all">
+                  <Avatar class="w-10 h-10 shrink-0">
+                    <AvatarFallback class="bg-slate-200 text-slate-500 font-black text-xs">
                       {{ (u.firstName || u.name || '?').charAt(0).toUpperCase() }}
                     </AvatarFallback>
                   </Avatar>
                   <div class="flex-1 min-w-0">
-                    <p class="text-sm font-black text-slate-500 truncate">{{ u.firstName }} {{ u.lastName }}</p>
-                    <p class="text-[10px] font-black uppercase tracking-wider mt-0.5 text-slate-400">{{ roleLabel(u.role) }}</p>
+                    <p class="text-xs font-bold text-slate-600 truncate">{{ u.firstName }} {{ u.lastName }}</p>
+                    <p class="text-[9px] font-bold uppercase tracking-wider text-slate-400 mt-0.5">{{ roleLabel(u.role) }}</p>
                   </div>
-                  <div class="flex items-center gap-2 text-slate-400 text-[10px] font-black uppercase tracking-wider">
-                    <span class="inline-flex rounded-full h-2 w-2 bg-slate-300"></span>
-                    Hors ligne
-                  </div>
+                  <span class="text-[9px] font-bold uppercase tracking-wider text-slate-400">Hors ligne</span>
                 </div>
               </div>
             </div>
           </template>
-          <div v-else class="flex flex-col items-center justify-center py-14 opacity-30 text-center space-y-3">
-            <Radio class="w-10 h-10 text-slate-500 stroke-1" />
-            <p class="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Aucun utilisateur trouvé</p>
+          <div v-else class="flex flex-col items-center justify-center py-12 opacity-30 text-center space-y-2">
+            <Radio class="w-8 h-8 text-slate-500 stroke-1" />
+            <p class="text-[9px] font-black text-slate-500 uppercase tracking-[0.25em]">Aucun utilisateur trouvé</p>
           </div>
         </div>
       </DialogContent>
     </Dialog>
+
     <Dialog v-model:open="showVidangeDialog">
-      <DialogContent class="sm:max-w-xl bg-white border-none shadow-3xl rounded-[2.5rem] p-0 overflow-hidden">
-        <DialogHeader class="p-8 bg-slate-900 text-white relative">
-          <div class="flex items-center gap-5 relative z-10">
-            <div class="w-14 h-14 bg-primary rounded-2xl flex items-center justify-center shadow-lg shadow-primary/30">
-              <Calculator class="w-7 h-7 text-white" />
+      <DialogContent class="sm:max-w-xl bg-white/95 backdrop-blur-2xl border border-white/80 shadow-[0_25px_70px_-15px_rgba(15,23,42,0.25)] rounded-[2.5rem] p-0 overflow-hidden">
+        <DialogHeader class="p-7 bg-gradient-to-r from-slate-900 via-indigo-950 to-indigo-900 text-white relative">
+          <div class="flex items-center gap-4 relative z-10">
+            <div class="w-13 h-13 bg-indigo-600/30 border border-white/20 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-600/25">
+              <Calculator class="w-6 h-6 text-white" />
             </div>
             <div>
-              <DialogTitle class="text-2xl font-black uppercase tracking-tight">Nouvelle <span class="text-primary italic">Vidange</span></DialogTitle>
-              <DialogDescription class="text-slate-400 font-bold uppercase text-[9px] mt-1">
+              <DialogTitle class="text-xl font-black uppercase tracking-tight">Nouvelle <span class="text-indigo-400">Vidange</span></DialogTitle>
+              <DialogDescription class="text-slate-300 font-bold uppercase text-[9px] tracking-wider mt-0.5">
                 {{ selectedCarForVidange?.carBrand }} {{ selectedCarForVidange?.carModel }} — {{ selectedCarForVidange?.carMatricule }}
               </DialogDescription>
             </div>
           </div>
         </DialogHeader>
 
-        <div class="p-8 space-y-6">
-          <div class="grid grid-cols-2 gap-6">
-            <div class="space-y-2">
-              <Label class="text-[10px] font-black uppercase tracking-widest ml-1 text-slate-400">Date du service</Label>
-              <Input type="date" v-model="vidangeForm.date" class="h-12 rounded-xl" />
+        <div class="p-7 space-y-5">
+          <div class="grid grid-cols-2 gap-4">
+            <div class="space-y-1.5">
+              <Label class="text-[9px] font-black uppercase tracking-widest text-slate-400 pl-1">Date du service</Label>
+              <Input type="date" v-model="vidangeForm.date" class="h-12 bg-slate-50/80 border-slate-200/80 rounded-2xl font-bold" />
             </div>
-            <div class="space-y-2">
-              <Label class="text-[10px] font-black uppercase tracking-widest ml-1 text-slate-400">Type d'huile</Label>
-              <Input v-model="vidangeForm.oilType" placeholder="ex: 5W40 Synthetic" class="h-12 rounded-xl" />
-            </div>
-          </div>
-
-          <div class="grid grid-cols-2 gap-6">
-            <div class="space-y-2">
-              <Label class="text-[10px] font-black uppercase tracking-widest ml-1 text-slate-400">KM au Compteur</Label>
-              <Input type="number" v-model.number="vidangeForm.mileageAtChange" class="h-12 rounded-xl font-black" />
-            </div>
-            <div class="space-y-2">
-              <Label class="text-[10px] font-black uppercase tracking-widest ml-1 text-primary">Prochaine Vidange</Label>
-              <Input type="number" v-model.number="vidangeForm.nextChangeMileage" class="h-12 rounded-xl bg-primary/5 text-primary border-primary/20 font-black" />
+            <div class="space-y-1.5">
+              <Label class="text-[9px] font-black uppercase tracking-widest text-slate-400 pl-1">Type d'huile</Label>
+              <Input v-model="vidangeForm.oilType" placeholder="ex: 5W40 Synthetic" class="h-12 bg-slate-50/80 border-slate-200/80 rounded-2xl font-bold" />
             </div>
           </div>
 
-          <div class="space-y-2">
-            <Label class="text-[10px] font-black uppercase tracking-widest ml-1 text-emerald-600">Coût du service (TND)</Label>
-            <Input type="number" v-model.number="vidangeForm.amount" placeholder="0.00" class="h-14 rounded-xl text-lg font-black bg-emerald-50 border-emerald-100 text-emerald-700" />
+          <div class="grid grid-cols-2 gap-4">
+            <div class="space-y-1.5">
+              <Label class="text-[9px] font-black uppercase tracking-widest text-slate-400 pl-1">KM au Compteur</Label>
+              <Input type="number" v-model.number="vidangeForm.mileageAtChange" class="h-12 bg-slate-50/80 border-slate-200/80 rounded-2xl font-black" />
+            </div>
+            <div class="space-y-1.5">
+              <Label class="text-[9px] font-black uppercase tracking-widest text-indigo-600 pl-1">Prochaine Vidange</Label>
+              <Input type="number" v-model.number="vidangeForm.nextChangeMileage" class="h-12 rounded-2xl bg-indigo-50 border-indigo-200/80 text-indigo-700 font-black" />
+            </div>
           </div>
 
-          <div class="space-y-2">
-            <Label class="text-[10px] font-black uppercase tracking-widest ml-1 text-slate-400">Notes additionnelles</Label>
-            <textarea v-model="vidangeForm.notes" class="w-full h-24 p-4 rounded-xl border border-input bg-background text-sm font-medium focus:ring-2 focus:ring-primary outline-none transition-all" placeholder="Détails sur les filtres, marque d'huile..."></textarea>
+          <div class="space-y-1.5">
+            <Label class="text-[9px] font-black uppercase tracking-widest text-emerald-600 pl-1">Coût du service (TND)</Label>
+            <Input type="number" v-model.number="vidangeForm.amount" placeholder="0.00" class="h-13 rounded-2xl text-base font-black bg-emerald-50/70 border-emerald-200/80 text-emerald-800" />
+          </div>
+
+          <div class="space-y-1.5">
+            <Label class="text-[9px] font-black uppercase tracking-widest text-slate-400 pl-1">Notes additionnelles</Label>
+            <textarea v-model="vidangeForm.notes" class="w-full h-20 p-3.5 rounded-2xl border border-slate-200/80 bg-slate-50/80 text-xs font-medium focus:bg-white focus:ring-4 focus:ring-indigo-600/10 focus:border-indigo-400 outline-none transition-all" placeholder="Détails sur les filtres, huile..."></textarea>
           </div>
 
           <Button 
             @click="submitVidange" 
             :disabled="submittingVidange"
-            class="w-full h-16 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl transition-all active:scale-[0.98] gap-3"
+            class="w-full h-14 bg-gradient-to-r from-indigo-600 to-primary hover:from-indigo-700 hover:to-indigo-800 text-white rounded-2xl font-black uppercase tracking-widest text-xs shadow-lg shadow-indigo-600/25 transition-all active:scale-[0.98] gap-2.5 cursor-pointer"
           >
-            <LoaderIcon v-if="submittingVidange" class="w-5 h-5 animate-spin" />
+            <LoaderIcon v-if="submittingVidange" class="w-4 h-4 animate-spin" />
             {{ submittingVidange ? 'Enregistrement...' : 'Confirmer la Maintenance' }}
           </Button>
         </div>
@@ -1135,57 +1165,57 @@ watch(() => vidangeForm.mileageAtChange, (newVal) => {
     </Dialog>
 
     <Dialog v-model:open="showVisiteDialog">
-      <DialogContent class="sm:max-w-xl bg-white border-none shadow-3xl rounded-[2.5rem] p-0 overflow-hidden">
-        <DialogHeader class="p-8 bg-rose-600 text-white relative">
-          <div class="flex items-center gap-5 relative z-10">
-            <div class="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center shadow-lg border border-white/30">
-              <ShieldCheck class="w-7 h-7 text-white" />
+      <DialogContent class="sm:max-w-xl bg-white/95 backdrop-blur-2xl border border-white/80 shadow-[0_25px_70px_-15px_rgba(15,23,42,0.25)] rounded-[2.5rem] p-0 overflow-hidden">
+        <DialogHeader class="p-7 bg-gradient-to-r from-rose-600 to-rose-700 text-white relative">
+          <div class="flex items-center gap-4 relative z-10">
+            <div class="w-13 h-13 bg-white/20 rounded-2xl flex items-center justify-center shadow-lg border border-white/30">
+              <ShieldCheck class="w-6 h-6 text-white stroke-[2.2]" />
             </div>
             <div>
-              <DialogTitle class="text-2xl font-black uppercase tracking-tight">Visite <span class="text-rose-200 italic">Technique</span></DialogTitle>
-              <DialogDescription class="text-rose-100 font-bold uppercase text-[9px] mt-1">
+              <DialogTitle class="text-xl font-black uppercase tracking-tight">Visite <span class="text-rose-200">Technique</span></DialogTitle>
+              <DialogDescription class="text-rose-100 font-bold uppercase text-[9px] tracking-wider mt-0.5">
                 {{ selectedCarForVisite?.carBrand }} {{ selectedCarForVisite?.carModel }} — {{ selectedCarForVisite?.carMatricule }}
               </DialogDescription>
             </div>
           </div>
         </DialogHeader>
 
-        <div class="p-8 space-y-6">
-          <div class="grid grid-cols-2 gap-6">
-            <div class="space-y-2">
-              <Label class="text-[10px] font-black uppercase tracking-widest ml-1 text-slate-400">Date du service</Label>
-              <Input type="date" v-model="visiteForm.date" class="h-12 rounded-xl" />
+        <div class="p-7 space-y-5">
+          <div class="grid grid-cols-2 gap-4">
+            <div class="space-y-1.5">
+              <Label class="text-[9px] font-black uppercase tracking-widest text-slate-400 pl-1">Date du service</Label>
+              <Input type="date" v-model="visiteForm.date" class="h-12 bg-slate-50/80 border-slate-200/80 rounded-2xl font-bold" />
             </div>
-            <div class="space-y-2">
-              <Label class="text-[10px] font-black uppercase tracking-widest ml-1 text-slate-400">Résultat</Label>
-              <select v-model="visiteForm.result" class="w-full h-12 bg-slate-50 border border-slate-100 rounded-xl px-4 font-black">
+            <div class="space-y-1.5">
+              <Label class="text-[9px] font-black uppercase tracking-widest text-slate-400 pl-1">Résultat</Label>
+              <select v-model="visiteForm.result" class="w-full h-12 bg-slate-50/80 border border-slate-200/80 rounded-2xl px-3 text-xs font-bold text-slate-800 outline-none focus:ring-4 focus:ring-rose-500/10 focus:border-rose-400">
                 <option value="pass">FAVORABLE (Validée)</option>
                 <option value="fail">DÉFAVORABLE (Échouée)</option>
               </select>
             </div>
           </div>
 
-          <div class="space-y-2">
-            <Label class="text-[10px] font-black uppercase tracking-widest ml-1 text-rose-600">Prochaine Visite</Label>
-            <Input type="date" v-model="visiteForm.nextVisitDate" class="h-12 rounded-xl bg-rose-50 border-rose-100 text-rose-700 font-black" />
+          <div class="space-y-1.5">
+            <Label class="text-[9px] font-black uppercase tracking-widest text-rose-600 pl-1">Prochaine Visite</Label>
+            <Input type="date" v-model="visiteForm.nextVisitDate" class="h-12 rounded-2xl bg-rose-50 border-rose-200 text-rose-700 font-black" />
           </div>
 
-          <div class="space-y-2">
-            <Label class="text-[10px] font-black uppercase tracking-widest ml-1 text-emerald-600">Coût (TND)</Label>
-            <Input type="number" v-model.number="visiteForm.cost" placeholder="0.00" class="h-14 rounded-xl text-lg font-black bg-emerald-50 border-emerald-100 text-emerald-700" />
+          <div class="space-y-1.5">
+            <Label class="text-[9px] font-black uppercase tracking-widest text-emerald-600 pl-1">Coût (TND)</Label>
+            <Input type="number" v-model.number="visiteForm.cost" placeholder="0.00" class="h-13 rounded-2xl text-base font-black bg-emerald-50/70 border-emerald-200/80 text-emerald-800" />
           </div>
 
-          <div class="space-y-2">
-            <Label class="text-[10px] font-black uppercase tracking-widest ml-1 text-slate-400">Notes & Observations</Label>
-            <textarea v-model="visiteForm.notes" class="w-full h-24 p-4 rounded-xl border border-input bg-background text-sm font-medium focus:ring-2 focus:ring-rose-500 outline-none transition-all" placeholder="Détails sur la visite..."></textarea>
+          <div class="space-y-1.5">
+            <Label class="text-[9px] font-black uppercase tracking-widest text-slate-400 pl-1">Notes & Observations</Label>
+            <textarea v-model="visiteForm.notes" class="w-full h-20 p-3.5 rounded-2xl border border-slate-200/80 bg-slate-50/80 text-xs font-medium focus:bg-white focus:ring-4 focus:ring-rose-500/10 focus:border-rose-400 outline-none transition-all" placeholder="Détails sur la visite..."></textarea>
           </div>
 
           <Button 
             @click="submitVisite" 
             :disabled="submittingVisite || !visiteForm.date || !visiteForm.nextVisitDate"
-            class="w-full h-16 bg-rose-600 hover:bg-rose-700 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl transition-all active:scale-[0.98] gap-3"
+            class="w-full h-14 bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-700 hover:to-rose-800 text-white rounded-2xl font-black uppercase tracking-widest text-xs shadow-lg shadow-rose-600/25 transition-all active:scale-[0.98] gap-2.5 cursor-pointer"
           >
-            <LoaderIcon v-if="submittingVisite" class="w-5 h-5 animate-spin" />
+            <LoaderIcon v-if="submittingVisite" class="w-4 h-4 animate-spin" />
             {{ submittingVisite ? 'Enregistrement...' : 'Valider la Visite' }}
           </Button>
         </div>

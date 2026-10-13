@@ -54,19 +54,39 @@ export class WinnouPollerService implements OnModuleInit, OnModuleDestroy {
       this.logger.log('WINNOU_USER/WINNOU_PASS not set - poller disabled');
       return;
     }
-    this.startupTimer = setTimeout(() => {
-      void this.poll();
-      this.timer = setInterval(
-        () => void this.poll(),
-        WinnouPollerService.POLL_INTERVAL_MS,
-      );
-    }, 7_500);
-    this.logger.log(`Winnou poller scheduled (${this.baseUrl})`);
+    this.logger.log(`Winnou poller initialized (idle, starts on-demand when Suivi Flotte is open)`);
+  }
+
+  start() {
+    if (this.timer) return;
+    if (!this.username || !this.password) return;
+    this.logger.log(`Starting Winnou live 1s polling (${this.baseUrl})`);
+    void this.poll();
+    this.timer = setInterval(
+      () => void this.poll(),
+      WinnouPollerService.POLL_INTERVAL_MS,
+    );
+  }
+
+  stop() {
+    if (this.timer) {
+      clearInterval(this.timer);
+      this.timer = null;
+      this.logger.log(`Stopped Winnou live polling`);
+    }
+    if (this.startupTimer) {
+      clearTimeout(this.startupTimer);
+      this.startupTimer = null;
+    }
+    this.inFlight = false;
+  }
+
+  get isRunning(): boolean {
+    return this.timer !== null;
   }
 
   onModuleDestroy() {
-    if (this.timer) clearInterval(this.timer);
-    if (this.startupTimer) clearTimeout(this.startupTimer);
+    this.stop();
   }
 
   private async login(): Promise<boolean> {

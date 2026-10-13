@@ -14,4 +14,10 @@ export class AppController {
   getVersion(): { version: string } {
     return { version: this.appService.getAppVersion() };
   }
+
+  @Get('ping')
+  ping(): { ok: boolean; ts: number } {
+    // Lightweight keep-alive endpoint — used by Vercel cron to prevent cold starts
+    return { ok: true, ts: Date.now() };
+  }
 }

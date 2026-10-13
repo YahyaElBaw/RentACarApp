@@ -43,19 +43,16 @@ export class PresenceService implements OnModuleInit, OnModuleDestroy {
     if (now - last < 20_000) return;
     this.lastTouch.set(throttleKey, now);
     if (this.lastTouch.size > 500) this.lastTouch.clear();
+
+    // Single upsert — merge lastSeen, name and role in one round-trip
+    const patch: Record<string, any> = { userId, device: dev, lastSeen: new Date() };
+    if (name) patch.name = name;
+    if (role) patch.role = role;
     await this.presenceModel.updateOne(
       { userId, device: dev },
-      { $set: { userId, device: dev, lastSeen: new Date() } },
+      { $set: patch },
       { upsert: true },
     );
-    if (name || role) {
-      const patch: Record<string, any> = {};
-      if (name) patch.name = name;
-      if (role) patch.role = role;
-      await this.presenceModel
-        .updateMany({ userId }, { $set: patch })
-        .catch(() => undefined);
-    }
   }
 
   onModuleInit() {

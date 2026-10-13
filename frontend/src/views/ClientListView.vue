@@ -322,8 +322,19 @@ const getInitials = (firstName: string, lastName: string) => {
   return `${firstName?.[0] || ''}${lastName?.[0] || ''}`.toUpperCase()
 }
 
+const clientStatusFilter = ref<string>('all')
+const totalClientsCount = computed(() => clients.value.length)
+const whitelistClientsCount = computed(() => clients.value.filter(c => c.status === 'WHITE_LIST').length)
+const warningClientsCount = computed(() => clients.value.filter(c => c.status === 'WARNING').length)
+const blacklistClientsCount = computed(() => clients.value.filter(c => c.status === 'BLACK_LIST').length)
+
+const filteredByStatusClients = computed(() => {
+  if (clientStatusFilter.value === 'all') return clients.value
+  return clients.value.filter(c => c.status === clientStatusFilter.value)
+})
+
 const sortedClients = computed(() => {
-  return [...clients.value];
+  return [...filteredByStatusClients.value];
 });
 
 const totalClientPages = computed(() => Math.ceil(sortedClients.value.length / pageSize))
@@ -338,38 +349,187 @@ const isStepValid = computed(() => {
   }
   return true;
 });
-</script><template>
-  <div class="client-list-container space-y-12 p-8 max-w-7xl mx-auto">
-    <!-- Header & Integrated Action Bar -->
-    <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-8">
-      <div class="space-y-2">
-        <h1 class="text-4xl font-black tracking-tight text-slate-900 uppercase">Portefeuille <span class="text-indigo-600">Clients</span></h1>
-        <p class="text-slate-400 font-bold uppercase text-[10px] tracking-[0.3em] pl-1">Base de Données Locataires & Dossiers</p>
+</script>
+
+<template>
+  <div class="client-list-container space-y-8 p-6 sm:p-8 lg:p-10 max-w-7xl mx-auto">
+    <!-- 1. Header Section -->
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-5">
+      <div class="space-y-1">
+        <div class="flex items-center gap-3">
+          <div class="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-lg shadow-indigo-600/20">
+            <Users class="w-6 h-6 stroke-[2.2]" />
+          </div>
+          <div>
+            <h1 class="text-2xl sm:text-3xl font-black uppercase tracking-tight text-slate-900">
+              Portefeuille <span class="text-indigo-600">Clients</span>
+            </h1>
+            <p class="text-[10px] uppercase tracking-widest font-bold text-slate-400">
+              Base de données locataires, pièces d'identité & statut de fiabilité
+            </p>
+          </div>
+        </div>
       </div>
 
-      <div class="flex wrap items-center gap-3">
-        <div class="group relative h-12 w-12 transition-all duration-300 overflow-hidden rounded-2xl bg-white border-2 border-slate-200 hover:border-indigo-400 flex items-center cursor-text active:scale-95 hover:shadow-xl hover:shadow-indigo-200/50"
-          :class="searchOpen ? 'w-80 border-indigo-500' : 'w-12'"
-          @mouseenter="searchOpen = true"
-          @mouseleave="searchOpen = false"
-          @focusin="searchOpen = true"
-          @focusout="searchOpen = false">
-          <div class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none">
-            <Search class="w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-colors duration-300" />
-          </div>
-          <input
-            v-model="filters.query"
-            placeholder="Nom, CIN ou Téléphone..."
-            :class="[searchOpen ? 'opacity-100' : 'opacity-0', 'h-full w-full pl-10 pr-3 bg-transparent border-0 outline-none text-xs font-bold text-slate-900 placeholder:text-slate-400 transition-opacity duration-300']"
-          />
-        </div>
-
-        <Button @click="openAddModal" @mouseenter="addOpen = true" @mouseleave="addOpen = false" class="group relative h-12 w-12 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-black shadow-2xl shadow-indigo-200 transition-all duration-300 overflow-hidden flex items-center justify-start active:scale-95 hover:scale-105 hover:-translate-y-0.5 hover:shadow-indigo-400/40">
-          <div class="absolute inset-y-0 left-0 flex items-center pl-3.5">
-            <UserPlus class="w-4 h-4 stroke-[3] transition-transform duration-300 group-hover:rotate-90 group-hover:scale-110" />
-          </div>
-          <span :class="[addOpen ? 'opacity-100' : 'opacity-0', 'whitespace-nowrap transition-all duration-300 pl-10 pr-4 uppercase tracking-widest text-[10px]']">Nouveau Client</span>
+      <div class="flex items-center gap-3">
+        <Button 
+          v-if="authStore.isAdmin"
+          @click="openAddModal" 
+          class="h-11 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase text-[10px] tracking-widest shadow-lg shadow-indigo-600/20 flex items-center gap-2 active:scale-95 transition-all"
+        >
+          <UserPlus class="w-4 h-4 stroke-[3]" /> Nouveau Client
         </Button>
+      </div>
+    </div>
+
+    <!-- 2. KPI Summary Bar (Clickable Filter Tabs) -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div 
+        @click="clientStatusFilter = 'all'"
+        :class="[
+          'p-5 rounded-3xl bg-white border shadow-xs space-y-1.5 cursor-pointer transition-all',
+          clientStatusFilter === 'all' ? 'border-indigo-500 ring-2 ring-indigo-500/10' : 'border-slate-200/80 hover:border-slate-300'
+        ]"
+      >
+        <div class="flex items-center justify-between text-slate-400">
+          <span class="text-[10px] font-black uppercase tracking-wider text-slate-500">Tous les Clients</span>
+          <div class="w-8 h-8 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center font-bold">
+            <Users class="w-4 h-4" />
+          </div>
+        </div>
+        <div class="text-2xl font-black text-slate-900 font-mono">
+          {{ totalClientsCount }}
+        </div>
+        <div class="text-[10px] font-bold text-slate-400">
+          Totalité des dossiers
+        </div>
+      </div>
+
+      <div 
+        @click="clientStatusFilter = 'WHITE_LIST'"
+        :class="[
+          'p-5 rounded-3xl bg-white border shadow-xs space-y-1.5 cursor-pointer transition-all',
+          clientStatusFilter === 'WHITE_LIST' ? 'border-emerald-500 ring-2 ring-emerald-500/10' : 'border-slate-200/80 hover:border-slate-300'
+        ]"
+      >
+        <div class="flex items-center justify-between text-slate-400">
+          <span class="text-[10px] font-black uppercase tracking-wider text-slate-500">Fiables (White List)</span>
+          <div class="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+          </div>
+        </div>
+        <div class="text-2xl font-black text-emerald-600 font-mono">
+          {{ whitelistClientsCount }}
+        </div>
+        <div class="text-[10px] font-bold text-emerald-600">
+          Clients validés sans incident
+        </div>
+      </div>
+
+      <div 
+        @click="clientStatusFilter = 'WARNING'"
+        :class="[
+          'p-5 rounded-3xl bg-white border shadow-xs space-y-1.5 cursor-pointer transition-all',
+          clientStatusFilter === 'WARNING' ? 'border-amber-500 ring-2 ring-amber-500/10' : 'border-slate-200/80 hover:border-slate-300'
+        ]"
+      >
+        <div class="flex items-center justify-between text-slate-400">
+          <span class="text-[10px] font-black uppercase tracking-wider text-slate-500">Surveillance (Warning)</span>
+          <div class="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
+            <span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+          </div>
+        </div>
+        <div class="text-2xl font-black text-amber-600 font-mono">
+          {{ warningClientsCount }}
+        </div>
+        <div class="text-[10px] font-bold text-amber-600">
+          Vérification recommandée
+        </div>
+      </div>
+
+      <div 
+        @click="clientStatusFilter = 'BLACK_LIST'"
+        :class="[
+          'p-5 rounded-3xl bg-white border shadow-xs space-y-1.5 cursor-pointer transition-all',
+          clientStatusFilter === 'BLACK_LIST' ? 'border-rose-500 ring-2 ring-rose-500/10' : 'border-slate-200/80 hover:border-slate-300'
+        ]"
+      >
+        <div class="flex items-center justify-between text-slate-400">
+          <span class="text-[10px] font-black uppercase tracking-wider text-slate-500">Liste Noire (Interdits)</span>
+          <div class="w-8 h-8 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center">
+            <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
+          </div>
+        </div>
+        <div class="text-2xl font-black text-rose-600 font-mono">
+          {{ blacklistClientsCount }}
+        </div>
+        <div class="text-[10px] font-bold text-rose-600">
+          Location bloquée
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. Dedicated Filters Toolbar -->
+    <div class="p-4 sm:p-5 rounded-3xl bg-white border border-slate-200/80 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <!-- Search Input -->
+      <div class="relative flex-1 max-w-md">
+        <Search class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+        <input
+          v-model="filters.query"
+          placeholder="Rechercher par nom, CIN, passeport ou téléphone..."
+          class="w-full h-11 pl-10 pr-9 bg-slate-50 hover:bg-slate-100/60 focus:bg-white rounded-xl text-xs font-bold text-slate-900 outline-none border border-slate-200 focus:border-indigo-600 transition-all placeholder:text-slate-400"
+        />
+        <button 
+          v-if="filters.query" 
+          @click="filters.query = ''" 
+          class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+        >
+          <X class="w-3.5 h-3.5" />
+        </button>
+      </div>
+
+      <!-- Status Tabs -->
+      <div class="flex items-center gap-1.5 p-1 bg-slate-100 rounded-2xl border border-slate-200/60">
+        <button
+          @click="clientStatusFilter = 'all'"
+          :class="[
+            'px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer',
+            clientStatusFilter === 'all' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-900'
+          ]"
+        >
+          <span>Tous</span>
+          <span class="px-1.5 py-0.5 rounded-full text-[9px] font-mono font-bold bg-slate-200 text-slate-700">{{ totalClientsCount }}</span>
+        </button>
+        <button
+          @click="clientStatusFilter = 'WHITE_LIST'"
+          :class="[
+            'px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer',
+            clientStatusFilter === 'WHITE_LIST' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500 hover:text-emerald-700'
+          ]"
+        >
+          <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+          <span>Fiables</span>
+        </button>
+        <button
+          @click="clientStatusFilter = 'WARNING'"
+          :class="[
+            'px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer',
+            clientStatusFilter === 'WARNING' ? 'bg-white text-amber-700 shadow-sm' : 'text-slate-500 hover:text-amber-700'
+          ]"
+        >
+          <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+          <span>Surveillance</span>
+        </button>
+        <button
+          @click="clientStatusFilter = 'BLACK_LIST'"
+          :class="[
+            'px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer',
+            clientStatusFilter === 'BLACK_LIST' ? 'bg-white text-rose-700 shadow-sm' : 'text-slate-500 hover:text-rose-700'
+          ]"
+        >
+          <span class="w-2 h-2 rounded-full bg-rose-500"></span>
+          <span>Bloqués</span>
+        </button>
       </div>
     </div>
 
@@ -473,7 +633,41 @@ const isStepValid = computed(() => {
                 </TableCell>
               </TableRow>
               
-              <TableRow v-if="clients.length === 0 && !loading">
+              <!-- Skeleton Loading Rows -->
+              <template v-if="loading">
+                <TableRow v-for="i in 5" :key="'client-skel-' + i" class="animate-pulse border-slate-100">
+                  <TableCell class="pl-10 py-7">
+                    <div class="flex items-center gap-4">
+                      <div class="w-12 h-12 rounded-full bg-slate-200/80"></div>
+                      <div class="space-y-2">
+                        <div class="h-4 bg-slate-200/80 rounded w-32"></div>
+                        <div class="h-3 bg-slate-100 rounded w-20"></div>
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div class="space-y-2">
+                      <div class="h-4 bg-slate-200/80 rounded w-24"></div>
+                      <div class="h-3 bg-slate-100 rounded w-28"></div>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div class="space-y-2">
+                      <div class="h-4 bg-slate-200/80 rounded w-28"></div>
+                      <div class="h-3 bg-slate-100 rounded w-36"></div>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div class="h-4 bg-slate-200/80 rounded w-32"></div>
+                  </TableCell>
+                  <TableCell v-if="authStore.isAdmin" class="pr-10 text-right">
+                    <div class="h-9 w-16 bg-slate-100 rounded-xl ml-auto"></div>
+                  </TableCell>
+                </TableRow>
+              </template>
+
+              <!-- Empty State -->
+              <TableRow v-else-if="clients.length === 0">
                 <TableCell :colspan="authStore.isAdmin ? 6 : 5" class="h-60 text-center">
                   <div class="flex flex-col items-center gap-4 opacity-30">
                     <User class="w-16 h-16 stroke-[1]" />

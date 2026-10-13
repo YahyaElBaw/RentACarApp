@@ -16,6 +16,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 import { TraciPollerService } from './traci-poller.service';
 import { WinnouPollerService } from './winnou-poller.service';
+import { GpsLiveTrackerService } from './gps-live-tracker.service';
 
 @Controller('gps')
 export class GpsController {
@@ -27,7 +28,35 @@ export class GpsController {
     private readonly configService: ConfigService,
     private readonly traciPoller: TraciPollerService,
     private readonly winnouPoller: WinnouPollerService,
+    private readonly gpsTracker: GpsLiveTrackerService,
   ) {}
+
+  @UseGuards(JwtAuthGuard)
+  @Post('tracking/start')
+  startTracking(@Body('clientId') clientId?: string) {
+    this.gpsTracker.subscribe(clientId);
+    return { ok: true, status: this.gpsTracker.getStatus() };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('tracking/stop')
+  stopTracking(@Body('clientId') clientId?: string) {
+    this.gpsTracker.unsubscribe(clientId);
+    return { ok: true, status: this.gpsTracker.getStatus() };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('tracking/ping')
+  pingTracking(@Body('clientId') clientId?: string) {
+    this.gpsTracker.ping(clientId);
+    return { ok: true, status: this.gpsTracker.getStatus() };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('tracking/status')
+  getTrackingStatus() {
+    return this.gpsTracker.getStatus();
+  }
 
   /**
    * Fire an on-demand poll in the background (non-blocking).

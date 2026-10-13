@@ -21,6 +21,7 @@ import { JourneeModule } from './journee/journee.module';
 import { SharedModule } from './shared/shared.module';
 import { SettingModule } from './setting/setting.module';
 import { AgenceModule } from './agence/agence.module';
+import { LotContratModule } from './lot-contrat/lot-contrat.module';
 import { LogModule } from './log/log.module';
 import { EventsModule } from './events/events.module';
 import { PresenceModule } from './presence/presence.module';
@@ -56,6 +57,7 @@ import { PresenceInterceptor } from './presence/presence.interceptor';
     JourneeModule,
     SettingModule,
     AgenceModule,
+    LotContratModule,
     LogModule,
   ],
   controllers: [AppController],

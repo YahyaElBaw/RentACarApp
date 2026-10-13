@@ -53,9 +53,15 @@ export class ContratController {
     return this.contratService.findAll({ status, reference, carId, clientId });
   }
 
+  @UseGuards(JwtAuthGuard)
+  @Get('deleted')
+  findDeleted() {
+    return this.contratService.findDeleted();
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
-    return this.contratService.findOne(id);
+    return this.contratService.findOne(id, true);
   }
 
   @Get(':id/pdf')
@@ -155,6 +161,64 @@ export class ContratController {
       throw new BadRequestException('Invalid password');
     }
 
-    return this.contratService.remove(id);
+    const actor = {
+      id: user._id.toString(),
+      cin: user.cin,
+      role: user.role,
+      name: `${user.firstName} ${user.lastName}`,
+    };
+
+    return this.contratService.remove(id, actor);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Patch(':id/restore')
+  async restore(@Param('id') id: string, @Req() req: any) {
+    const userId = req.user.id;
+    const user = await this.usersService.findById(userId);
+
+    if (!user || !['admin', 'super_admin'].includes(user.role)) {
+      throw new ForbiddenException('Only administrators can restore contracts');
+    }
+
+    const actor = {
+      id: user._id.toString(),
+      cin: user.cin,
+      role: user.role,
+      name: `${user.firstName} ${user.lastName}`,
+    };
+
+    return this.contratService.restore(id, actor);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete(':id/permanent')
+  async permanentDelete(
+    @Param('id') id: string,
+    @Body('password') password: string,
+    @Req() req: any,
+  ) {
+    const userId = req.user.id;
+    const user = await this.usersService.findById(userId);
+
+    if (!user || user.role !== 'super_admin') {
+      throw new ForbiddenException('Only super administrators can permanently delete contracts');
+    }
+
+    if (password) {
+      const isMatch = await bcrypt.compare(password, user.password);
+      if (!isMatch) {
+        throw new BadRequestException('Invalid password');
+      }
+    }
+
+    const actor = {
+      id: user._id.toString(),
+      cin: user.cin,
+      role: user.role,
+      name: `${user.firstName} ${user.lastName}`,
+    };
+
+    return this.contratService.permanentDelete(id, actor);
   }
 }

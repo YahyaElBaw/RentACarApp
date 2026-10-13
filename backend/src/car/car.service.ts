@@ -2,6 +2,8 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Car, CarDocument } from './schemas/car.schema';
+import { Reservation, ReservationDocument } from '../reservation/schemas/reservation.schema';
+import { Contrat, ContratDocument } from '../contrat/schemas/contrat.schema';
 import { BookingConflictService } from '../shared/booking-conflict.service';
 import { EventsGateway } from '../events/events.gateway';
 
@@ -9,6 +11,8 @@ import { EventsGateway } from '../events/events.gateway';
 export class CarService {
   constructor(
     @InjectModel(Car.name) private carModel: Model<CarDocument>,
+    @InjectModel(Reservation.name) private reservationModel: Model<ReservationDocument>,
+    @InjectModel(Contrat.name) private contratModel: Model<ContratDocument>,
     private readonly bookingConflictService: BookingConflictService,
     private readonly eventsGateway: EventsGateway,
   ) {}
@@ -24,25 +28,35 @@ export class CarService {
   }
 
   async findAvailable(startDate: Date, endDate: Date): Promise<CarDocument[]> {
-    const allCars = await this.carModel
-      .find({ disabled: false })
-      .populate('agence')
-      .exec();
+    // Run all 3 queries in parallel: cars + reservations + contracts
+    const [allCars, bookedByReservation, bookedByContract] = await Promise.all([
+      this.carModel
+        .find({ disabled: false })
+        .select('-reservations -visites -vidanges -depenses -documents')
+        .lean()
+        .exec(),
+      this.reservationModel
+        .distinct('car', {
+          status: { $in: ['confirmed', 'pending'] },
+          startDate: { $lt: endDate },
+          endDate: { $gt: startDate },
+        })
+        .exec(),
+      this.contratModel
+        .distinct('car', {
+          status: { $in: ['active', 'soon'] },
+          startDate: { $lt: endDate },
+          endDate: { $gt: startDate },
+        })
+        .exec(),
+    ]);
 
-    const availableCars = [];
-    for (const car of allCars) {
-      const conflictResult = await this.bookingConflictService.findConflicts(
-        (car as any)._id.toString(),
-        startDate,
-        endDate,
-      );
-
-      if (!conflictResult.hasConflicts) {
-        availableCars.push(car);
-      }
+    const bookedIds = new Set<string>();
+    for (const id of [...bookedByReservation, ...bookedByContract]) {
+      if (id) bookedIds.add(id.toString());
     }
 
-    return availableCars;
+    return allCars.filter(car => !bookedIds.has((car as any)._id.toString()));
   }
 
   async findAll(filters: any = {}): Promise<CarDocument[]> {
@@ -59,28 +73,59 @@ export class CarService {
     if (filters.isAvailable !== undefined)
       query['isAvailable'] = filters.isAvailable;
 
-    let cars = await this.carModel.find(query).populate('agence').exec();
+    let cars = await this.carModel
+      .find(query)
+      .select('-reservations -visites -vidanges -depenses -documents')
+      .populate('agence', 'name')
+      .lean()
+      .exec();
 
     if (filters.isAvailable) {
-      const now = new Date();
-      const startOfDay = new Date(now.setHours(0, 0, 0, 0));
-      const endOfDay = new Date(now.setHours(23, 59, 59, 999));
-
-      const filtered = [];
-      for (const car of cars) {
-        const conflicts = await this.bookingConflictService.findConflicts(
-          (car as any)._id.toString(),
-          startOfDay,
-          endOfDay,
-        );
-        if (!conflicts.hasConflicts) {
-          filtered.push(car);
-        }
-      }
-      cars = filtered;
+      // Batch approach: single aggregation to get all booked car IDs for today
+      // instead of firing 2 queries per car in a loop (N+1 anti-pattern)
+      const bookedCarIds = await this.getBookedCarIdsToday();
+      cars = cars.filter(car => !bookedCarIds.has((car as any)._id.toString()));
     }
 
-    return cars;
+    return cars as any;
+  }
+
+  /**
+   * Returns a Set of car IDs that have active bookings (contracts or reservations)
+   * overlapping today. Uses 2 aggregations instead of 2N per-car queries.
+   */
+  private async getBookedCarIdsToday(): Promise<Set<string>> {
+    const now = new Date();
+    const startOfDay = new Date(now);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(now);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const dateOverlapFilter = {
+      startDate: { $lt: endOfDay },
+      endDate: { $gt: startOfDay },
+    };
+
+    const [bookedByReservation, bookedByContract] = await Promise.all([
+      this.reservationModel
+        .distinct('car', {
+          status: { $in: ['confirmed', 'pending'] },
+          ...dateOverlapFilter,
+        })
+        .exec(),
+      this.contratModel
+        .distinct('car', {
+          status: { $in: ['active', 'soon'] },
+          ...dateOverlapFilter,
+        })
+        .exec(),
+    ]);
+
+    const ids = new Set<string>();
+    for (const id of [...bookedByReservation, ...bookedByContract]) {
+      ids.add(id.toString());
+    }
+    return ids;
   }
 
   async findOne(id: string): Promise<CarDocument> {

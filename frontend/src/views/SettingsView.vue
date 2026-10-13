@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, reactive } from 'vue'
-import { settingApi, carApi, clientApi, userApi, gpsApi, dashboardApi } from '@/api/index'
+import { settingApi, carApi, clientApi, userApi, gpsApi, dashboardApi, contratApi } from '@/api/index'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useAuthStore } from '@/stores/auth'
-import { Car, Users, Calculator, RefreshCw, AlertTriangle, FileText, Wrench, KeyRound, UserCircle2, Eye, EyeOff, Loader2, Gauge, Tags, X, Plus, Route, Trash2, RotateCcw, CheckSquare, Square, Search } from 'lucide-vue-next'
+import { Car, Users, Calculator, RefreshCw, AlertTriangle, FileText, Wrench, KeyRound, UserCircle2, Eye, EyeOff, Loader2, Gauge, Tags, X, Plus, Route, Trash2, RotateCcw, CheckSquare, Square, Search, BookOpen, Sliders } from 'lucide-vue-next'
 import { useToast } from 'primevue/usetoast'
 
 const authStore = useAuthStore()
@@ -173,7 +173,10 @@ onMounted(() => {
 const onTabChange = (tab: string) => {
   activeTab.value = tab
   if (tab === 'corbeille') {
-    loadDismissedAlerts()
+    loadDeletedContrats()
+    if (authStore.isSuperAdmin) {
+      loadDismissedAlerts()
+    }
   }
 }
 
@@ -275,6 +278,88 @@ const restoreClient = async (id: string) => {
     toast.add({ severity: 'success', summary: 'Client Restaure', detail: 'Le client est a nouveau actif.', life: 3000 })
   } catch (err) {
     alert("Erreur lors de la restauration.")
+  }
+}
+
+// ── Corbeille (Contrats & Alertes) ──
+const corbeilleSubTab = ref<'contrats' | 'alerts'>('contrats')
+const deletedContrats = ref<any[]>([])
+const loadingDeletedContrats = ref(false)
+const deletedContratSearch = ref('')
+
+const loadDeletedContrats = async () => {
+  loadingDeletedContrats.value = true
+  try {
+    const data = await contratApi.getDeleted()
+    deletedContrats.value = data || []
+  } catch (err) {
+    console.error('Failed to load deleted contrats', err)
+  } finally {
+    loadingDeletedContrats.value = false
+  }
+}
+
+const filteredDeletedContrats = computed(() => {
+  let list = deletedContrats.value
+  if (deletedContratSearch.value) {
+    const q = deletedContratSearch.value.toLowerCase()
+    list = list.filter((c: any) =>
+      (c.reference || '').toLowerCase().includes(q) ||
+      (c.clients || []).some((cl: any) => 
+        (cl.firstName || '').toLowerCase().includes(q) ||
+        (cl.lastName || '').toLowerCase().includes(q) ||
+        (cl.cin || '').toLowerCase().includes(q)
+      ) ||
+      (c.car?.brand || '').toLowerCase().includes(q) ||
+      (c.car?.model || '').toLowerCase().includes(q) ||
+      (c.car?.matricule || '').toLowerCase().includes(q)
+    )
+  }
+  return list
+})
+
+const getContratStatusBadge = (c: any) => {
+  const status = c?.status?.toLowerCase()
+  switch (status) {
+    case 'soon':
+      return { label: 'À VENIR', class: 'bg-blue-50 text-blue-600 border-blue-200/50' }
+    case 'active': 
+      return { label: 'ACTIF', class: 'bg-emerald-50 text-emerald-600 border-emerald-200/50' }
+    case 'terminé': 
+      return { label: 'TERMINÉ', class: 'bg-slate-50 text-slate-500 border-slate-200/50' }
+    case 'clôturé': 
+      return { label: 'CLÔTURÉ', class: 'bg-amber-50 text-amber-600 border-amber-200/50' }
+    case 'cancelled': 
+      return { label: 'ANNULÉ', class: 'bg-red-50 text-red-600 border-red-200/50' }
+    default: 
+      return { label: status?.toUpperCase() || 'STATUT', class: 'bg-slate-50 text-slate-500 border-slate-200/50' }
+  }
+}
+
+const formatContratDate = (iso: string) => {
+  if (!iso) return '--'
+  const d = new Date(iso)
+  return d.toLocaleDateString('fr-TN', { day: '2-digit', month: '2-digit', year: 'numeric' })
+}
+
+const restoreDeletedContrat = async (id: string) => {
+  try {
+    await contratApi.restore(id)
+    deletedContrats.value = deletedContrats.value.filter((c: any) => c._id !== id)
+    toast.add({ severity: 'success', summary: 'Contrat Restauré', detail: 'Le contrat a été restauré avec succès.', life: 3000 })
+  } catch (err: any) {
+    toast.add({ severity: 'error', summary: 'Erreur', detail: err.response?.data?.message || 'Échec de la restauration.', life: 3000 })
+  }
+}
+
+const permanentDeleteContrat = async (id: string) => {
+  if (!confirm('Supprimer définitivement ce contrat ? Cette action est irréversible.')) return
+  try {
+    await contratApi.permanentDelete(id)
+    deletedContrats.value = deletedContrats.value.filter((c: any) => c._id !== id)
+    toast.add({ severity: 'success', summary: 'Supprimé définitivement', detail: 'Le contrat a été supprimé de la base de données.', life: 3000 })
+  } catch (err: any) {
+    toast.add({ severity: 'error', summary: 'Erreur', detail: err.response?.data?.message || 'Échec de la suppression.', life: 3000 })
   }
 }
 
@@ -425,47 +510,54 @@ const formatDismissedDate = (iso: string) => {
 
 <template>
   <div class="settings-view p-8 lg:p-12 max-w-7xl mx-auto space-y-12">
-    <div class="space-y-2">
-      <h1 class="text-4xl font-black uppercase tracking-tighter flex items-center gap-4">
-        Parametres <span class="text-indigo-600">Globaux</span>
-      </h1>
-      <p class="text-[10px] uppercase tracking-widest font-black opacity-60">Configuration et Maintenance du Systeme</p>
+    <div class="flex items-center gap-4">
+      <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-indigo-700 flex items-center justify-center shadow-lg shadow-indigo-500/20 text-white shrink-0">
+        <Sliders class="w-7 h-7" />
+      </div>
+      <div>
+        <h1 class="text-3xl font-black uppercase tracking-tight text-slate-900">
+          Paramètres <span class="text-indigo-600">Globaux</span>
+        </h1>
+        <p class="text-[11px] uppercase tracking-widest font-bold text-slate-400 mt-0.5">
+          Configuration du Système, Véhicules, Clients &amp; Comptabilité
+        </p>
+      </div>
     </div>
 
     <!-- TABS -->
-    <div class="flex gap-4 border-b border-slate-200/50 pb-4 flex-wrap">
+    <div class="flex gap-3 border-b border-slate-200/60 pb-5 flex-wrap">
       <button 
         @click="onTabChange('compte')"
-        :class="['px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all flex items-center gap-3', activeTab === 'compte' ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-600/20' : 'bg-white text-slate-400 hover:bg-slate-50 hover:text-slate-900 border border-slate-100']"
+        :class="['px-6 py-3.5 rounded-2xl font-extrabold text-sm uppercase tracking-wide transition-all flex items-center gap-3', activeTab === 'compte' ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-600/25 scale-[1.02]' : 'bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-900 border border-slate-200/80']"
       >
-        <KeyRound class="w-4 h-4" /> Mon Compte
+        <KeyRound class="w-5 h-5" /> Mon Compte
       </button>
       <template v-if="authStore.isAdmin">
         <button 
           @click="onTabChange('voitures')"
-          :class="['px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all flex items-center gap-3', activeTab === 'voitures' ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-600/20' : 'bg-white text-slate-400 hover:bg-slate-50 hover:text-slate-900 border border-slate-100']"
+          :class="['px-6 py-3.5 rounded-2xl font-extrabold text-sm uppercase tracking-wide transition-all flex items-center gap-3', activeTab === 'voitures' ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-600/25 scale-[1.02]' : 'bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-900 border border-slate-200/80']"
         >
-          <Car class="w-4 h-4" /> Flotte & Vehicules
+          <Car class="w-5 h-5" /> Flotte &amp; Véhicules
         </button>
         <button 
           @click="onTabChange('clients')"
-          :class="['px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all flex items-center gap-3', activeTab === 'clients' ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-600/20' : 'bg-white text-slate-400 hover:bg-slate-50 hover:text-slate-900 border border-slate-100']"
+          :class="['px-6 py-3.5 rounded-2xl font-extrabold text-sm uppercase tracking-wide transition-all flex items-center gap-3', activeTab === 'clients' ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-600/25 scale-[1.02]' : 'bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-900 border border-slate-200/80']"
         >
-          <Users class="w-4 h-4" /> Base Clients
+          <Users class="w-5 h-5" /> Base Clients
         </button>
         <button 
           @click="onTabChange('comptabilite')"
-          :class="['px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all flex items-center gap-3', activeTab === 'comptabilite' ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-600/20' : 'bg-white text-slate-400 hover:bg-slate-50 hover:text-slate-900 border border-slate-100']"
+          :class="['px-6 py-3.5 rounded-2xl font-extrabold text-sm uppercase tracking-wide transition-all flex items-center gap-3', activeTab === 'comptabilite' ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-600/25 scale-[1.02]' : 'bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-900 border border-slate-200/80']"
         >
-          <Calculator class="w-4 h-4" /> Comptabilite
+          <Calculator class="w-5 h-5" /> Comptabilité
         </button>
       </template>
-      <template v-if="authStore.isSuperAdmin">
+      <template v-if="authStore.isAdmin">
         <button 
           @click="onTabChange('corbeille')"
-          :class="['px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all flex items-center gap-3', activeTab === 'corbeille' ? 'bg-slate-900 text-white shadow-xl shadow-slate-900/20' : 'bg-white text-slate-400 hover:bg-slate-50 hover:text-slate-900 border border-slate-100']"
+          :class="['px-6 py-3.5 rounded-2xl font-extrabold text-sm uppercase tracking-wide transition-all flex items-center gap-3', activeTab === 'corbeille' ? 'bg-slate-900 text-white shadow-xl shadow-slate-900/25 scale-[1.02]' : 'bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-900 border border-slate-200/80']"
         >
-          <Trash2 class="w-4 h-4" /> Corbeille
+          <Trash2 class="w-5 h-5" /> Corbeille
         </button>
       </template>
     </div>
@@ -767,7 +859,7 @@ const formatDismissedDate = (iso: string) => {
                 <div class="flex items-center justify-between">
                   <div class="space-y-1">
                     <Label class="text-xs font-black uppercase tracking-widest text-slate-900">Frais de Contrat (Timbre)</Label>
-                    <p class="text-[10px] text-slate-500 font-bold">Ajouter des frais fixes d'edition de contrat.</p>
+                    <p class="text-[10px] text-slate-500 font-bold">Dépense de timbre fiscal calculée par jour de location et créée automatiquement à la clôture du carnet.</p>
                   </div>
                   <button 
                     @click="appSettings.contractTaxEnabled = !appSettings.contractTaxEnabled"
@@ -777,7 +869,7 @@ const formatDismissedDate = (iso: string) => {
                   </button>
                 </div>
                 <div v-if="appSettings.contractTaxEnabled" class="space-y-3 animate-in fade-in duration-300">
-                  <Label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Montant (TND)</Label>
+                  <Label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Montant par jour de location (TND)</Label>
                   <Input type="number" v-model="appSettings.contractTaxValue" class="h-14 bg-slate-50 border-slate-100 rounded-2xl font-black text-slate-900" />
                 </div>
               </div>
@@ -831,9 +923,193 @@ const formatDismissedDate = (iso: string) => {
         </Card>
       </div>
 
-      <!-- CORBEILLE TAB (super_admin only) -->
-      <div v-if="authStore.isSuperAdmin && activeTab === 'corbeille'" class="space-y-8 animate-in slide-in-from-right-4 duration-500">
-        <Card class="border border-slate-100 shadow-2xl shadow-slate-200/50 bg-white rounded-[2.5rem] overflow-hidden">
+      <!-- CORBEILLE TAB -->
+      <div v-if="authStore.isAdmin && activeTab === 'corbeille'" class="space-y-8 animate-in slide-in-from-right-4 duration-500">
+        <!-- Sub-Navigation for Corbeille: Contrats vs Alertes -->
+        <div class="flex items-center gap-3 bg-white p-2 rounded-2xl border border-slate-100 shadow-sm w-fit">
+          <button
+            type="button"
+            @click="corbeilleSubTab = 'contrats'"
+            :class="['px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2', corbeilleSubTab === 'contrats' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20' : 'text-slate-400 hover:text-slate-800 hover:bg-slate-50']"
+          >
+            <FileText class="w-4 h-4" />
+            Contrats Supprimés
+            <span v-if="deletedContrats.length" class="px-2 py-0.5 rounded-full text-[9px] font-black" :class="corbeilleSubTab === 'contrats' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'">
+              {{ deletedContrats.length }}
+            </span>
+          </button>
+
+          <button
+            v-if="authStore.isSuperAdmin"
+            type="button"
+            @click="corbeilleSubTab = 'alerts'"
+            :class="['px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2', corbeilleSubTab === 'alerts' ? 'bg-slate-900 text-white shadow-md shadow-slate-900/20' : 'text-slate-400 hover:text-slate-800 hover:bg-slate-50']"
+          >
+            <AlertTriangle class="w-4 h-4" />
+            Alertes Supprimées
+            <span v-if="dismissedAlerts.length" class="px-2 py-0.5 rounded-full text-[9px] font-black" :class="corbeilleSubTab === 'alerts' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'">
+              {{ dismissedAlerts.length }}
+            </span>
+          </button>
+        </div>
+
+        <!-- Contrats Supprimés Card -->
+        <Card v-if="corbeilleSubTab === 'contrats'" class="border border-slate-100 shadow-2xl shadow-slate-200/50 bg-white rounded-[2.5rem] overflow-hidden">
+          <CardHeader class="bg-slate-50/50 p-8">
+            <div class="flex items-center justify-between">
+              <div>
+                <CardTitle class="text-xl font-black text-slate-900 uppercase flex items-center gap-3">
+                  <Trash2 class="w-5 h-5 text-rose-500" /> Contrats dans la Corbeille
+                </CardTitle>
+                <CardDescription class="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-2">
+                  {{ deletedContrats.length }} contrat(s) supprimé(s) — Vous pouvez les restaurer à tout moment
+                </CardDescription>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                @click="loadDeletedContrats"
+                class="rounded-xl font-bold uppercase text-[10px] tracking-wider"
+              >
+                <RefreshCw class="w-3.5 h-3.5 mr-1.5" :class="{ 'animate-spin': loadingDeletedContrats }" />
+                Actualiser
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent class="p-0">
+            <!-- Search -->
+            <div class="px-8 pt-6 pb-4">
+              <div class="relative max-w-sm">
+                <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input
+                  v-model="deletedContratSearch"
+                  placeholder="Rechercher par réf, client, immatriculation..."
+                  class="w-full h-10 pl-9 pr-4 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 bg-white focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 outline-none"
+                />
+              </div>
+            </div>
+
+            <!-- Loading -->
+            <div v-if="loadingDeletedContrats" class="flex justify-center py-16">
+              <div class="w-6 h-6 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+            </div>
+
+            <!-- Table -->
+            <Table v-else-if="filteredDeletedContrats.length > 0">
+              <TableHeader>
+                <TableRow class="bg-slate-50/50">
+                  <TableHead class="pl-8 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">Réf / Statut</TableHead>
+                  <TableHead class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Locataire</TableHead>
+                  <TableHead class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Véhicule</TableHead>
+                  <TableHead class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Période & Montant</TableHead>
+                  <TableHead class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Carnet (Lot)</TableHead>
+                  <TableHead class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Supprimé le</TableHead>
+                  <TableHead class="text-right pr-8 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                <TableRow v-for="c in filteredDeletedContrats" :key="c._id" class="hover:bg-slate-50/70 transition-colors">
+                  <TableCell class="pl-8 py-5">
+                    <div class="flex flex-col gap-1.5">
+                      <span class="font-black text-slate-900 tracking-tight text-sm uppercase tabular-nums italic">#{{ c.reference }}</span>
+                      <span :class="['text-[8px] font-black tracking-widest px-2.5 py-0.5 rounded-full border shadow-sm w-fit uppercase', getContratStatusBadge(c).class]">
+                        {{ getContratStatusBadge(c).label }}
+                      </span>
+                    </div>
+                  </TableCell>
+
+                  <TableCell>
+                    <div class="flex flex-col" v-if="c.clients?.length">
+                      <span class="font-bold text-xs text-slate-900 uppercase">
+                        {{ c.clients[0]?.firstName }} {{ c.clients[0]?.lastName }}
+                      </span>
+                      <span class="text-[9px] font-medium text-slate-400 mt-0.5">
+                        CIN: {{ c.clients[0]?.cin || 'N/A' }}
+                      </span>
+                    </div>
+                    <span v-else class="text-xs text-slate-300 italic">Inconnu</span>
+                  </TableCell>
+
+                  <TableCell>
+                    <div class="flex flex-col" v-if="c.car">
+                      <span class="font-bold text-xs text-slate-900 uppercase">
+                        {{ c.car?.brand }} {{ c.car?.model }}
+                      </span>
+                      <span class="text-[10px] font-mono font-bold text-indigo-500 uppercase mt-0.5">
+                        {{ c.car?.matricule }}
+                      </span>
+                    </div>
+                    <span v-else class="text-xs text-slate-300 italic">Non assigné</span>
+                  </TableCell>
+
+                  <TableCell>
+                    <div class="flex flex-col">
+                      <span class="text-[11px] font-bold text-slate-700 tabular-nums">
+                        {{ formatContratDate(c.startDate) }} ⎯ {{ formatContratDate(c.endDate) }}
+                      </span>
+                      <span class="text-xs font-black text-slate-900 mt-0.5 tabular-nums">
+                        {{ c.totalAmount || 0 }} TND
+                      </span>
+                    </div>
+                  </TableCell>
+
+                  <TableCell>
+                    <span v-if="c.lot" class="text-[9px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200/60 inline-flex items-center gap-1">
+                      <BookOpen class="w-3 h-3" />
+                      {{ c.lot.name || 'Carnet lié' }}
+                    </span>
+                    <span v-else class="text-[10px] text-slate-300 italic">Aucun</span>
+                  </TableCell>
+
+                  <TableCell>
+                    <div class="flex flex-col">
+                      <span class="text-[10px] font-bold text-slate-600 tabular-nums">
+                        {{ formatDismissedDate(c.deletedAt) || '--' }}
+                      </span>
+                      <span v-if="c.deletedBy" class="text-[9px] text-slate-400 mt-0.5">
+                        par {{ c.deletedBy.firstName }} {{ c.deletedBy.lastName }}
+                      </span>
+                    </div>
+                  </TableCell>
+
+                  <TableCell class="pr-8 text-right">
+                    <div class="flex items-center justify-end gap-2">
+                      <Button
+                        size="sm"
+                        @click="restoreDeletedContrat(c._id)"
+                        class="h-9 px-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 shadow-sm shadow-emerald-600/20 active:scale-95 transition-all"
+                        title="Restaurer ce contrat"
+                      >
+                        <RotateCcw class="w-3.5 h-3.5" /> Restaurer
+                      </Button>
+                      <Button
+                        v-if="authStore.isSuperAdmin"
+                        variant="ghost"
+                        size="icon"
+                        @click="permanentDeleteContrat(c._id)"
+                        class="h-9 w-9 text-rose-500 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
+                        title="Supprimer définitivement"
+                      >
+                        <Trash2 class="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+
+            <!-- Empty State -->
+            <div v-else class="p-16 text-center space-y-4">
+              <Trash2 class="w-12 h-12 text-slate-200 mx-auto stroke-1" />
+              <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                {{ deletedContratSearch ? 'Aucun contrat correspondant' : 'Aucun contrat dans la corbeille' }}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <!-- Alertes Supprimées Card -->
+        <Card v-if="corbeilleSubTab === 'alerts' && authStore.isSuperAdmin" class="border border-slate-100 shadow-2xl shadow-slate-200/50 bg-white rounded-[2.5rem] overflow-hidden">
           <CardHeader class="bg-slate-50/50 p-8">
             <div class="flex items-center justify-between">
               <div>
@@ -898,18 +1174,18 @@ const formatDismissedDate = (iso: string) => {
                   >
                     Tous <span class="ml-1 opacity-60">{{ dismissedFilterCounts.all || 0 }}</span>
                   </button>
-                  <button
-                    v-for="(count, code) in dismissedFilterCounts"
-                    :key="code"
-                    v-if="code !== 'all' && count"
-                    @click="dismissedAlertFilter = code as string"
-                    :class="[
-                      'px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest transition-all',
-                      dismissedAlertFilter === code ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
-                    ]"
-                  >
-                    {{ codeLabels[code as string] || code }} <span class="ml-1 opacity-60">{{ count }}</span>
-                  </button>
+                  <template v-for="(count, code) in dismissedFilterCounts" :key="code">
+                    <button
+                      v-if="code !== 'all' && count"
+                      @click="dismissedAlertFilter = code as string"
+                      :class="[
+                        'px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest transition-all',
+                        dismissedAlertFilter === code ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
+                      ]"
+                    >
+                      {{ codeLabels[code as string] || code }} <span class="ml-1 opacity-60">{{ count }}</span>
+                    </button>
+                  </template>
                 </div>
               </div>
 

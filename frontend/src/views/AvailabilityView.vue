@@ -1,28 +1,37 @@
 <template>
-  <div class="availability-container space-y-12 p-8 max-w-7xl mx-auto">
-    <!-- Header Section -->
-    <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
-      <div class="space-y-2">
-        <h1 class="text-4xl font-black tracking-tight text-slate-900 uppercase">
-          Planificateur <span class="text-indigo-600">Disponibilité</span>
-        </h1>
-        <p class="text-slate-400 font-bold uppercase text-[10px] tracking-[0.3em] pl-1">Recherche temps réel & Réservation instantanée</p>
+  <div class="availability-container space-y-8 p-6 sm:p-8 lg:p-10 max-w-7xl mx-auto">
+    <!-- 1. Header Section -->
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-5">
+      <div class="space-y-1">
+        <div class="flex items-center gap-3">
+          <div class="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-lg shadow-indigo-600/20">
+            <Search class="w-6 h-6 stroke-[2.2]" />
+          </div>
+          <div>
+            <h1 class="text-2xl sm:text-3xl font-black uppercase tracking-tight text-slate-900">
+              Planificateur <span class="text-indigo-600">Disponibilité</span>
+            </h1>
+            <p class="text-[10px] uppercase tracking-widest font-bold text-slate-400">
+              Recherche temps réel & réservation instantanée selon les dates
+            </p>
+          </div>
+        </div>
       </div>
 
       <div v-if="reservationStep > 0" class="flex gap-2">
-        <Button variant="outline" size="sm" @click="reservationStep = 0" class="rounded-xl font-black uppercase text-[10px] tracking-widest gap-2 bg-white shadow-sm hover:bg-slate-50 transition-all">
+        <Button variant="outline" size="sm" @click="reservationStep = 0" class="h-11 px-5 rounded-xl font-black uppercase text-[10px] tracking-widest gap-2 bg-white shadow-xs hover:bg-slate-50 transition-all">
           <ChevronLeft class="w-4 h-4" /> Retour à la Recherche
         </Button>
       </div>
     </div>
 
     <!-- Main Workflow Card -->
-    <Card class="border border-slate-100 shadow-2xl shadow-slate-200/50 bg-white rounded-[2.5rem] overflow-hidden">
+    <Card class="border border-slate-200/70 shadow-[0_20px_50px_-20px_rgba(15,23,42,0.07)] bg-white/95 backdrop-blur-2xl rounded-[2.5rem] overflow-hidden">
       <CardContent class="p-8">
         <!-- Step 0: Search & Selection -->
         <div v-if="reservationStep === 0" class="space-y-10 animate-in fade-in slide-in-from-top-2 duration-500">
           <!-- Search Form -->
-          <div class="flex flex-wrap items-end gap-4 bg-slate-50 p-8 rounded-[2.5rem] border border-slate-100">
+          <div class="flex flex-wrap items-end gap-4 bg-slate-50/80 p-8 rounded-[2.5rem] border border-slate-100 shadow-inner">
             <div class="space-y-2 flex-1 min-w-[280px]">
               <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Date de Départ</label>
               <div class="flex gap-2">
@@ -73,13 +82,41 @@
               </div>
 
               <div class="flex flex-col gap-4 max-h-[600px] overflow-y-auto no-scrollbar pr-2 py-1">
+                <!-- Skeletons when searching -->
+                <template v-if="searching">
+                  <div 
+                    v-for="i in 4" 
+                    :key="'avail-skel-' + i"
+                    class="p-4 rounded-2xl border-2 border-slate-100 bg-white/60 animate-pulse flex items-center gap-5"
+                  >
+                    <div class="w-20 h-20 rounded-2xl bg-slate-200/70 shrink-0"></div>
+                    <div class="flex-1 space-y-2">
+                      <div class="h-4 bg-slate-200/70 rounded-md w-3/4"></div>
+                      <div class="h-3 bg-slate-100 rounded-md w-1/2"></div>
+                    </div>
+                    <div class="w-16 h-8 bg-slate-200/70 rounded-lg"></div>
+                  </div>
+                </template>
+
+                <!-- Empty state when not searching -->
                 <div 
+                  v-else-if="filteredAvailableCars.length === 0" 
+                  class="py-12 flex flex-col items-center justify-center text-center opacity-40 space-y-3"
+                >
+                  <CarIcon class="w-12 h-12 stroke-1 text-slate-400" />
+                  <p class="text-xs font-black uppercase tracking-widest text-slate-500">Aucun véhicule disponible</p>
+                  <p class="text-[10px] text-slate-400">Modifiez les dates ou les critères de recherche</p>
+                </div>
+
+                <!-- Car List -->
+                <div 
+                  v-else
                   v-for="car in filteredAvailableCars" 
                   :key="car._id"
                   @click="selectedCar = car"
                   :class="[
-                    'group p-4 rounded-2xl border-2 transition-all duration-300 cursor-pointer flex items-center gap-5 relative overflow-hidden',
-                    selectedCar?._id === car._id ? 'border-indigo-600 bg-indigo-50/50 shadow-xl shadow-indigo-100' : 'border-slate-50 bg-white hover:border-indigo-100 hover:shadow-lg'
+                    'group p-4 rounded-2xl border-2 transition-all duration-300 cursor-pointer flex items-center gap-5 relative overflow-hidden hover-lift',
+                    selectedCar?._id === car._id ? 'border-indigo-600 bg-indigo-50/50 shadow-xl shadow-indigo-600/15' : 'border-slate-100 bg-white/90 hover:border-indigo-200 hover:shadow-lg hover:shadow-indigo-500/5'
                   ]"
                 >
                   <div class="w-20 h-20 rounded-2xl bg-slate-50 border border-slate-100 overflow-hidden shrink-0 group-hover:scale-105 transition-transform flex items-center justify-center p-1">
@@ -138,7 +175,7 @@
                   </div>
                   <div class="space-y-2">
                     <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Total Séjour ({{ availabilitySearch.days }}j)</label>
-                    <div class="h-14 bg-indigo-600 rounded-xl flex items-center justify-center border border-indigo-500 shadow-lg shadow-indigo-100/50">
+                    <div class="h-14 bg-indigo-600 rounded-xl flex items-center justify-center border border-indigo-500 shadow-lg shadow-indigo-600/20">
                       <span class="text-xl font-black text-white tabular-nums italic">{{ (overriddenDailyPrice * availabilitySearch.days).toLocaleString() }} <span class="text-xs not-italic text-indigo-200 ml-1">TND</span></span>
                     </div>
                   </div>
@@ -155,7 +192,7 @@
                   </div>
                 </div>
 
-                <Button @click="reservationStep = 1" class="w-full h-16 bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase tracking-widest rounded-2xl shadow-xl shadow-indigo-100 group gap-3">
+                <Button @click="reservationStep = 1" class="w-full h-16 bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase tracking-widest rounded-2xl shadow-xl shadow-indigo-600/20 group gap-3 hover-lift active:scale-95">
                   Assigner le Client <ArrowRight class="w-5 h-5 group-hover:translate-x-2 transition-transform" />
                 </Button>
               </div>
@@ -195,8 +232,8 @@
                   :key="client._id"
                   @click="toggleClientSelection(client)"
                   :class="[
-                    'p-5 rounded-2xl border-2 transition-all cursor-pointer flex items-center justify-between group relative overflow-hidden',
-                    selectedClients.some(c => c._id === client._id) ? 'border-indigo-600 bg-indigo-50/50' : 'border-slate-50 bg-white hover:border-indigo-100 shadow-sm'
+                    'p-5 rounded-2xl border-2 transition-all duration-300 cursor-pointer flex items-center justify-between group relative overflow-hidden hover-lift',
+                    selectedClients.some(c => c._id === client._id) ? 'border-indigo-600 bg-indigo-50/50 shadow-lg shadow-indigo-600/10' : 'border-slate-100 bg-white/90 hover:border-indigo-200 shadow-sm hover:shadow-indigo-500/5'
                   ]"
                 >
                   <div class="flex items-center gap-4">
@@ -276,7 +313,7 @@
 
               <!-- New Client Dialog -->
               <Dialog v-model:open="isAddingNewClient">
-                <DialogContent class="sm:max-w-2xl bg-white border-none shadow-2xl rounded-[2.5rem] p-10">
+                <DialogContent class="sm:max-w-2xl glass-modal border border-white/60 shadow-3xl rounded-[2.5rem] p-10">
                   <DialogHeader>
                     <DialogTitle class="text-3xl font-black text-slate-900 uppercase tracking-tight">Nouveau <span class="text-indigo-600 italic">Profil</span></DialogTitle>
                     <DialogDescription class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Enregistrement d'un nouveau conducteur</DialogDescription>
@@ -318,7 +355,7 @@
                   </div>
 
                   <div class="mt-8">
-                    <Button @click="createNewClient" :disabled="!isNewClientValid" class="w-full h-16 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl shadow-indigo-100 disabled:opacity-50">
+                    <Button @click="createNewClient" :disabled="!isNewClientValid" class="w-full h-16 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl shadow-indigo-600/20 disabled:opacity-50">
                       Enregistrer & Sélectionner
                     </Button>
                   </div>
@@ -327,7 +364,7 @@
 
               <!-- Conflict Confirmation Dialog -->
               <Dialog v-model:open="showConflictDialog">
-                <DialogContent class="sm:max-w-md bg-white border-none shadow-2xl rounded-[2rem] p-8">
+                <DialogContent class="sm:max-w-md glass-modal border border-white/60 shadow-3xl rounded-[2rem] p-8">
                   <DialogHeader>
                     <DialogTitle class="text-2xl font-black text-rose-600 uppercase flex items-center gap-3">
                       <AlertCircle class="w-8 h-8" />
@@ -378,7 +415,7 @@
 import { ref, onMounted, computed, reactive, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { reservationApi, carApi, contratApi, clientApi, getImageUrl } from '@/api'
+import { reservationApi, carApi, clientApi, getImageUrl } from '@/api'
 import { useToast } from 'primevue/usetoast'
 import { 
   Car as CarIcon, Calendar, 
@@ -445,77 +482,41 @@ const filteredAvailableCars = computed(() => {
 
 const rates = ref({ EUR: 0.296, USD: 0.342 })
 
+let currentSearchId = 0
+let isMounted = false
+
 const searchAvailability = async () => {
   searching.value = true
   searched.value = true
-  // Preserve selection if possible
+  const searchId = ++currentSearchId
   const previousId = selectedCar.value?._id
 
   try {
     const startIso = `${availabilitySearch.startDate}T${availabilitySearch.startTime}:00`
     const endIso = `${availabilitySearch.endDate}T${availabilitySearch.endTime}:00`
-    const searchStart = new Date(startIso)
-    const searchEnd = new Date(endIso)
-    
-    const [allCars, allRes, allContrats] = await Promise.all([
-      carApi.getAll(),
-      reservationApi.getAll(),
-      contratApi.getAll()
-    ])
 
-    const occupiedStatuses = ['cancelled', 'terminé', 'clôturé', 'converted']
-    const occupations = [
-      ...allRes.map((r: any) => ({ ...r, type: 'reservation' })),
-      ...allContrats.map((c: any) => ({ ...c, type: 'contract' }))
-    ].filter((occ: any) => !occupiedStatuses.includes(occ.status))
-
-    const processedCars = allCars.map((car: any) => {
-      const carOccupations = occupations.filter((occ: any) => 
-        (occ.car?._id === car._id) || (occ.car === car._id)
-      )
-      const overlapping = carOccupations.filter(occ => {
-        const occStart = new Date(occ.startDate)
-        const occEnd = new Date(occ.endDate)
-        return occStart < searchEnd && occEnd > searchStart
-      })
-      const returnsTomorrow = carOccupations.find(occ => {
-        const occEnd = new Date(occ.endDate)
-        const tomorrow = new Date(searchStart)
-        tomorrow.setDate(searchStart.getDate() + 1)
-        return occEnd.toDateString() === tomorrow.toDateString()
-      })
-      const prevOcc = carOccupations.find(occ => {
-        const occEnd = new Date(occ.endDate)
-        return occEnd.toDateString() === searchStart.toDateString()
-      })
-
-      return {
-        ...car,
-        isStrictlyAvailable: overlapping.length === 0,
-        prevOcc,
-        returnsTomorrow
-      }
-    })
-
-    availableCars.value = processedCars.filter((car: any) => 
-      car.isStrictlyAvailable
-    )
+    // Use dedicated backend endpoint with parallel queries
+    const cars = await carApi.getAvailableSearch(startIso, endIso)
+    if (searchId !== currentSearchId) return // Ignore stale responses
+    availableCars.value = (cars || []).filter((c: any) => !c.disabled)
 
     // Verify if previous selection is still valid
     if (previousId) {
-      const stillAvailable = availableCars.value.find(c => c._id === previousId)
+      const stillAvailable = availableCars.value.find((c: any) => c._id === previousId)
       if (!stillAvailable) {
         selectedCar.value = null
       } else {
-        // Update selectedCar with fresh data (like bookingConflict status)
         selectedCar.value = stillAvailable
       }
     }
   } catch (err) {
+    if (searchId !== currentSearchId) return
     console.error('Search failed', err)
     toast.add({ severity: 'error', summary: "Erreur", detail: "Impossible d'effectuer la recherche", life: 3000 })
   } finally {
-    searching.value = false
+    if (searchId === currentSearchId) {
+      searching.value = false
+    }
   }
 }
 
@@ -531,10 +532,11 @@ watch([() => availabilitySearch.startDate, () => availabilitySearch.startTime, (
   const end = new Date(start.getTime() + availabilitySearch.days * 24 * 60 * 60 * 1000)
   availabilitySearch.endDate = end.toISOString().split('T')[0]
   
-  // Trigger automatic search with debounce
+  // Only debounce subsequent user changes after initial mount
+  if (!isMounted) return
   clearTimeout(searchDebounce)
-  searchDebounce = setTimeout(searchAvailability, 500)
-}, { immediate: true })
+  searchDebounce = setTimeout(searchAvailability, 300)
+})
 
 watch(selectedCar, (newCar) => {
   if (newCar) {
@@ -663,18 +665,29 @@ const confirmFinalReservation = async (force = false) => {
   }
 }
 
-onMounted(async () => {
-  try {
-    const response = await fetch('https://open.er-api.com/v6/latest/TND')
-    const data = await response.json()
-    if (data.result === 'success') {
-      rates.value = { EUR: data.rates.EUR, USD: data.rates.USD }
-    }
-  } catch (e) { console.warn('Rates failed') }
-  
-  // Initial data fetch
-  fetchInitialClients()
+// Lazy load clients only when transitioning to Step 1 (client assignment)
+watch(reservationStep, (step) => {
+  if (step === 1 && clientResults.value.length === 0) {
+    fetchInitialClients()
+  }
+})
+
+onMounted(() => {
+  // 1. Immediately launch availability search without blocking
   searchAvailability()
+  isMounted = true
+
+  // 2. Fetch external exchange rates in background (non-blocking)
+  fetch('https://open.er-api.com/v6/latest/TND')
+    .then(res => res.json())
+    .then(data => {
+      if (data?.result === 'success' && data.rates) {
+        rates.value = { EUR: data.rates.EUR, USD: data.rates.USD }
+      }
+    })
+    .catch(() => {
+      console.warn('Rates fetch failed or timed out (using defaults)')
+    })
 })
 </script>
 

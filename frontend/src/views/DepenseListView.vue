@@ -1,78 +1,123 @@
 <template>
-  <div class="depense-list-container space-y-12 p-8 max-w-7xl mx-auto">
-    <!-- Header & Integrated Action Bar -->
-    <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-8">
-      <div class="space-y-2">
-        <h1 class="text-4xl font-black tracking-tight text-slate-900 uppercase italic">Flux de <span class="text-rose-600">Trésorerie</span></h1>
-        <p class="text-slate-400 font-bold uppercase text-[10px] tracking-[0.3em] pl-1">Gestion des Dépenses & Maintenance</p>
+  <div class="depense-list-container space-y-8 p-8 max-w-7xl mx-auto">
+    <!-- Header -->
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <div class="flex items-center gap-4">
+        <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-rose-500 to-rose-700 flex items-center justify-center shadow-lg shadow-rose-500/20 text-white shrink-0">
+          <Wallet class="w-7 h-7" />
+        </div>
+        <div>
+          <h1 class="text-3xl font-black tracking-tight text-slate-900 uppercase italic">
+            Flux de <span class="text-rose-600">Trésorerie</span>
+          </h1>
+          <p class="text-slate-400 font-bold uppercase text-[11px] tracking-widest mt-0.5">
+            Gestion des Dépenses &amp; Maintenance Véhicules
+          </p>
+        </div>
       </div>
 
-      <div class="flex flex-wrap items-center gap-3">
-        <div class="group relative h-12 w-12 transition-all duration-300 overflow-hidden rounded-2xl bg-white border-2 border-slate-200 hover:border-rose-400 flex items-center cursor-text active:scale-95 hover:shadow-xl hover:shadow-rose-200/50"
-          :class="searchOpen ? 'w-80 border-rose-500' : 'w-12'"
-          @mouseenter="searchOpen = true"
-          @mouseleave="searchOpen = false"
-          @focusin="searchOpen = true"
-          @focusout="searchOpen = false">
-          <div class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none">
-            <Search class="w-4 h-4 text-slate-400 group-hover:text-rose-600 transition-colors duration-300" />
-          </div>
-          <input
-            v-model="filters.query"
-            placeholder="Rechercher une dépense..."
-            :class="[searchOpen ? 'opacity-100' : 'opacity-0', 'h-full w-full pl-10 pr-3 bg-transparent border-0 outline-none text-xs font-bold text-slate-900 placeholder:text-slate-400 transition-opacity duration-300']"
-          />
-        </div>
-
-        <div class="relative">
-          <div class="group relative h-12 transition-all duration-300 overflow-hidden rounded-2xl bg-white border-2 border-slate-200 hover:border-rose-400 flex items-center active:scale-95 hover:shadow-xl hover:shadow-rose-200/50"
-            :class="filterHover ? 'w-52' : 'w-12'"
-            @mouseenter="filterHover = true"
-            @mouseleave="filterHover = false">
-            <div class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none">
-              <Filter class="w-4 h-4 text-slate-400 group-hover:text-rose-600 transition-colors duration-300 group-hover:rotate-[-20deg] group-hover:scale-110" />
-              <span v-if="filters.category" class="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-rose-500 rounded-full"></span>
-            </div>
-            <button @click="showFilterMenu = !showFilterMenu" class="w-full h-full pl-11 pr-2 flex items-center whitespace-nowrap cursor-pointer bg-transparent border-0 text-left">
-              <span :class="[filterHover ? 'opacity-100' : 'opacity-0', 'transition-all duration-300 uppercase tracking-widest text-[10px] font-black text-slate-600 group-hover:text-rose-600']">
-                {{ filters.category ? catLabel(filters.category) : 'Filtrer' }}
-              </span>
-            </button>
-          </div>
-          <div v-if="showFilterMenu" class="absolute right-0 top-14 w-48 bg-white border border-slate-100 rounded-3xl shadow-3xl overflow-hidden z-50 py-2">
-            <button @click="filters.category = null; showFilterMenu = false" class="w-full text-left px-5 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50 hover:text-rose-600 flex items-center justify-between">
-              Toutes
-              <Check v-if="!filters.category" class="w-4 h-4" />
-            </button>
-            <button v-for="cat in categoryOptions" :key="cat.value" @click="filters.category = cat.value; showFilterMenu = false" class="w-full text-left px-5 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-rose-50 hover:text-rose-600 flex items-center justify-between">
-              {{ cat.label }}
-              <Check v-if="filters.category === cat.value" class="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-
-        <div class="relative">
-          <div class="group relative h-12 transition-all duration-300 overflow-hidden rounded-2xl bg-white border-2 border-slate-200 hover:border-indigo-400 flex items-center active:scale-95 hover:shadow-xl hover:shadow-indigo-200/50"
-            :class="settingsOpen ? 'w-52' : 'w-12'"
-            @mouseenter="settingsOpen = true"
-            @mouseleave="settingsOpen = false">
-            <div class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none">
-              <SettingsIcon class="w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-colors duration-300 group-hover:rotate-90" />
-            </div>
-            <button @click="router.push('/settings')" class="w-full h-full pl-11 pr-2 flex items-center whitespace-nowrap cursor-pointer bg-transparent border-0 text-left">
-              <span :class="[settingsOpen ? 'opacity-100' : 'opacity-0', 'transition-all duration-300 uppercase tracking-widest text-[10px] font-black text-slate-600 group-hover:text-indigo-600']">
-                Parametres Depense
-              </span>
-            </button>
-          </div>
-        </div>
-
-        <Button @click="openForm()" @mouseenter="addOpen = true" @mouseleave="addOpen = false" class="group relative h-12 w-12 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white font-black shadow-2xl shadow-rose-600/20 transition-all duration-300 overflow-hidden flex items-center justify-start active:scale-95 hover:scale-105 hover:-translate-y-0.5 hover:shadow-rose-400/40">
-          <div class="absolute inset-y-0 left-0 flex items-center pl-3.5">
-            <Plus class="w-4 h-4 stroke-[3] transition-transform duration-300 group-hover:rotate-90 group-hover:scale-110" />
-          </div>
-          <span :class="[addOpen ? 'opacity-100' : 'opacity-0', 'whitespace-nowrap transition-all duration-300 pl-10 pr-4 uppercase tracking-widest text-[10px]']">Nouvelle Dépense</span>
+      <div class="flex items-center gap-3">
+        <Button
+          variant="outline"
+          @click="router.push('/settings')"
+          class="h-12 px-5 rounded-2xl border-slate-200 hover:border-slate-300 bg-white font-black text-xs uppercase tracking-wider text-slate-600 hover:text-slate-900 shadow-sm flex items-center gap-2.5"
+        >
+          <SettingsIcon class="w-4 h-4 text-slate-400" />
+          <span>Paramètres</span>
         </Button>
+
+        <Button
+          @click="openForm()"
+          class="h-12 px-6 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white font-black text-xs uppercase tracking-wider shadow-xl shadow-rose-600/25 flex items-center gap-2.5 transition-all hover:scale-105 active:scale-95"
+        >
+          <Plus class="w-4 h-4 stroke-[3]" />
+          <span>Nouvelle Dépense</span>
+        </Button>
+      </div>
+    </div>
+
+    <!-- Quick Stats Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div class="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm flex items-center justify-between">
+        <div class="space-y-1">
+          <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Total Dépenses</p>
+          <div class="flex items-baseline gap-1.5">
+            <span class="text-2xl font-black text-slate-900 tabular-nums">{{ totalDepensesAmount.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}</span>
+            <span class="text-[10px] font-bold text-slate-400">TND</span>
+          </div>
+          <p class="text-[11px] font-semibold text-slate-500">{{ totalDepensesCount }} transactions au total</p>
+        </div>
+        <div class="w-12 h-12 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+          <ReceiptIcon class="w-6 h-6" />
+        </div>
+      </div>
+
+      <div class="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm flex items-center justify-between">
+        <div class="space-y-1">
+          <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Maintenance Flotte</p>
+          <div class="flex items-baseline gap-1.5">
+            <span class="text-2xl font-black text-slate-900 tabular-nums">{{ carDepensesAmount.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}</span>
+            <span class="text-[10px] font-bold text-slate-400">TND</span>
+          </div>
+          <p class="text-[11px] font-semibold text-emerald-600">Dépenses liées aux véhicules</p>
+        </div>
+        <div class="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+          <CarIcon class="w-6 h-6" />
+        </div>
+      </div>
+
+      <div class="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm flex items-center justify-between">
+        <div class="space-y-1">
+          <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">Frais Généraux</p>
+          <div class="flex items-baseline gap-1.5">
+            <span class="text-2xl font-black text-slate-900 tabular-nums">{{ generalDepensesAmount.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}</span>
+            <span class="text-[10px] font-bold text-slate-400">TND</span>
+          </div>
+          <p class="text-[11px] font-semibold text-slate-500">Charges &amp; exploitation</p>
+        </div>
+        <div class="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+          <TrendingDown class="w-6 h-6" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Filters Bar -->
+    <div class="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+      <div class="relative w-full sm:w-96">
+        <Search class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+        <Input
+          v-model="filters.query"
+          placeholder="Rechercher par description, catégorie ou véhicule..."
+          class="h-11 pl-10 pr-4 rounded-xl bg-slate-50 border-slate-200 font-bold text-xs text-slate-800 placeholder:text-slate-400 focus:bg-white"
+        />
+      </div>
+
+      <!-- Category Filter Pills -->
+      <div class="flex items-center gap-2 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
+        <button
+          @click="filters.category = null"
+          :class="[
+            'px-3.5 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all shrink-0',
+            !filters.category
+              ? 'bg-rose-600 text-white shadow-md shadow-rose-600/20'
+              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+          ]"
+        >
+          Toutes
+        </button>
+        <button
+          v-for="cat in categoryOptions"
+          :key="cat.value"
+          @click="filters.category = cat.value"
+          :class="[
+            'px-3.5 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all shrink-0',
+            filters.category === cat.value
+              ? 'bg-rose-600 text-white shadow-md shadow-rose-600/20'
+              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+          ]"
+        >
+          {{ cat.label }}
+        </button>
       </div>
     </div>
 
@@ -154,7 +199,35 @@
                 </TableCell>
               </TableRow>
               
-              <TableRow v-if="depenses.length === 0 && !loading">
+              <!-- Skeleton Loading Rows -->
+              <template v-if="loading">
+                <TableRow v-for="i in 5" :key="'depense-skel-' + i" class="animate-pulse border-slate-100">
+                  <TableCell class="pl-10 py-7">
+                    <div class="space-y-2">
+                      <div class="h-4 bg-slate-200/80 rounded w-24"></div>
+                      <div class="h-3 bg-slate-100 rounded w-16"></div>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div class="space-y-2">
+                      <div class="h-4 bg-slate-200/80 rounded w-28"></div>
+                      <div class="h-3 bg-slate-100 rounded w-44"></div>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div class="h-4 bg-slate-200/80 rounded w-28"></div>
+                  </TableCell>
+                  <TableCell class="text-right">
+                    <div class="h-6 bg-slate-200/80 rounded w-20 ml-auto"></div>
+                  </TableCell>
+                  <TableCell class="pr-10 text-right">
+                    <div class="h-9 w-20 bg-slate-100 rounded-xl ml-auto"></div>
+                  </TableCell>
+                </TableRow>
+              </template>
+
+              <!-- Empty State -->
+              <TableRow v-else-if="depenses.length === 0">
                 <TableCell colspan="5" class="h-60 text-center">
                   <div class="flex flex-col items-center gap-4 opacity-30">
                     <ReceiptIcon class="w-16 h-16 stroke-[1]" />
@@ -365,7 +438,8 @@ import {
   Car as CarIcon, Trash2, Pencil,
   Receipt as ReceiptIcon, Filter, Check,
   Settings as SettingsIcon,
-  ChevronLeft, ChevronRight
+  ChevronLeft, ChevronRight,
+  Wallet, TrendingDown
 } from 'lucide-vue-next';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -413,6 +487,11 @@ const carById = computed<Record<string, any>>(() => {
 const pendingTotal = computed(() => {
   return pendingDepenses.value.reduce((acc, d) => acc + (Number(d.amount) || 0), 0);
 });
+
+const totalDepensesAmount = computed(() => depenses.value.reduce((acc, d) => acc + (Number(d.amount) || 0), 0));
+const totalDepensesCount = computed(() => depenses.value.length);
+const generalDepensesAmount = computed(() => depenses.value.filter(d => !d.car).reduce((acc, d) => acc + (Number(d.amount) || 0), 0));
+const carDepensesAmount = computed(() => depenses.value.filter(d => !!d.car).reduce((acc, d) => acc + (Number(d.amount) || 0), 0));
 
 const resetForm = () => {
   depenseForm.date = new Date().toISOString().split('T')[0];
@@ -572,7 +651,7 @@ onUnmounted(() => {
 });
 watch(filters, loadDepenses, { deep: true });
 
-const openForm = async (depense?: any) => {
+const openForm = (depense?: any) => {
   pendingDepenses.value = [];
   editPassword.value = '';
   showEditPwdDialog.value = false;
@@ -589,10 +668,11 @@ const openForm = async (depense?: any) => {
     resetForm();
   }
   
-  if (cars.value.length === 0) {
-    cars.value = await carApi.getAll();
-  }
+  // Show dialog immediately — load cars in background if needed
   showForm.value = true;
+  if (cars.value.length === 0) {
+    carApi.getAll().then(list => { cars.value = list; });
+  }
 };
 
 const addToPending = () => {

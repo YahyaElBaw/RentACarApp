@@ -81,7 +81,12 @@ export class DepenseService {
 
   async findAll(carId?: string): Promise<DepenseDocument[]> {
     const query: any = carId ? { car: carId } : {};
-    return this.depenseModel.find(query).populate('car').exec();
+    return this.depenseModel
+      .find(query)
+      .populate('car', 'brand model matricule')
+      .sort({ date: -1 })
+      .lean()
+      .exec() as any;
   }
 
   async findOne(id: string): Promise<DepenseDocument> {

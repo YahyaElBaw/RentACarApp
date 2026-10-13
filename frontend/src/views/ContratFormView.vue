@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import { carApi, clientApi, contratApi, getImageUrl, settingApi, agenceApi } from '@/api';
+import { carApi, clientApi, contratApi, getImageUrl, settingApi, agenceApi, lotContratApi } from '@/api';
 import { formatDate } from '@/lib/utils';
 import { 
   Car as CarIcon, User as UserIcon, Calendar as CalendarIcon, 
-  ArrowRight, ArrowLeft, Check, Search, Eye, 
-  Clock, Hash, FileText, MapPin, ShieldCheck, FileWarning, AlertTriangle, Percent, DollarSign, Building2, Zap
+  ArrowRight, ArrowLeft, Check, Search, Eye, Edit,
+  Clock, Hash, FileText, MapPin, ShieldCheck, FileWarning, AlertTriangle, Percent, DollarSign, Building2, Zap, BookOpen, ChevronDown, X
 } from 'lucide-vue-next';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/dialog';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useAuthStore } from '@/stores/auth';
+import CarnetDetailModal from '@/components/CarnetDetailModal.vue';
 
 const authStore = useAuthStore();
 const router = useRouter();
@@ -37,22 +38,138 @@ const steps = [
 ];
 const appSettings = ref<any>(null);
 const availableAgencies = ref<any[]>([]);
+const activeLots = ref<any[]>([]);
+const selectedLot = ref<any>(null);
+const existingContract = ref<any>(null);
+const checkingContract = ref(false);
+const showCarnetDetails = ref(false);
+const showCarnetModal = ref(false);
+const targetEditContratId = ref<string | undefined>(undefined);
+const carnetModalTab = ref<'details' | 'contrats'>('details');
+
+const openCarnetForContract = (contract: any) => {
+  targetEditContratId.value = contract._id;
+  carnetModalTab.value = 'contrats';
+  if (contract.lot) {
+    selectedLot.value = typeof contract.lot === 'object' ? contract.lot : (activeLots.value.find(l => l._id === contract.lot) || selectedLot.value);
+  }
+  showCarnetModal.value = true;
+};
+
+const checkExistingContract = async (refNumber: string) => {
+  if (!refNumber || refNumber.length !== 6) {
+    existingContract.value = null;
+    return;
+  }
+  checkingContract.value = true;
+  try {
+    const res = await contratApi.getAll({ reference: refNumber });
+    if (res && res.length > 0) {
+      existingContract.value = res[0];
+    } else {
+      existingContract.value = null;
+    }
+  } catch (err) {
+    existingContract.value = null;
+  } finally {
+    checkingContract.value = false;
+  }
+};
+
+const openExistingContract = (id: string) => {
+  isRefModalOpen.value = false;
+  router.push(`/contrats/${id}`);
+};
+
+const selectLot = (lot: any) => {
+  selectedLot.value = lot;
+  if (lot?.agence?.name) {
+    form.agency = lot.agence.name;
+  }
+  if (lot?.currentNumber) {
+    manualReference.value = String(lot.currentNumber).padStart(lot.numberPadding || 6, '0');
+    checkExistingContract(manualReference.value);
+  }
+};
+
+const selectAgencyLot = (lot: any) => {
+  selectLot(lot);
+};
+
+const applyActiveLotForAgency = (agencyName: string) => {
+  const lot = activeLots.value.find(l => l.agence?.name === agencyName);
+  if (lot) {
+    selectLot(lot);
+  } else {
+    selectedLot.value = null;
+    existingContract.value = null;
+  }
+};
+
+const onAgencyChange = () => {
+  if (form.agency) {
+    applyActiveLotForAgency(form.agency);
+  } else {
+    selectedLot.value = null;
+    existingContract.value = null;
+  }
+};
+
+const onReferenceInput = () => {
+  manualReference.value = manualReference.value.replace(/\D/g, '').slice(0, 6);
+  if (!manualReference.value) {
+    existingContract.value = null;
+    return;
+  }
+
+  const num = parseInt(manualReference.value, 10);
+  if (!isNaN(num)) {
+    // 1. Exact match with currentNumber of any active lot
+    let matched = activeLots.value.find(l => l.currentNumber === num);
+
+    // 2. If not exact match, check if full 6 digits are typed and number is within [startNumber, endNumber]
+    if (!matched && manualReference.value.length === 6) {
+      matched = activeLots.value.find(l => num >= l.startNumber && num <= l.endNumber);
+    }
+
+    if (matched) {
+      selectedLot.value = matched;
+      if (matched.agence?.name && form.agency !== matched.agence.name) {
+        form.agency = matched.agence.name;
+      }
+    }
+  }
+
+  if (manualReference.value.length === 6) {
+    checkExistingContract(manualReference.value);
+  } else {
+    existingContract.value = null;
+  }
+};
 
 const fetchAppSettings = async () => {
   try {
-    const [data, agenceRes] = await Promise.all([
+    const [data, agenceRes, lotsRes] = await Promise.all([
       settingApi.get(),
-      agenceApi.getAll()
+      agenceApi.getAll(),
+      lotContratApi.getActive()
     ]);
     appSettings.value = data;
     availableAgencies.value = agenceRes || [];
+    activeLots.value = lotsRes || [];
 
     if (data) {
       form.contractTaxValue = data.contractTaxValue || 0;
       form.tvaValue = data.tvaValue || 0;
     }
+
+    if (form.agency) {
+      applyActiveLotForAgency(form.agency);
+    } else if (activeLots.value.length === 1) {
+      selectLot(activeLots.value[0]);
+    }
   } catch (err) {
-    console.warn('Failed to fetch settings/agencies, using defaults');
+    console.warn('Failed to fetch settings/agencies/lots, using defaults');
   }
 };
 
@@ -316,8 +433,41 @@ const submitContrat = async (force = false) => {
   if (submitting.value) return;
   submitting.value = true;
   try {
+    // Resolve lot if not already linked (ONLY if contract reference is a valid number in carnet interval)
+    const refStr = (manualReference.value || '').trim();
+    const isNumericRef = /^\d+$/.test(refStr);
+    const refNum = isNumericRef ? parseInt(refStr, 10) : null;
+
+    if (refNum !== null) {
+      const carAgencyId = selectedCar.value?.agence?._id || (typeof selectedCar.value?.agence === 'string' ? selectedCar.value.agence : null);
+      const targetAgencyName = form.agency || selectedCar.value?.agence?.name;
+
+      if (!selectedLot.value) {
+        selectedLot.value = activeLots.value.find(l => {
+          const agenceObj = l.agence as any;
+          const idMatches = Boolean(carAgencyId && (agenceObj?._id === carAgencyId || agenceObj === carAgencyId));
+          const nameMatches = Boolean(targetAgencyName && agenceObj?.name && agenceObj.name.trim().toLowerCase() === targetAgencyName.trim().toLowerCase());
+          const inRange = refNum >= l.startNumber && refNum <= l.endNumber;
+          return (idMatches || nameMatches) && inRange;
+        }) || null;
+
+        if (!selectedLot.value) {
+          selectedLot.value = activeLots.value.find(l => 
+            refNum >= l.startNumber && refNum <= l.endNumber
+          ) || null;
+        }
+      } else {
+        if (refNum < selectedLot.value.startNumber || refNum > selectedLot.value.endNumber) {
+          selectedLot.value = null;
+        }
+      }
+    } else {
+      selectedLot.value = null;
+    }
+
     const payload = {
       reference: manualReference.value || undefined,
+      lotId: selectedLot.value?._id || undefined,
       car: selectedCar.value._id,
       carDailyRate: effectiveDailyRate.value,
       clients: selectedClients.value.map(c => c._id),
@@ -330,7 +480,8 @@ const submitContrat = async (force = false) => {
       bankName: form.bankName,
       contractTaxValue: form.contractTaxValue,
       tvaValue: form.tvaValue,
-      agency: form.agency,
+      agency: form.agency || selectedCar.value?.agence?.name || undefined,
+      agence: selectedCar.value?.agence?._id || (typeof selectedCar.value?.agence === 'string' ? selectedCar.value.agence : undefined),
       carburantLevel: form.carburantLevel,
       lieuDepart: form.lieuDepart,
       lieuRetour: form.lieuRetour,
@@ -361,6 +512,33 @@ const closeSuccessAndRedirect = () => {
 
 const startConfiguration = () => {
   if (manualReference.value && manualReference.value.toString().length === 6) {
+    if (existingContract.value) {
+      if (authStore.isSuperAdmin) {
+        openExistingContract(existingContract.value._id);
+        return;
+      } else {
+        alert('Ce numéro de contrat est déjà utilisé par un contrat existant.');
+        return;
+      }
+    }
+    const num = parseInt(manualReference.value, 10);
+    if (!isNaN(num)) {
+      if (!selectedLot.value) {
+        const matched = activeLots.value.find(l => 
+          num >= l.startNumber && num <= l.endNumber
+        );
+        if (matched) {
+          selectedLot.value = matched;
+          if (matched.agence?.name && !form.agency) {
+            form.agency = matched.agence.name;
+          }
+        }
+      } else {
+        if (num < selectedLot.value.startNumber || num > selectedLot.value.endNumber) {
+          selectedLot.value = null;
+        }
+      }
+    }
     isRefModalOpen.value = false;
   }
 };
@@ -428,10 +606,15 @@ watch(isRefModalOpen, (isOpen) => {
           <!-- STEP 1: CAR -->
           <div v-if="activeStep === 0" class="space-y-6 animate-in slide-in-from-left-4 duration-500">
             <div class="flex items-center justify-between">
-              <h3 class="text-xl font-black text-slate-900 uppercase tracking-wider flex items-center gap-3 italic">
-                 <div class="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600 rotate-[-10deg]">01</div>
-                 Véhicule
-              </h3>
+              <div class="space-y-1">
+                <h3 class="text-xl font-black text-slate-900 uppercase tracking-wider flex items-center gap-3 italic">
+                   <div class="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600 rotate-[-10deg]">01</div>
+                   Véhicule
+                </h3>
+                <p v-if="form.agency" class="text-[10px] font-black uppercase tracking-widest text-indigo-600 pl-1">
+                  Agence : {{ form.agency }} <span v-if="selectedLot" class="text-slate-400 font-bold">• Carnet « {{ selectedLot.name }} »</span>
+                </p>
+              </div>
               <div class="relative w-full max-w-xs group">
                 <Search class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
                 <Input v-model="carSearch" placeholder="Filtre rapide..." class="h-12 pl-12 bg-white/50 border-slate-200 rounded-2xl font-bold text-slate-900" />
@@ -936,61 +1119,316 @@ watch(isRefModalOpen, (isOpen) => {
       </div>
     </div>
 
-    <!-- IDENTIFICATION MODAL (Flotten Input) -->
+    <!-- IDENTIFICATION MODAL (Code Contrat) -->
     <Dialog v-model:open="isRefModalOpen">
-      <DialogContent class="sm:max-w-md bg-white border-none shadow-[0_50px_100px_rgba(0,0,0,0.2)] [0_50px_100px_rgba(0,0,0,0.8)] p-0 overflow-hidden text-slate-900 rounded-[3rem] max-h-[90vh] flex flex-col">
-        <div class="absolute -top-12 -left-12 w-48 h-48 bg-indigo-600/30 rounded-full blur-[100px] opacity-50"></div>
-        <CardHeader class="p-10 pb-6 relative z-10 text-center">
-            <div class="w-24 h-24 bg-indigo-600/10 rounded-[2.5rem] flex items-center justify-center mx-auto mb-8 text-indigo-600 shadow-inner rotate-3">
-                <Hash class="w-12 h-12 stroke-[2.5]" />
+      <DialogContent hideClose class="sm:max-w-xl bg-white border border-slate-200/80 shadow-[0_25px_70px_-15px_rgba(15,23,42,0.25)] p-0 overflow-hidden text-slate-900 rounded-[2.5rem] max-h-[92vh] flex flex-col z-[250]">
+        
+        <!-- Header Banner -->
+        <div class="px-8 py-6 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white relative overflow-hidden shrink-0 flex items-center justify-between border-b border-white/10">
+          <div class="flex items-center gap-4 relative z-10">
+            <div class="w-12 h-12 rounded-2xl bg-white/10 backdrop-blur border border-white/20 flex items-center justify-center text-indigo-300 shadow-lg">
+              <Hash class="w-6 h-6 stroke-[2.5]" />
             </div>
-            <DialogTitle class="text-4xl font-black tracking-tighter uppercase italic mb-3 text-slate-900">Initialisation</DialogTitle>
-            <DialogDescription class="text-slate-400 font-bold uppercase text-[10px] tracking-[0.3em] max-w-[200px] mx-auto leading-relaxed">
-                Entrez le numéro du nouveau contrat système.
-            </DialogDescription>
-        </CardHeader>
-        <div class="px-10 py-10 relative z-10">
-            <div class="space-y-6">
-                <div v-if="availableAgencies.length > 0" class="space-y-2">
-                    <label class="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2 flex items-center gap-2">
-                        <Building2 class="w-3.5 h-3.5 text-indigo-600" /> Agence Émettrice
-                    </label>
-                    <select v-model="form.agency" class="h-14 w-full px-6 bg-slate-50 border-2 border-slate-100 focus:border-indigo-600 rounded-2xl font-black text-slate-900 text-sm outline-none transition-all cursor-pointer">
-                        <option value="" disabled>Choisir une agence...</option>
-                        <option v-for="a in availableAgencies" :key="a._id || a.name" :value="a.name">{{ a.name }}</option>
-                    </select>
+            <div>
+              <div class="flex items-center gap-2">
+                <DialogTitle class="text-xl font-black uppercase tracking-tight text-white">Nouveau Contrat</DialogTitle>
+                <span class="text-[9px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-indigo-500/30 text-indigo-200 border border-indigo-400/30">Code Manuel</span>
+              </div>
+              <DialogDescription class="text-white/60 font-bold uppercase text-[9px] tracking-widest mt-0.5">
+                Attribuez le numéro officiel du contrat de location
+              </DialogDescription>
+            </div>
+          </div>
+          <button 
+            type="button" 
+            @click="router.push('/contrats')" 
+            class="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 text-white flex items-center justify-center transition-all active:scale-90"
+            title="Fermer et retourner à la liste"
+          >
+            <X class="w-4 h-4" />
+          </button>
+        </div>
+
+        <!-- Dialog Scrollable Body -->
+        <div class="px-8 py-6 space-y-6 overflow-y-auto max-h-[calc(92vh-170px)] custom-scrollbar">
+
+          <!-- 1. Agency Selection (if agencies available) -->
+          <div v-if="availableAgencies.length > 0" class="space-y-2">
+            <label class="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-1.5 ml-1">
+              <Building2 class="w-3.5 h-3.5 text-indigo-600" /> Agence Émettrice
+            </label>
+            <select 
+              v-model="form.agency" 
+              @change="onAgencyChange"
+              class="h-12 w-full px-4 bg-slate-50 hover:bg-slate-100/80 border border-slate-200 focus:border-indigo-600 focus:bg-white rounded-2xl font-bold text-slate-900 text-xs outline-none transition-all cursor-pointer"
+            >
+              <option value="" disabled>Choisir une agence...</option>
+              <option v-for="a in availableAgencies" :key="a._id || a.name" :value="a.name">{{ a.name }}</option>
+            </select>
+          </div>
+
+          <!-- 2. Active Carnets Suggestions (Quick Numbers by Agency) -->
+          <div v-if="activeLots.length > 0" class="space-y-2">
+            <div class="flex items-center justify-between ml-1">
+              <label class="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-1.5">
+                <BookOpen class="w-3.5 h-3.5 text-indigo-600" /> Carnets actifs disponibles
+              </label>
+              <span class="text-[8px] font-bold text-slate-400 uppercase tracking-wider">Cliquer pour remplir</span>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <button
+                v-for="lot in activeLots"
+                :key="lot._id"
+                type="button"
+                @click="selectAgencyLot(lot)"
+                :class="[
+                  'p-3.5 rounded-2xl border text-left transition-all flex items-center justify-between group active:scale-95',
+                  form.agency === lot.agence?.name && manualReference === String(lot.currentNumber).padStart(lot.numberPadding || 6, '0')
+                    ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-600/20'
+                    : 'bg-slate-50 border-slate-200/80 hover:border-indigo-300 text-slate-700 hover:bg-indigo-50/40'
+                ]"
+              >
+                <div class="min-w-0 pr-2">
+                  <div :class="['text-xs font-black uppercase truncate', form.agency === lot.agence?.name && manualReference === String(lot.currentNumber).padStart(lot.numberPadding || 6, '0') ? 'text-white' : 'text-slate-900']">
+                    {{ lot.agence?.name || 'Agence' }}
+                  </div>
+                  <div :class="['text-[9px] font-bold uppercase tracking-wider truncate', form.agency === lot.agence?.name && manualReference === String(lot.currentNumber).padStart(lot.numberPadding || 6, '0') ? 'text-indigo-200' : 'text-slate-400']">
+                    Carnet : {{ lot.name }}
+                  </div>
                 </div>
-                <div class="relative group">
-                    <input 
-                        v-model="manualReference" 
-                        type="text"
-                        inputmode="numeric"
-                        maxlength="6"
-                        placeholder="000000" 
-                        autofocus
-                        @input="manualReference = manualReference.replace(/\D/g, '').slice(0, 6)"
-                        @keyup.enter="startConfiguration"
-                        class="h-28 w-full bg-slate-50 border-2 border-slate-100 rounded-[2rem] text-center text-6xl font-black text-slate-900 focus:ring-4 focus:ring-indigo-600/20 focus:border-indigo-600 transition-all tabular-nums placeholder:text-slate-200 :text-white/5 outline-none"
-                    />
+                <span :class="[
+                  'px-2.5 py-1 rounded-xl font-mono text-xs font-black shrink-0 tracking-wider',
+                  form.agency === lot.agence?.name && manualReference === String(lot.currentNumber).padStart(lot.numberPadding || 6, '0')
+                    ? 'bg-white/20 text-white'
+                    : 'bg-indigo-100/80 text-indigo-700'
+                ]">
+                  N° {{ String(lot.currentNumber).padStart(lot.numberPadding || 6, '0') }}
+                </span>
+              </button>
+            </div>
+          </div>
+
+          <!-- 3. The 6-Digit Contract Code Input Card -->
+          <div class="p-5 rounded-3xl bg-slate-50 border border-slate-200/90 space-y-3">
+            <div class="flex items-center justify-between">
+              <label class="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] flex items-center gap-1.5">
+                <Hash class="w-3.5 h-3.5 text-indigo-600" /> Numéro de Contrat
+              </label>
+              <span class="text-[9px] font-black font-mono tracking-wider" :class="manualReference?.length === 6 ? 'text-emerald-600' : 'text-slate-400'">
+                {{ manualReference?.length || 0 }} / 6 chiffres
+              </span>
+            </div>
+
+            <div class="relative group">
+              <input 
+                v-model="manualReference" 
+                type="text"
+                inputmode="numeric"
+                maxlength="6"
+                placeholder="000000" 
+                autofocus
+                @input="onReferenceInput"
+                @keyup.enter="startConfiguration"
+                :class="[
+                  'h-20 w-full bg-white rounded-2xl text-center text-4xl sm:text-5xl font-black font-mono tracking-[0.25em] tabular-nums outline-none transition-all shadow-inner',
+                  existingContract
+                    ? 'border-2 border-amber-500 text-amber-700 ring-4 ring-amber-500/10'
+                    : manualReference?.length === 6
+                      ? 'border-2 border-emerald-500 text-slate-900 ring-4 ring-emerald-500/10'
+                      : 'border-2 border-slate-200 text-slate-900 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-600/15'
+                ]"
+              />
+            </div>
+
+            <!-- Context / Status Under Input -->
+            <div class="flex flex-wrap items-center justify-between gap-2 pt-1 text-[10px]">
+              <div v-if="existingContract" class="flex items-center gap-1.5 text-amber-600 font-bold">
+                <AlertTriangle class="w-3.5 h-3.5 shrink-0" />
+                <span>Ce numéro existe déjà en base de données.</span>
+              </div>
+              <div v-else-if="manualReference?.length === 6" class="flex items-center gap-1.5 text-emerald-600 font-black">
+                <Check class="w-3.5 h-3.5 stroke-[3] shrink-0" />
+                <span>Numéro valide et disponible</span>
+              </div>
+              <div v-else class="text-slate-400 font-medium italic">
+                Entrez le code à 6 chiffres (ex : 000123)
+              </div>
+
+              <!-- Associated Carnet pill -->
+              <span v-if="selectedLot" class="px-2.5 py-0.5 rounded-full font-black uppercase text-[8px] tracking-wider bg-indigo-50 text-indigo-700 border border-indigo-200/80">
+                Carnet : {{ selectedLot.name }} ({{ selectedLot.startNumber }} - {{ selectedLot.endNumber }})
+              </span>
+            </div>
+          </div>
+
+          <!-- 4. Existing Contract Detected Alert -->
+          <div v-if="existingContract" class="p-4 rounded-2xl bg-amber-50 border-2 border-amber-200/90 space-y-3 animate-in fade-in duration-300">
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex items-center gap-2.5">
+                <div class="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-sm">
+                  <FileText class="w-4 h-4" />
+                </div>
+                <div>
+                  <span class="text-[10px] font-black uppercase text-amber-900 tracking-wider block">
+                    Contrat Existant Détecté
+                  </span>
+                  <span class="text-[9px] font-bold text-amber-700">
+                    N° {{ existingContract.reference }} &bull; Statut : {{ existingContract.status }}
+                  </span>
+                </div>
+              </div>
+              <Badge class="bg-amber-200 text-amber-800 border-none text-[8px] font-black uppercase px-2 py-0.5 rounded-md">
+                Déjà Créé
+              </Badge>
+            </div>
+            <div class="text-[11px] font-bold text-slate-700 space-y-1 bg-white/80 p-2.5 rounded-xl border border-amber-100">
+              <div v-if="existingContract.car" class="flex items-center justify-between">
+                <span class="text-slate-400 text-[10px] uppercase font-black">Véhicule :</span>
+                <span class="font-black">{{ existingContract.car.brand }} {{ existingContract.car.model }} ({{ existingContract.car.matricule }})</span>
+              </div>
+              <div v-if="existingContract.clients && existingContract.clients.length > 0" class="flex items-center justify-between">
+                <span class="text-slate-400 text-[10px] uppercase font-black">Client :</span>
+                <span class="font-black">{{ existingContract.clients[0].firstName }} {{ existingContract.clients[0].lastName }}</span>
+              </div>
+            </div>
+            <div v-if="authStore.isAdmin" class="flex gap-2">
+              <Button 
+                @click="openCarnetForContract(existingContract)"
+                type="button"
+                class="flex-1 h-10 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-xl text-xs uppercase tracking-wider shadow-md shadow-indigo-600/20 flex items-center justify-center gap-2 active:scale-95 transition-all"
+              >
+                <BookOpen class="w-4 h-4 stroke-[2.5]" /> Modifier depuis le Carnet
+              </Button>
+              <Button 
+                @click="openExistingContract(existingContract._id)"
+                type="button"
+                variant="outline"
+                class="h-10 px-4 border-amber-300 text-amber-900 hover:bg-amber-100 font-black rounded-xl text-xs uppercase tracking-wider flex items-center justify-center gap-2 active:scale-95 transition-all"
+              >
+                <Eye class="w-4 h-4 stroke-[2.5]" /> Consulter
+              </Button>
+            </div>
+            <p v-else class="text-[9px] font-bold text-rose-500 text-center uppercase tracking-wide">
+              Ce numéro de contrat est déjà utilisé par un contrat existant.
+            </p>
+          </div>
+
+          <!-- 5. Super Admin Carnet Details Section -->
+          <div v-if="authStore.isSuperAdmin" class="pt-2 border-t border-slate-100 space-y-3">
+            <button
+              type="button"
+              @click="showCarnetDetails = !showCarnetDetails"
+              class="w-full p-3 rounded-2xl bg-indigo-50/70 hover:bg-indigo-100/70 border border-indigo-200/60 flex items-center justify-between text-indigo-800 text-xs font-black transition-all group"
+            >
+              <div class="flex items-center gap-2.5">
+                <BookOpen class="w-4 h-4 text-indigo-600" />
+                <span class="uppercase tracking-wider text-[10px]">
+                  {{ showCarnetDetails ? 'Masquer les détails du carnet' : 'Ouvrir les détails du carnet' }}
+                </span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-[9px] font-bold text-indigo-500 uppercase">Super Admin</span>
+                <ChevronDown :class="['w-4 h-4 text-indigo-600 transition-transform duration-300', showCarnetDetails ? 'rotate-180' : '']" />
+              </div>
+            </button>
+
+            <!-- Expanded Carnet Details for Super Admin -->
+            <div v-if="showCarnetDetails" class="space-y-3 p-4 rounded-2xl bg-slate-50 border border-slate-200/80 animate-in fade-in slide-in-from-top-2 duration-300">
+              <div class="space-y-1.5">
+                <label class="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-1.5">
+                  <BookOpen class="w-3 h-3 text-indigo-600" /> Choisir un Carnet (Lot)
+                </label>
+                <select 
+                  :value="selectedLot?._id || ''" 
+                  @change="(e: any) => {
+                    const lot = activeLots.find(l => l._id === e.target.value);
+                    if (lot) selectLot(lot);
+                    else selectedLot = null;
+                  }"
+                  class="h-11 w-full px-4 bg-white border border-slate-200 focus:border-indigo-600 rounded-xl font-black text-slate-800 text-xs outline-none transition-all cursor-pointer"
+                >
+                  <option value="">Sélection libre (sans carnet)...</option>
+                  <option v-for="lot in activeLots" :key="lot._id" :value="lot._id">
+                    {{ lot.name }} — {{ lot.agence?.name }} (Prochain : {{ String(lot.currentNumber).padStart(6, '0') }})
+                  </option>
+                </select>
+              </div>
+
+              <div v-if="selectedLot" class="space-y-2 pt-2 border-t border-slate-200 text-xs">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <span class="font-black text-slate-900 uppercase block">{{ selectedLot.name }}</span>
+                    <span class="text-[9px] font-bold text-slate-500 uppercase">Agence: {{ selectedLot.agence?.name }}</span>
+                  </div>
+                  <Badge class="bg-emerald-600 text-white border-none text-[8px] font-black uppercase px-2 py-0.5 rounded-md">
+                    {{ selectedLot.status || 'ouvert' }}
+                  </Badge>
+                </div>
+                <div class="grid grid-cols-2 gap-2 text-[10px] font-bold text-slate-600 bg-white p-2.5 rounded-xl border border-slate-100">
+                  <div>
+                    <span class="text-[9px] text-slate-400 uppercase block">Plage de numéros</span>
+                    <span class="font-mono font-bold text-slate-800">
+                      {{ String(selectedLot.startNumber).padStart(6, '0') }} → {{ String(selectedLot.endNumber).padStart(6, '0') }}
+                    </span>
+                  </div>
+                  <div>
+                    <span class="text-[9px] text-slate-400 uppercase block">Prochain numéro</span>
+                    <span class="font-mono font-black text-indigo-600">
+                      N° {{ String(selectedLot.currentNumber).padStart(6, '0') }}
+                    </span>
+                  </div>
                 </div>
                 <Button 
-                    :disabled="!manualReference || manualReference.toString().length !== 6" 
-                    @click="startConfiguration"
-                    class="w-full h-16 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-2xl text-xl uppercase tracking-widest shadow-2xl shadow-indigo-600/20 transition-all flex items-center justify-center gap-4 active:scale-95 disabled:opacity-50"
+                  type="button"
+                  @click="showCarnetModal = true"
+                  class="w-full h-10 mt-2 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs uppercase tracking-wider rounded-xl flex items-center justify-center gap-2 shadow-md shadow-indigo-600/20"
                 >
-                    Forger <ArrowRight class="w-7 h-7 stroke-[3]" />
+                  <Edit class="w-3.5 h-3.5" /> Gérer ce Carnet & ses Contrats
                 </Button>
-                <button 
-                    @click="router.push('/contrats')"
-                    class="w-full h-12 text-slate-400 hover:text-slate-900 :text-white font-black uppercase text-[10px] tracking-[0.4em] transition-all flex items-center justify-center gap-2"
-                >
-                    <ArrowLeft class="w-3 h-3" /> Annuler & Retourner
-                </button>
+              </div>
             </div>
+          </div>
+
+        </div>
+
+        <!-- Footer Actions -->
+        <div class="p-6 bg-slate-50 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+          <Button 
+            type="button"
+            variant="ghost" 
+            @click="router.push('/contrats')"
+            class="w-full sm:w-auto px-5 h-12 text-slate-400 hover:text-slate-800 font-black uppercase text-[10px] tracking-widest rounded-xl transition-all flex items-center justify-center gap-2"
+          >
+            <ArrowLeft class="w-3.5 h-3.5" /> Annuler
+          </Button>
+
+          <Button 
+            type="button"
+            :disabled="!manualReference || manualReference.toString().length !== 6 || !!existingContract" 
+            @click="startConfiguration"
+            class="w-full sm:flex-1 h-12 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-xl text-xs uppercase tracking-wider shadow-xl shadow-indigo-600/20 transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50"
+          >
+            <template v-if="existingContract">
+              Numéro Déjà Utilisé
+            </template>
+            <template v-else>
+              Continuer la Configuration <ArrowRight class="w-4 h-4 stroke-[2.5]" />
+            </template>
+          </Button>
         </div>
 
       </DialogContent>
     </Dialog>
+
+    <!-- Carnet Details & Management Modal (Oriented from Carnet to Contrat) -->
+    <CarnetDetailModal
+      v-model:open="showCarnetModal"
+      :initial-lot="selectedLot"
+      :lot-id="selectedLot?._id"
+      :initial-tab="carnetModalTab"
+      :edit-contrat-id="targetEditContratId"
+      @updated="fetchAppSettings"
+    />
 
     <!-- Client Detail Preview Dialog -->
     <Dialog v-model:open="isClientDetailOpen">

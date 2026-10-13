@@ -16,6 +16,12 @@ async function bootstrap() {
   const pinia = createPinia();
   app.use(pinia);
 
+  // Fire a silent keep-alive ping in parallel with auth check.
+  // This pre-warms the Vercel serverless function so the first real
+  // API call (cars, dashboard, etc.) doesn't pay a cold-start penalty.
+  const backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+  fetch(`${backendUrl}/ping`, { method: 'GET' }).catch(() => {/* ignore */});
+
   // Validate stored token before mounting — prevents stale-session blank dashboard
   const authStore = useAuthStore();
   if (authStore.token) {

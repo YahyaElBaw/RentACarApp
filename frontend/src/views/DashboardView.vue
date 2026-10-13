@@ -1,9 +1,15 @@
 <template>
-  <div class="dashboard-container space-y-12 p-8 max-w-7xl mx-auto">
+  <div class="dashboard-container space-y-12 p-8 max-w-7xl mx-auto relative">
+    <!-- Ambient Background Orbs -->
+    <div class="pointer-events-none fixed inset-0 overflow-hidden z-0" aria-hidden="true">
+      <div class="absolute -top-40 -right-40 w-[600px] h-[600px] rounded-full bg-indigo-400/5 blur-3xl"></div>
+      <div class="absolute top-1/3 -left-40 w-[500px] h-[500px] rounded-full bg-violet-400/5 blur-3xl"></div>
+      <div class="absolute bottom-0 right-1/4 w-[400px] h-[400px] rounded-full bg-emerald-400/4 blur-3xl"></div>
+    </div>
     <!-- Header Section -->
     <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
       <div class="space-y-2">
-        <h1 class="text-4xl font-black tracking-tight text-slate-900 uppercase">Panel de <span class="text-indigo-600">Pilotage</span></h1>
+        <h1 class="text-4xl font-black tracking-tight text-slate-900 uppercase gradient-title">Panel de <span style="background: linear-gradient(135deg, #4f46e5, #7c3aed); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;">Pilotage</span></h1>
         <p class="text-slate-400 font-bold uppercase text-[10px] tracking-[0.3em] pl-1">Tableau de Bord Stratégique & KPI</p>
       </div>
 
@@ -16,6 +22,7 @@
     </div>
 
     <!-- KPI Cards Grid -->
+    <!-- All sections sit above the ambient orbs -->
     <div :class="['grid grid-cols-1 md:grid-cols-2 gap-8', authStore.isAdmin ? 'lg:grid-cols-4' : 'lg:grid-cols-2']">
       <Card 
         v-for="(kpi, index) in kpis" 
@@ -28,11 +35,11 @@
           }
         }"
         @mouseleave="hoveredKpi = null"
-        :class="['group relative border border-slate-100 shadow-2xl shadow-slate-200/50 bg-white rounded-[2.5rem] transition-all duration-500 cursor-default active:scale-[0.98]', revenueMenuOwner === kpi.label ? 'overflow-visible z-30' : 'overflow-hidden']"
+        :class="['group relative border border-slate-200/70 shadow-[0_12px_36px_-12px_rgba(15,23,42,0.08)] bg-white/92 backdrop-blur-xl rounded-[2.5rem] transition-all duration-500 cursor-default hover-lift', revenueMenuOwner === kpi.label ? 'overflow-visible z-30' : 'overflow-hidden', hoveredKpi === index ? 'shadow-2xl shadow-indigo-500/10 -translate-y-2 border-indigo-200/60' : '']"
       >
         <CardContent class="p-8 relative z-10">
           <div class="flex justify-between items-start mb-6">
-            <div :class="['p-4 rounded-2xl transition-all duration-500 group-hover:scale-110 group-hover:rotate-6 shadow-xl border border-white ', kpi.bg]">
+            <div :class="['p-4 rounded-2xl transition-all duration-500 group-hover:scale-110 group-hover:rotate-6 shadow-md border border-white/80', kpi.bg]">
               <component :is="kpi.icon" :class="['w-6 h-6', kpi.color]" />
             </div>
             <div class="flex items-center gap-2">
@@ -44,7 +51,7 @@
                 >
                   <CalendarRange class="w-3.5 h-3.5" />
                 </button>
-              <div v-if="revenueMenuOwner === kpi.label" class="absolute right-0 top-10 w-60 bg-white border border-slate-100 shadow-2xl rounded-2xl p-2 space-y-1 z-50 animate-in fade-in zoom-in-95 duration-150">
+              <div v-if="revenueMenuOwner === kpi.label" class="absolute right-0 top-10 w-60 glass-modal border border-slate-200/70 shadow-2xl rounded-2xl p-2 space-y-1 z-50 animate-in fade-in zoom-in-95 duration-150">
                 <button
                   @click="selectRevenuePeriod('month')"
                   :class="['w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all', revenuePeriod === 'month' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:bg-slate-50']"
@@ -104,7 +111,8 @@
           <div class="space-y-1">
             <p class="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-1 pl-0.5">{{ t(kpi.label) }}</p>
             <div class="flex items-baseline gap-2">
-              <h3 class="text-4xl font-black tracking-tighter tabular-nums italic" :class="kpi.sensitive && !profitVisible ? 'text-slate-300' : 'text-slate-900'">
+              <div v-if="loading" class="h-9 w-28 bg-slate-200/70 rounded-xl animate-pulse"></div>
+              <h3 v-else class="text-4xl font-black tracking-tighter tabular-nums italic" :class="kpi.sensitive && !profitVisible ? 'text-slate-300' : 'text-slate-900'">
                 <template v-if="kpi.type === 'currency'">
                    <template v-if="kpi.sensitive && !profitVisible">••••••••</template>
                    <template v-else>{{ formatBaseCurrency(kpi.value) }}<span class="text-xs font-black text-indigo-400 ml-1">TND</span></template>
@@ -133,7 +141,8 @@
             </svg>
           </div>
         </CardContent>
-        <div class="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none"></div>
+        <div class="absolute inset-0 bg-gradient-to-br from-indigo-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none"></div>
+        <div :class="['absolute inset-0 rounded-[2.5rem] opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none', kpi.color.includes('emerald') ? 'bg-gradient-to-br from-emerald-500/4 to-transparent' : kpi.color.includes('rose') ? 'bg-gradient-to-br from-rose-500/4 to-transparent' : 'bg-gradient-to-br from-indigo-500/4 to-transparent']"></div>
       </Card>
     </div>
 
@@ -144,19 +153,19 @@
         :key="action.label"
         variant="secondary"
         @click="router.push(action.route)"
-        class="h-28 flex-col gap-4 rounded-[1.8rem] bg-white border border-slate-100 shadow-xl shadow-slate-100/50 hover:bg-slate-50 transition-all group active:scale-95"
+        class="h-28 flex-col gap-4 rounded-[1.8rem] bg-white/90 border border-slate-200/70 shadow-[0_8px_24px_-8px_rgba(15,23,42,0.06)] hover:border-indigo-200/80 hover:bg-gradient-to-b hover:from-white hover:to-indigo-50/30 transition-all duration-400 group active:scale-95 hover-lift hover:shadow-xl hover:shadow-indigo-500/8"
       >
-        <div :class="['p-3 rounded-2xl text-white shadow-lg transition-all duration-500 group-hover:scale-110 group-hover:rotate-6', action.color]">
+        <div :class="['p-3 rounded-2xl text-white shadow-md shadow-black/20 transition-all duration-500 group-hover:scale-110 group-hover:rotate-6 group-hover:shadow-lg', action.color]">
           <component :is="action.icon" class="w-6 h-6 stroke-[2.5]" />
         </div>
-        <span class="text-[9px] font-black text-slate-900 uppercase tracking-widest">{{ action.label }}</span>
+        <span class="text-[9px] font-black text-slate-800 uppercase tracking-widest group-hover:text-indigo-600 transition-colors">{{ action.label }}</span>
       </Button>
     </div>
 
     <!-- Daily Actions / Monthly Calendar Section -->
     <div class="space-y-6">
-      <Card class="border border-slate-100 shadow-2xl shadow-slate-200/50 bg-white rounded-[2.5rem] overflow-hidden">
-        <CardHeader class="p-8 pb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <Card class="border border-slate-200/70 shadow-[0_20px_50px_-20px_rgba(15,23,42,0.07)] bg-white/95 backdrop-blur-2xl rounded-[2.5rem] overflow-hidden">
+        <CardHeader class="px-8 py-8 pb-4 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100/80 bg-white/40">
           <div class="space-y-1">
             <h2 class="text-2xl font-black text-slate-900 uppercase tracking-tight flex items-center gap-3">
               <template v-if="dashboardViewMode === 'today'">
@@ -178,26 +187,54 @@
 
           <div class="flex flex-wrap items-center gap-3">
              <!-- Action Filter Tabs for Today (Toutes, Départs, Retours) -->
-             <div v-if="dashboardViewMode === 'today'" class="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+             <div v-if="dashboardViewMode === 'today'" class="flex items-center gap-1.5 bg-slate-100/80 p-1.5 rounded-2xl border border-slate-200/60 shadow-inner">
+                <!-- Toutes: always first, blue if any actions exist -->
                 <button
                    @click="todayActionFilter = 'all'"
-                   :class="['px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all', todayActionFilter === 'all' ? 'bg-white shadow text-slate-900' : 'text-slate-500 hover:text-slate-900']"
+                   :class="[
+                     'px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all duration-300 flex items-center gap-2',
+                     todayActionFilter === 'all'
+                       ? 'bg-white shadow-sm text-slate-900'
+                       : todayActions.length > 0
+                         ? 'bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100'
+                         : 'text-slate-500 hover:text-slate-900'
+                   ]"
                 >
-                   Toutes ({{ todayActions.length }})
+                   Toutes
+                   <span :class="[
+                     'inline-flex items-center justify-center min-w-[1.2rem] h-5 rounded-full text-[8px] font-black px-1.5 transition-all',
+                     todayActionFilter === 'all'
+                       ? 'bg-slate-900 text-white'
+                       : todayActions.length > 0
+                         ? 'bg-indigo-600 text-white'
+                         : 'bg-slate-200 text-slate-500'
+                   ]">{{ todayActions.length }}</span>
                 </button>
+
+                <!-- Sorted tabs: most notifs first -->
                 <button
-                   @click="todayActionFilter = 'départ'"
-                   :class="['px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5', todayActionFilter === 'départ' ? 'bg-indigo-600 text-white shadow font-black' : 'text-slate-600 hover:text-indigo-600 hover:bg-indigo-50']"
+                   v-for="tab in sortedActionTabs"
+                   :key="tab.value"
+                   @click="todayActionFilter = tab.value as 'départ' | 'retour'"
+                   :class="[
+                     'px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all duration-300 flex items-center gap-2',
+                     todayActionFilter === tab.value
+                       ? tab.value === 'départ' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20' : 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
+                       : tab.count > 0
+                         ? 'bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100'
+                         : 'text-slate-500 hover:text-slate-900'
+                   ]"
                 >
-                   <span class="w-2 h-2 rounded-full bg-indigo-400"></span>
-                   Départs ({{ todayActions.filter(a => a.type?.toLowerCase() === 'départ').length }})
-                </button>
-                <button
-                   @click="todayActionFilter = 'retour'"
-                   :class="['px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5', todayActionFilter === 'retour' ? 'bg-emerald-600 text-white shadow font-black' : 'text-slate-600 hover:text-emerald-600 hover:bg-emerald-50']"
-                >
-                   <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
-                   Retours ({{ todayActions.filter(a => a.type?.toLowerCase() === 'retour').length }})
+                   <span :class="['w-2 h-2 rounded-full shrink-0', todayActionFilter === tab.value ? 'bg-white/70' : tab.dot]"></span>
+                   {{ tab.label }}
+                   <span :class="[
+                     'inline-flex items-center justify-center min-w-[1.2rem] h-5 rounded-full text-[8px] font-black px-1.5 transition-all',
+                     todayActionFilter === tab.value
+                       ? 'bg-white/20 text-white'
+                       : tab.count > 0
+                         ? 'bg-indigo-600 text-white'
+                         : 'bg-slate-200 text-slate-400'
+                   ]">{{ tab.count }}</span>
                 </button>
              </div>
 
@@ -205,7 +242,7 @@
              <Button
                 variant="outline"
                 @click="dashboardViewMode = dashboardViewMode === 'today' ? 'calendar' : 'today'"
-                class="h-10 px-5 rounded-xl font-black uppercase text-[10px] tracking-widest flex items-center gap-2 transition-all shadow-sm border-indigo-100 bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white"
+                class="h-10 px-5 rounded-2xl font-black uppercase text-[10px] tracking-widest flex items-center gap-2 transition-all shadow-sm border-indigo-200/80 bg-indigo-50/70 text-indigo-600 hover:bg-indigo-600 hover:text-white hover-lift active:scale-95"
              >
                 <component :is="dashboardViewMode === 'today' ? Calendar : List" class="w-4 h-4" />
                 <span>{{ dashboardViewMode === 'today' ? 'Vue Calendrier' : 'Actions du Jour' }}</span>
@@ -214,7 +251,26 @@
         </CardHeader>
 
         <CardContent class="p-0">
-          <div v-if="loading || (dashboardViewMode === 'calendar' && loadingCalendar)" class="p-20 flex flex-col items-center justify-center space-y-4">
+          <!-- Skeletons when loading today actions -->
+          <div v-if="loading && dashboardViewMode === 'today'" class="p-6 space-y-4">
+            <div v-for="i in 4" :key="'today-skel-' + i" class="p-4 rounded-2xl border border-slate-100 bg-white/70 animate-pulse flex items-center justify-between gap-4">
+              <div class="flex items-center gap-4">
+                <div class="w-24 h-10 rounded-xl bg-slate-200/70"></div>
+                <div class="space-y-2">
+                  <div class="h-4 w-32 bg-slate-200/70 rounded-md"></div>
+                  <div class="h-3 w-20 bg-slate-100 rounded-md"></div>
+                </div>
+              </div>
+              <div class="space-y-2">
+                <div class="h-4 w-28 bg-slate-200/70 rounded-md"></div>
+                <div class="h-3 w-16 bg-slate-100 rounded-md"></div>
+              </div>
+              <div class="w-20 h-8 bg-slate-200/70 rounded-xl"></div>
+            </div>
+          </div>
+
+          <!-- Spinner when loading calendar view -->
+          <div v-else-if="dashboardViewMode === 'calendar' && loadingCalendar" class="p-20 flex flex-col items-center justify-center space-y-4">
              <Loader2 class="w-10 h-10 text-indigo-200 animate-spin" />
              <p class="text-[10px] font-black text-slate-300 uppercase tracking-[0.3em]">Synchronisation de l'agenda...</p>
           </div>
@@ -404,16 +460,16 @@
           <template v-else-if="filteredTodayActions && filteredTodayActions.length">
             <Table>
               <TableHeader>
-                <TableRow class="bg-slate-50/50 border-b border-slate-100">
-                  <TableHead class="pl-10 py-5 text-slate-400 font-black text-[9px] tracking-[0.3em] uppercase">ACTION & HEURE</TableHead>
-                  <TableHead class="text-slate-400 font-black text-[9px] tracking-[0.3em] uppercase">CLIENTS & DOSSIER</TableHead>
-                  <TableHead class="text-slate-400 font-black text-[9px] tracking-[0.3em] uppercase">VÉHICULE & N° SÉRIE</TableHead>
-                  <TableHead class="pr-10 text-right text-slate-400 font-black text-[9px] tracking-[0.3em] uppercase">STATUT</TableHead>
+                 <TableRow class="bg-slate-50/50 border-b border-slate-100">
+                  <TableHead class="pl-8 py-5 text-slate-400 font-black text-[9px] tracking-[0.3em] uppercase">ACTION &amp; HEURE</TableHead>
+                  <TableHead class="text-slate-400 font-black text-[9px] tracking-[0.3em] uppercase">CLIENTS &amp; DOSSIER</TableHead>
+                  <TableHead class="text-slate-400 font-black text-[9px] tracking-[0.3em] uppercase">VÉHICULE &amp; N° SÉRIE</TableHead>
+                  <TableHead class="pr-8 text-right text-slate-400 font-black text-[9px] tracking-[0.3em] uppercase">STATUT</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 <TableRow v-for="action in filteredTodayActions" :key="action.id + action.type" class="group hover:bg-slate-50/50 transition-all duration-500 cursor-pointer border-slate-100" @click="router.push(action.category === 'contrat' ? `/contrats/${action.id}` : `/reservations?id=${action.id}`)">
-                  <TableCell class="pl-10 py-6">
+                  <TableCell class="pl-8 py-6">
                     <div class="flex items-center gap-4">
                        <Badge :class="['h-10 px-4 rounded-xl font-black uppercase text-[10px] tracking-widest border-2 flex items-center gap-2 shadow-2xs', action.type === 'départ' ? 'bg-indigo-600 text-white border-indigo-200' : 'bg-emerald-600 text-white border-emerald-200']">
                           <span :class="['w-2 h-2 rounded-full', action.type === 'départ' ? 'bg-indigo-300' : 'bg-emerald-300']"></span>
@@ -448,7 +504,7 @@
                        </div>
                     </div>
                   </TableCell>
-                  <TableCell class="pr-10 text-right">
+                  <TableCell class="pr-8 text-right">
                     <Badge :class="['text-[8px] font-black uppercase tracking-widest px-3 py-1 rounded-full border shadow-sm', getStatusBadgeClasses(action.status)]">
                       {{ getStatusLabel(action.status) }}
                     </Badge>
@@ -473,7 +529,7 @@
 
     <!-- Day Action Details Modal Dialog -->
     <Dialog v-model:open="showDayModal">
-      <DialogContent v-if="selectedDayData" class="sm:max-w-xl bg-white border-none shadow-2xl rounded-[2.5rem] p-8 overflow-y-auto max-h-[85vh] no-scrollbar">
+      <DialogContent v-if="selectedDayData" class="sm:max-w-xl glass-modal border border-white/60 shadow-3xl rounded-[2.5rem] p-8 overflow-y-auto max-h-[85vh] no-scrollbar">
         <div class="space-y-6">
           <div class="flex items-center justify-between border-b border-slate-100 pb-4">
             <div>
@@ -575,17 +631,17 @@
 
     <!-- Floating Converter Button -->
     <Teleport to="body">
-      <button @click="showConverterModal = true" class="fixed bottom-10 right-10 z-[100] w-16 h-16 bg-indigo-600 hover:bg-indigo-700 rounded-[2rem] shadow-[0_10px_40px_rgba(79,70,229,0.5)] flex items-center justify-center hover:scale-110 active:scale-95 transition-all outline-none border-4 border-white backdrop-blur-md group">
+      <button @click="showConverterModal = true" class="fixed bottom-10 right-10 z-[100] w-16 h-16 bg-gradient-to-tr from-indigo-600 to-indigo-500 hover:from-indigo-700 hover:to-indigo-600 rounded-[2rem] shadow-xl shadow-indigo-600/30 flex items-center justify-center hover:scale-110 active:scale-95 transition-all outline-none border-4 border-white backdrop-blur-md group glow-indigo">
         <Calculator class="w-6 h-6 text-white group-hover:rotate-12 transition-transform duration-300 drop-shadow-md" />
       </button>
     </Teleport>
 
     <!-- Smart Converter Dialog -->
     <Dialog v-model:open="showConverterModal">
-      <DialogContent class="sm:max-w-2xl bg-white border-none shadow-2xl rounded-[2.5rem] p-10 overflow-y-auto max-h-[90vh] no-scrollbar">
+      <DialogContent class="sm:max-w-2xl glass-modal border border-white/60 shadow-3xl rounded-[2.5rem] p-8 sm:p-10 overflow-y-auto max-h-[90vh] no-scrollbar">
         <div class="flex flex-col space-y-8">
            <div class="flex items-center gap-5">
-              <div class="p-4 bg-indigo-50 rounded-2xl">
+              <div class="p-4 bg-indigo-50/80 border border-indigo-100 rounded-2xl">
                  <Calculator class="w-8 h-8 text-indigo-600" />
               </div>
               <div>
@@ -596,7 +652,7 @@
 
            <div class="space-y-6">
               <!-- Currency Selector -->
-              <div class="flex justify-center gap-2 p-1 bg-slate-100 rounded-2xl">
+              <div class="flex justify-center gap-2 p-1.5 bg-slate-100/80 rounded-2xl border border-slate-200/50">
                  <button 
                   v-for="curr in currencies" 
                   :key="curr.label"
@@ -611,8 +667,8 @@
               </div>
 
               <div class="relative group">
-                <Input type="number" v-model="converter.amount" class="h-24 bg-slate-50 border-slate-100 text-slate-900 font-black text-5xl px-10 rounded-[2rem] text-center focus:ring-4 focus:ring-indigo-600/5 transition-all shadow-inner" />
-                <div class="absolute right-8 top-1/2 -translate-y-1/2 opacity-20 group-hover:opacity-100 transition-opacity">
+                <Input type="number" v-model="converter.amount" class="h-24 bg-slate-50/90 border-slate-200 text-slate-900 font-black text-5xl px-10 rounded-[2rem] text-center focus:ring-4 focus:ring-indigo-600/10 focus:border-indigo-500 transition-all shadow-inner" />
+                <div class="absolute right-8 top-1/2 -translate-y-1/2 opacity-30 group-hover:opacity-100 transition-opacity">
                   <span class="text-2xl font-black text-indigo-600 italic uppercase">{{ converter.currency }}</span>
                 </div>
               </div>
@@ -620,8 +676,8 @@
               <div class="grid grid-cols-3 gap-4 font-black">
                  <div v-for="res in convertedValues.converter" :key="res.label" 
                   :class="[
-                    'p-6 rounded-[1.5rem] border-2 transition-all duration-500 flex flex-col items-center justify-center gap-1',
-                    res.label === converter.currency ? 'bg-indigo-600 border-indigo-600 text-white shadow-xl shadow-indigo-100' : 'bg-white border-slate-100 text-slate-900'
+                    'p-6 rounded-[1.5rem] border-2 transition-all duration-500 flex flex-col items-center justify-center gap-1 hover-lift',
+                    res.label === converter.currency ? 'bg-indigo-600 border-indigo-600 text-white shadow-xl shadow-indigo-600/20' : 'bg-white/80 border-slate-100 text-slate-900'
                   ]"
                  >
                     <span :class="['text-[9px] uppercase tracking-[0.2em]', res.label === converter.currency ? 'text-indigo-200' : 'text-slate-400']">{{ res.label }}</span>
@@ -651,7 +707,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, reactive } from 'vue'
+import { ref, onMounted, onUnmounted, computed, reactive, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { dashboardApi, contratApi, reservationApi, carApi, getImageUrl, authApi } from '@/api'
@@ -708,6 +764,17 @@ const filteredTodayActions = computed(() => {
   if (!todayActions.value) return []
   if (todayActionFilter.value === 'all') return todayActions.value
   return todayActions.value.filter(a => a.type?.toLowerCase() === todayActionFilter.value)
+})
+
+// Sorted filter tabs: Toutes always first, then the rest sorted by count desc
+const sortedActionTabs = computed(() => {
+  const departCount = (todayActions.value || []).filter(a => a.type?.toLowerCase() === 'départ').length
+  const retourCount = (todayActions.value || []).filter(a => a.type?.toLowerCase() === 'retour').length
+  const tabs = [
+    { value: 'départ', label: 'Départs', count: departCount, dot: 'bg-indigo-400' },
+    { value: 'retour', label: 'Retours', count: retourCount, dot: 'bg-emerald-400' },
+  ].sort((a, b) => b.count - a.count)
+  return tabs
 })
 
 // Big Calendar State
@@ -1032,7 +1099,20 @@ const displayStats = reactive({
 })
 
 const startCountUp = (key: 'totalCars' | 'availableCars', target: number) => {
-  displayStats[key] = target
+  const duration = 900
+  const startTime = performance.now()
+  const startValue = displayStats[key]
+  const diff = target - startValue
+  if (diff === 0) return
+  const step = (now: number) => {
+    const elapsed = now - startTime
+    const progress = Math.min(elapsed / duration, 1)
+    // Ease out cubic
+    const eased = 1 - Math.pow(1 - progress, 3)
+    displayStats[key] = Math.round(startValue + diff * eased)
+    if (progress < 1) requestAnimationFrame(step)
+  }
+  requestAnimationFrame(step)
 }
 
 const currencies = ref([
@@ -1069,7 +1149,10 @@ const convertedValues = computed(() => {
 
 const fetchLiveRates = async () => {
   try {
-    const response = await fetch('https://open.er-api.com/v6/latest/TND')
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 3000)
+    const response = await fetch('https://open.er-api.com/v6/latest/TND', { signal: controller.signal })
+    clearTimeout(timeoutId)
     const data = await response.json()
     if (data.result === 'success') {
       currencies.value = [
@@ -1082,7 +1165,7 @@ const fetchLiveRates = async () => {
       lastUpdated.value = new Date().toLocaleTimeString('fr-TN')
     }
   } catch (err) {
-    console.error('Failed to fetch live rates', err)
+    // Keep fallback static currencies silently
   }
 }
 const formatBaseCurrency = (amount: number) => {
@@ -1224,11 +1307,10 @@ const loadCalendarData = async () => {
 
 const loadDashboardData = async () => {
   try {
-    const [dashData] = await Promise.all([
-      dashboardApi.getStats(getPeriodRange()),
-      fetchLiveRates(),
-      loadCalendarData()
-    ])
+    // Fire external rates in background (non-blocking)
+    fetchLiveRates()
+
+    const dashData = await dashboardApi.getStats(getPeriodRange())
     stats.value = dashData.kpis || {}
     alerts.value = dashData.alerts || []
     todayActions.value = dashData.todayActions || []
@@ -1242,7 +1324,12 @@ const loadDashboardData = async () => {
   }
 }
 
-// Live fleet tracking moved to FleetMapView.vue
+// Watch view mode: lazily load heavy calendar datasets only if user toggles to calendar mode
+watch(dashboardViewMode, (mode: string) => {
+  if (mode === 'calendar' && allCars.value.length === 0) {
+    loadCalendarData()
+  }
+})
 
 onMounted(async () => {
   loading.value = true

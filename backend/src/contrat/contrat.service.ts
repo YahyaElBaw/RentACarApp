@@ -6,7 +6,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { Contrat, ContratDocument } from './schemas/contrat.schema';
 import { Car, CarDocument } from '../car/schemas/car.schema';
 import { Client, ClientDocument } from '../client/schemas/client.schema';
@@ -22,6 +22,7 @@ import { SettingService } from '../setting/setting.service';
 import { LogService } from '../log/log.service';
 import { EventsGateway } from '../events/events.gateway';
 import { GpsService } from '../gps/gps.service';
+import { LotContratService } from '../lot-contrat/lot-contrat.service';
 
 @Injectable()
 export class ContratService implements OnModuleInit {
@@ -38,7 +39,10 @@ export class ContratService implements OnModuleInit {
     private logService: LogService,
     private eventsGateway: EventsGateway,
     private gpsService: GpsService,
+    private lotContratService: LotContratService,
   ) {}
+
+  private lastStatusCheck = 0;
 
   async onModuleInit() {
     try {
@@ -60,6 +64,68 @@ export class ContratService implements OnModuleInit {
           { $set: { lieuRetour: 'Djerba' } },
         )
         .exec();
+
+      // Clean up any contracts previously linked to lots that are out of interval
+      await this.lotContratService.cleanupOutOfRangeContrats();
+
+      // Sync relation from carnet to contrat for existing records that are strictly in interval
+      const contractsWithLot = await this.contratModel
+        .find({ lot: { $exists: true, $ne: null } })
+        .populate('lot')
+        .select('_id lot reference')
+        .exec();
+      for (const c of contractsWithLot) {
+        if (c.lot) {
+          const lot = c.lot as any;
+          const refNum = this.lotContratService.extractRefNumber(c.reference);
+          if (refNum !== null && refNum >= lot.startNumber && refNum <= lot.endNumber) {
+            await this.lotContratService.addContratToLot(
+              lot._id.toString(),
+              c._id.toString(),
+              undefined,
+              false,
+            );
+          } else {
+            // Out of range: unlink!
+            await this.contratModel.findByIdAndUpdate(c._id, { $unset: { lot: 1 } });
+            await this.lotContratService.removeContratFromLot(
+              lot._id.toString(),
+              c._id.toString(),
+            );
+          }
+        }
+      }
+
+      // Also auto-link existing contracts without lot ONLY if their reference is strictly in an active carnet's interval
+      const contractsWithoutLot = await this.contratModel
+        .find({ $or: [{ lot: { $exists: false } }, { lot: null }] })
+        .populate('car', 'agence')
+        .select('_id reference agency car')
+        .exec();
+      for (const c of contractsWithoutLot) {
+        const refNum = this.lotContratService.extractRefNumber(c.reference);
+        if (refNum === null) continue; // Skip non-carnet references like CTR-...
+
+        const agId =
+          (c.car as any)?.agence?._id?.toString() ||
+          (c.car as any)?.agence?.toString();
+        const agName = (c as any).agency;
+        const matchedLot = await this.lotContratService.findActiveLotForContract({
+          agencyId: agId,
+          agencyName: agName,
+          reference: c.reference,
+        });
+        if (matchedLot) {
+          c.lot = matchedLot._id;
+          await c.save();
+          await this.lotContratService.addContratToLot(
+            matchedLot._id.toString(),
+            c._id.toString(),
+            undefined,
+            false,
+          );
+        }
+      }
     } catch (err) {
       console.error('Error auto-migrating contrat fields on module init:', err);
     }
@@ -177,7 +243,45 @@ export class ContratService implements OnModuleInit {
       createdContrat.reservation = createContratDto.reservation;
     }
 
+    // Link to Lot and increment lot current number (ONLY if contract reference is a code number within carnet interval)
+    const refNum = this.lotContratService.extractRefNumber(createContratDto.reference);
+    const lotIdCandidate = createContratDto.lotId;
+    delete createContratDto.lot;
+    delete createContratDto.lotId;
+
+    let targetLot: any = null;
+
+    if (refNum !== null) {
+      const agencyId =
+        createContratDto.agence ||
+        createContratDto.agencyId ||
+        (car as any)?.agence?.toString();
+      const agencyName =
+        createContratDto.agency || (car as any)?.agence?.name;
+
+      targetLot = await this.lotContratService.findActiveLotForContract({
+        lotId: lotIdCandidate,
+        agencyId,
+        agencyName,
+        reference: createContratDto.reference,
+      });
+    }
+
+    if (targetLot) {
+      createdContrat.lot = targetLot._id;
+    }
+
     const savedContrat = await createdContrat.save();
+
+    // Link carnet to contrat (relation oriented from carnet to contrat)
+    if (targetLot && refNum !== null) {
+      await this.lotContratService.addContratToLot(
+        targetLot._id.toString(),
+        savedContrat._id.toString(),
+        refNum,
+        true,
+      );
+    }
 
     // Auto-update car's dailyRate to match the contract's rate
     if (dailyRate > 0 && dailyRate !== car.dailyRate) {
@@ -256,45 +360,55 @@ export class ContratService implements OnModuleInit {
   async findAll(filters: any = {}): Promise<ContratDocument[]> {
     const now = new Date();
 
-    // Auto-activate 'soon' contracts whose start time has passed
-    const toActivate = await this.contratModel
-      .find({
-        status: 'soon',
-        startDate: { $lte: now },
-      })
-      .exec();
-
-    if (toActivate.length > 0) {
-      for (const contrat of toActivate) {
-        contrat.status = 'active';
-        await (contrat as any).save();
-        await this.carModel
-          .findByIdAndUpdate(contrat.car, { isAvailable: false })
+    // Throttle auto-status transition checks (at most once every 60s) so read queries stay fast
+    if (Date.now() - this.lastStatusCheck > 60000) {
+      this.lastStatusCheck = Date.now();
+      try {
+        // Auto-activate 'soon' contracts whose start time has passed
+        const toActivate = await this.contratModel
+          .find({
+            status: 'soon',
+            startDate: { $lte: now },
+          }, { _id: 1, car: 1 })
+          .lean()
           .exec();
+
+        if (toActivate.length > 0) {
+          const activateIds = toActivate.map(c => c._id);
+          const activateCarIds = toActivate.map(c => c.car).filter(Boolean);
+          await Promise.all([
+            this.contratModel.updateMany({ _id: { $in: activateIds } }, { $set: { status: 'active' } }).exec(),
+            this.carModel.updateMany({ _id: { $in: activateCarIds } }, { $set: { isAvailable: false } }).exec(),
+          ]);
+        }
+
+        // Auto-terminate 'active' contracts whose end date has passed
+        const toTerminate = await this.contratModel
+          .find({
+            status: 'active',
+            endDate: { $lte: now },
+          }, { _id: 1, car: 1 })
+          .lean()
+          .exec();
+
+        if (toTerminate.length > 0) {
+          const terminateIds = toTerminate.map(c => c._id);
+          const terminateCarIds = toTerminate.map(c => c.car).filter(Boolean);
+          await Promise.all([
+            this.contratModel.updateMany({ _id: { $in: terminateIds } }, { $set: { status: 'terminé' } }).exec(),
+            this.carModel.updateMany({ _id: { $in: terminateCarIds } }, { $set: { isAvailable: true } }).exec(),
+          ]);
+        }
+      } catch (err) {
+        console.error('Error during throttled contract status auto-check:', err);
       }
     }
 
-    // Auto-terminate 'active' contracts whose end date has passed
-    const toTerminate = await this.contratModel
-      .find({
-        status: 'active',
-        endDate: { $lte: now },
-      })
-      .exec();
-
-    if (toTerminate.length > 0) {
-      for (const contrat of toTerminate) {
-        contrat.status = 'terminé';
-        await (contrat as any).save();
-        await this.carModel
-          .findByIdAndUpdate(contrat.car, { isAvailable: true })
-          .exec();
-      }
-    }
-
-    const query: any = {};
+    const query: any = { isDeleted: { $ne: true } };
     if (filters.status) query['status'] = filters.status;
     if (filters.carId) query['car'] = filters.carId;
+    if (filters.reference) query['reference'] = filters.reference;
+    if (filters.lotId) query['lot'] = filters.lotId;
     if (filters.clientId) {
       query['$or'] = [
         { clients: filters.clientId },
@@ -306,16 +420,19 @@ export class ContratService implements OnModuleInit {
       .find(query)
       .populate({
         path: 'car',
+        select: 'brand model matricule color agence',
         populate: { path: 'agence', model: 'Agence', select: 'name' },
       })
-      .populate({ path: 'clients', model: 'Client' })
+      .populate({ path: 'clients', model: 'Client', select: 'firstName lastName cin phone drivingLicense' })
       .populate('createdBy', 'firstName lastName')
+      .populate({ path: 'lot', model: 'LotContrat', select: 'name startNumber endNumber status' })
       .sort({ createdAt: -1 })
-      .exec();
+      .lean()
+      .exec() as any;
   }
 
-  async findOne(id: string): Promise<ContratDocument> {
-    const contrat = await this.contratModel
+  async findOne(id: string, lean = false): Promise<any> {
+    const query = this.contratModel
       .findById(id)
       .populate({
         path: 'car',
@@ -323,7 +440,13 @@ export class ContratService implements OnModuleInit {
       })
       .populate({ path: 'clients', model: 'Client' })
       .populate('createdBy', 'firstName lastName')
-      .exec();
+      .populate('lot');
+
+    if (lean) {
+      query.lean();
+    }
+
+    const contrat = await query.exec();
     if (!contrat)
       throw new NotFoundException(`Contract with ID ${id} not found`);
 
@@ -611,6 +734,30 @@ export class ContratService implements OnModuleInit {
       contrat.lieuRetour = String(updateContratDto.lieuRetour).trim();
     }
 
+    // Handle carnet/lot reassignment if specified
+    if (updateContratDto.lot !== undefined || updateContratDto.lotId !== undefined) {
+      const rawNewLotId = updateContratDto.lot || updateContratDto.lotId || null;
+      const newLotId = rawNewLotId ? String(rawNewLotId).trim() : null;
+      const oldLotId = contrat.lot ? contrat.lot.toString() : null;
+
+      if (newLotId !== oldLotId) {
+        if (oldLotId) {
+          await this.lotContratService.removeContratFromLot(oldLotId, contrat._id.toString());
+        }
+        if (newLotId) {
+          await this.lotContratService.addContratToLot(
+            newLotId,
+            contrat._id.toString(),
+            undefined,
+            false,
+          );
+          contrat.lot = new Types.ObjectId(newLotId);
+        } else {
+          contrat.lot = undefined;
+        }
+      }
+    }
+
     await contrat.save();
 
     // Auto-update car's dailyRate if the contract rate changed
@@ -648,21 +795,119 @@ export class ContratService implements OnModuleInit {
     return this.findOne(id);
   }
 
-  async remove(id: string): Promise<any> {
-    const contrat = await this.findOne(id);
+  async findDeleted(): Promise<any[]> {
+    return this.contratModel
+      .find({ isDeleted: true })
+      .populate({
+        path: 'car',
+        select: 'brand model matricule color agence',
+        populate: { path: 'agence', model: 'Agence', select: 'name' },
+      })
+      .populate({ path: 'clients', model: 'Client', select: 'firstName lastName cin phone' })
+      .populate('createdBy', 'firstName lastName')
+      .populate('deletedBy', 'firstName lastName')
+      .populate({ path: 'lot', model: 'LotContrat', select: 'name startNumber endNumber status' })
+      .sort({ deletedAt: -1, updatedAt: -1 })
+      .lean()
+      .exec();
+  }
 
-    // If the contract is active, we should make the car available again
-    if (contrat.status === 'active') {
+  async remove(id: string, actor?: any): Promise<any> {
+    const contrat = await this.contratModel.findById(id).exec();
+    if (!contrat) throw new NotFoundException(`Contract with ID ${id} not found`);
+
+    // If the contract is active or upcoming, make the car available again
+    if (contrat.status === 'active' || contrat.status === 'soon') {
       await this.carModel
         .findByIdAndUpdate(contrat.car, { isAvailable: true })
         .exec();
     }
 
-    const result = await this.contratModel.findByIdAndDelete(id).exec();
+    contrat.isDeleted = true;
+    (contrat as any).deletedAt = new Date();
+    if (actor?.id) {
+      (contrat as any).deletedBy = new Types.ObjectId(actor.id);
+    }
+    await contrat.save();
+
+    await this.logService.add({
+      action: 'CONTRAT_DELETED',
+      actorId: actor?.id,
+      actorName: actor?.name,
+      role: actor?.role,
+      detail: `Mise en corbeille du contrat ${contrat.reference}`,
+    });
+
     this.eventsGateway.broadcastDataChange('contract:change', {
       action: 'removed',
       id,
     });
+    return { success: true, id, message: 'Contrat déplacé dans la corbeille' };
+  }
+
+  async restore(id: string, actor?: any): Promise<ContratDocument> {
+    const contrat = await this.contratModel.findById(id).exec();
+    if (!contrat) throw new NotFoundException(`Contract with ID ${id} not found`);
+
+    contrat.isDeleted = false;
+    (contrat as any).deletedAt = undefined;
+    (contrat as any).deletedBy = undefined;
+    await contrat.save();
+
+    // If contract status is active and current date falls in range, restore car reservation state
+    const now = new Date();
+    if (
+      contrat.status === 'active' &&
+      new Date(contrat.startDate) <= now &&
+      new Date(contrat.endDate) >= now
+    ) {
+      await this.carModel
+        .findByIdAndUpdate(contrat.car, { isAvailable: false })
+        .exec();
+    }
+
+    await this.logService.add({
+      action: 'CONTRAT_RESTORED',
+      actorId: actor?.id,
+      actorName: actor?.name,
+      role: actor?.role,
+      detail: `Restauration du contrat ${contrat.reference}`,
+    });
+
+    this.eventsGateway.broadcastDataChange('contract:change', {
+      action: 'restored',
+      id,
+    });
+
+    return contrat;
+  }
+
+  async permanentDelete(id: string, actor?: any): Promise<any> {
+    const contrat = await this.contratModel.findById(id).exec();
+    if (!contrat) throw new NotFoundException(`Contract with ID ${id} not found`);
+
+    if (contrat.lot) {
+      await this.lotContratService.removeContratFromLot(
+        contrat.lot.toString(),
+        contrat._id.toString(),
+      );
+    }
+
+    const result = await this.contratModel.findByIdAndDelete(id).exec();
+
+    await this.logService.add({
+      action: 'CONTRAT_PERMANENT_DELETED',
+      actorId: actor?.id,
+      actorName: actor?.name,
+      role: actor?.role,
+      detail: `Suppression définitive du contrat ${contrat.reference}`,
+    });
+
+    this.eventsGateway.broadcastDataChange('contract:change', {
+      action: 'permanent_deleted',
+      id,
+    });
+
     return result;
   }
 }

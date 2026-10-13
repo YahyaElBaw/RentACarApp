@@ -55,6 +55,7 @@ export const logApi = {
 
 export const dashboardApi = {
   getStats: (params?: any) => api.get('/dashboard', { params }).then(res => res.data),
+  getAlerts: () => api.get('/dashboard/alerts').then(res => res.data),
   getAppVersion: () => api.get('/version').then(res => res.data),
   dismissAlert: (key: string, password: string, alertData?: { code?: string; type?: string; message?: string; metadata?: any }) =>
     api.post('/dashboard/alerts/dismiss', { key, password, ...alertData }).then(res => res.data),
@@ -85,6 +86,10 @@ export const gpsApi = {
     api.get(`/gps/history/${carId}`, { params: { from, to, limit } }).then(res => res.data),
   getHistoryStats: (carId: string, from?: string, to?: string) =>
     api.get(`/gps/history/${carId}/stats`, { params: { from, to } }).then(res => res.data),
+  startTracking: (clientId?: string) => api.post('/gps/tracking/start', { clientId }).then(res => res.data),
+  stopTracking: (clientId?: string) => api.post('/gps/tracking/stop', { clientId }).then(res => res.data),
+  pingTracking: (clientId?: string) => api.post('/gps/tracking/ping', { clientId }).then(res => res.data),
+  getTrackingStatus: () => api.get('/gps/tracking/status').then(res => res.data),
 };
 
 export const carApi = {
@@ -101,12 +106,15 @@ export const carApi = {
 
 export const contratApi = {
   getAll: (params?: any) => api.get('/contrats', { params }).then(res => res.data),
+  getDeleted: () => api.get('/contrats/deleted').then(res => res.data),
   getOne: (id: string) => api.get(`/contrats/${id}`).then(res => res.data),
   create: (data: any) => api.post('/contrats', data).then(res => res.data),
   getPdf: (id: string) => api.get(`/contrats/${id}/pdf`, { responseType: 'blob' }).then(res => res.data),
   close: (id: string, data: any) => api.patch(`/contrats/${id}/close`, data).then(res => res.data),
   update: (id: string, data: any) => api.patch(`/contrats/${id}`, data).then(res => res.data),
   remove: (id: string, password: string) => api.delete(`/contrats/${id}`, { data: { password } }).then(res => res.data),
+  restore: (id: string) => api.patch(`/contrats/${id}/restore`).then(res => res.data),
+  permanentDelete: (id: string, password?: string) => api.delete(`/contrats/${id}/permanent`, { data: { password } }).then(res => res.data),
 };
 
 export const reservationApi = {
@@ -172,6 +180,33 @@ export const agenceApi = {
   create: (data: any) => api.post('/agences', data).then(res => res.data),
   update: (id: string, data: any) => api.patch(`/agences/${id}`, data).then(res => res.data),
   delete: (id: string, password?: string) => api.delete(`/agences/${id}`, { data: { password } }).then(res => res.data),
+};
+
+export const lotContratApi = {
+  getAll: (params?: { agenceId?: string; status?: string }) =>
+    api.get('/lot-contrats', { params }).then(res => res.data),
+  getActive: (agenceId?: string) =>
+    api.get('/lot-contrats/active', { params: { agenceId } }).then(res => res.data),
+  getOne: (id: string) =>
+    api.get(`/lot-contrats/${id}`).then(res => res.data),
+  create: (data: any) =>
+    api.post('/lot-contrats', data).then(res => res.data),
+  update: (id: string, data: any) =>
+    api.patch(`/lot-contrats/${id}`, data).then(res => res.data),
+  close: (id: string) =>
+    api.patch(`/lot-contrats/${id}/close`).then(res => res.data),
+  reopen: (id: string, closeOther = false) =>
+    api.patch(`/lot-contrats/${id}/reopen`, { closeOther }).then(res => res.data),
+  delete: (id: string) =>
+    api.delete(`/lot-contrats/${id}`).then(res => res.data),
+  attachContrat: (lotId: string, payload: string | string[]) => {
+    const body = Array.isArray(payload) ? { contratIds: payload } : { contratId: payload };
+    return api.post(`/lot-contrats/${lotId}/attach-contrat`, body).then(res => res.data);
+  },
+  detachContrat: (lotId: string, contratId: string) =>
+    api.post(`/lot-contrats/${lotId}/detach-contrat`, { contratId }).then(res => res.data),
+  cleanupOutOfRange: () =>
+    api.post('/lot-contrats/cleanup-out-of-range').then(res => res.data),
 };
 
 export const presenceApi = {

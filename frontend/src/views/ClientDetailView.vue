@@ -1,44 +1,78 @@
 <template>
   <div v-if="client" class="client-detail-container space-y-12 p-8 max-w-7xl mx-auto">
-    <!-- Header with Breadcrumbs Style -->
-    <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
-      <div class="flex items-center gap-4">
-        <Button @click="router.back()" variant="secondary" size="icon" class="h-12 w-12 rounded-2xl bg-white shadow-lg border border-slate-200 hover:bg-slate-50 transition-all active:scale-90">
-             <ChevronLeft class="w-6 h-6 text-slate-600" />
+    <!-- Header with Breadcrumbs & Modern HUD Style -->
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white border border-slate-200/80 shadow-xs p-6 sm:p-8 rounded-[2rem]">
+      <div class="flex items-center gap-5">
+        <Button @click="router.back()" variant="secondary" size="icon" class="h-12 w-12 rounded-2xl bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-700 shadow-xs transition-all active:scale-95 shrink-0">
+          <ChevronLeft class="w-5 h-5" />
         </Button>
-        <div class="space-y-1">
-          <div class="flex items-center gap-3 group">
-              <template v-if="editingField === 'name'">
-                <div class="flex gap-2">
-                  <Input v-model="tempValue" class="h-10 text-xl font-black uppercase italic" @keyup.enter="triggerSave('name')" />
-                  <Button size="icon" variant="ghost" @click="triggerSave('firstName')" class="h-10 w-10 text-emerald-500"><Check class="w-5 h-5" /></Button>
-                  <Button size="icon" variant="ghost" @click="cancelEditing" class="h-10 w-10 text-rose-500"><X class="w-5 h-5" /></Button>
-                </div>
-              </template>
-              <template v-else>
-                <h1 class="text-3xl font-black tracking-tight text-slate-900 uppercase italic">{{ client.firstName }} <span class="text-indigo-600">{{ client.lastName }}</span></h1>
-                <button v-if="authStore.isAdmin" @click="isEditing = true" class="opacity-0 group-hover:opacity-100 p-2 bg-slate-100 rounded-xl transition-all">
-                  <Pencil class="w-4 h-4 text-slate-600" />
-                </button>
-              </template>
-              <Badge :class="['text-[9px] font-black tracking-widest px-3 py-1 rounded-full border-2', getStatusInfo(client.status).class]">
-                 {{ getStatusInfo(client.status).label }}
-              </Badge>
+        <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-600 to-indigo-800 text-white flex items-center justify-center shadow-lg shadow-indigo-600/25 shrink-0">
+          <User class="w-6 h-6 stroke-[2.2]" />
+        </div>
+        <div class="space-y-1.5">
+          <div class="flex items-center gap-3 flex-wrap group">
+            <template v-if="editingField === 'name'">
+              <div class="flex gap-2">
+                <Input v-model="tempValue" class="h-10 text-xl font-black uppercase italic" @keyup.enter="triggerSave('name')" />
+                <Button size="icon" variant="ghost" @click="triggerSave('firstName')" class="h-10 w-10 text-emerald-500"><Check class="w-5 h-5" /></Button>
+                <Button size="icon" variant="ghost" @click="cancelEditing" class="h-10 w-10 text-rose-500"><X class="w-5 h-5" /></Button>
+              </div>
+            </template>
+            <template v-else>
+              <h1 class="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 uppercase italic">
+                {{ client.firstName }} <span class="text-indigo-600">{{ client.lastName }}</span>
+              </h1>
+              <button v-if="authStore.isAdmin" @click="isEditing = true" class="opacity-0 group-hover:opacity-100 p-1.5 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all" title="Modifier le nom">
+                <Pencil class="w-4 h-4 text-slate-600" />
+              </button>
+            </template>
+            <Badge :class="['text-[9px] font-black tracking-widest px-3 py-1 rounded-full border', getStatusInfo(client.status).class]">
+               {{ getStatusInfo(client.status).label }}
+            </Badge>
           </div>
-          <p class="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] pl-0.5">Identifiant Client: {{ client._id.slice(-6).toUpperCase() }}</p>
+          <div class="flex items-center gap-2">
+            <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest font-mono">
+              CLIENT #{{ client._id.slice(-6).toUpperCase() }}
+            </span>
+            <span class="text-[10px] font-bold text-slate-300 uppercase">&bull;</span>
+            <span :class="['text-[10px] font-bold uppercase tracking-wider', isComplete ? 'text-emerald-600' : 'text-amber-600']">
+              {{ isComplete ? 'Dossier complet' : 'Dossier incomplet' }}
+            </span>
+          </div>
         </div>
       </div>
 
-      <div v-if="authStore.isAdmin" class="flex items-center gap-3">
-        <Button @click="downloadPdf" variant="outline" class="h-12 px-6 rounded-2xl font-black uppercase text-[10px] tracking-widest border-slate-200 hover:bg-slate-50 transition-all flex items-center gap-2 shadow-sm">
-           <Download class="w-4 h-4" /> PDF
-        </Button>
-        <Button v-if="!isComplete" @click="showFinishInfoDialog = true" class="h-12 px-6 rounded-2xl bg-amber-500 text-white hover:bg-amber-600 font-black uppercase text-[10px] tracking-widest shadow-xl shadow-amber-100 transition-all active:scale-95 gap-2">
+      <div v-if="authStore.isAdmin" class="flex flex-wrap items-center gap-2.5">
+        <Button 
+          v-if="!isComplete" 
+          @click="showFinishInfoDialog = true" 
+          class="h-11 px-5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-black uppercase text-[10px] tracking-wider shadow-sm transition-all active:scale-95 gap-2"
+        >
           <AlertCircle class="w-4 h-4" />
-          Finaliser le Dossier
+          <span>Finaliser le Dossier</span>
         </Button>
-        <Button variant="outline" @click="isEditing = true" class="h-12 px-6 rounded-2xl font-black uppercase text-[10px] tracking-widest border-slate-200 hover:bg-slate-50 transition-all">Modifier le Profil</Button>
-        <Button variant="destructive" @click="deleteClient" class="h-12 px-6 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl shadow-rose-100 transition-all active:scale-95">Désactiver Compte</Button>
+        <Button 
+          variant="outline" 
+          @click="isEditing = true" 
+          class="h-11 px-5 rounded-xl border-slate-200 hover:bg-slate-50 text-slate-700 font-black uppercase text-[10px] tracking-wider transition-all shadow-2xs active:scale-95"
+        >
+          <Pencil class="w-3.5 h-3.5 mr-1" />
+          <span>Modifier</span>
+        </Button>
+        <Button 
+          @click="downloadPdf" 
+          variant="outline" 
+          class="h-11 px-5 rounded-xl border-slate-200 hover:bg-slate-50 text-slate-700 font-black uppercase text-[10px] tracking-wider transition-all flex items-center gap-2 shadow-2xs active:scale-95"
+        >
+          <Download class="w-4 h-4" /> 
+          <span>PDF</span>
+        </Button>
+        <Button 
+          @click="deleteClient" 
+          class="h-11 px-4 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 font-black uppercase tracking-wider text-[10px] shadow-2xs transition-all active:scale-95"
+        >
+          Désactiver
+        </Button>
       </div>
     </div>
 
@@ -462,7 +496,7 @@
     </Dialog>
 
     <!-- Finish Info Dialog -->
-    <Dialog :open="showFinishInfoDialog" @update:open="showFinishInfoDialog = $event">
+    <Dialog v-if="showFinishInfoDialog" :open="showFinishInfoDialog" @update:open="showFinishInfoDialog = $event">
       <DialogContent class="!top-0 !translate-y-0 !left-0 !translate-x-0 w-full h-full max-w-full max-h-full bg-white border-0 rounded-none p-0 sm:!top-[5%] sm:!left-1/2 sm:!-translate-x-1/2 sm:max-w-xl sm:max-h-[90vh] sm:rounded-[2.5rem] sm:border-none overflow-y-auto">
         <div class="p-5 sm:p-10 space-y-6 sm:space-y-8 min-h-full sm:min-h-0">
           <div class="flex items-center gap-3 sm:gap-4 border-b border-slate-100 pb-4 sm:pb-6">
@@ -593,7 +627,7 @@
     </Dialog>
 
     <!-- Edit Profile Dialog -->
-    <Dialog :open="isEditing" @update:open="isEditing = $event">
+    <Dialog v-if="isEditing" :open="isEditing" @update:open="isEditing = $event">
       <DialogContent class="!top-0 !translate-y-0 !left-0 !translate-x-0 w-full h-full max-w-full max-h-full bg-white border-0 rounded-none p-0 sm:!top-[5%] sm:!left-1/2 sm:!-translate-x-1/2 sm:max-w-xl sm:max-h-[90vh] sm:rounded-[2.5rem] sm:border-none overflow-y-auto">
         <div class="p-5 sm:p-10 space-y-6 sm:space-y-8 min-h-full sm:min-h-0">
           <div class="flex items-center gap-3 sm:gap-4 border-b border-slate-100 pb-4 sm:pb-6">
@@ -700,7 +734,7 @@
     </Dialog>
 
     <!-- Cropper Dialog -->
-    <Dialog :open="showCropper" @update:open="showCropper = $event">
+    <Dialog v-if="showCropper" :open="showCropper" @update:open="showCropper = $event">
       <DialogContent class="max-w-[95vw] md:max-w-4xl h-[90vh] flex flex-col bg-white border-none shadow-2xl rounded-[2.5rem] p-6 md:p-10 overflow-hidden">
         <div class="space-y-6 flex flex-col h-full">
           <div class="flex items-center justify-between border-b border-slate-100 pb-4">
@@ -780,7 +814,7 @@ import {
 ChevronLeft, Phone, Mail, MapPin, Globe,
 CreditCard, ShieldCheck, Calendar, 
 FileWarning, ExternalLink, Download, Pencil, RotateCw, Upload, Trash2,
-Car as CarIcon, History as HistoryIcon, X, AlertCircle, Check, Loader2, Eye, EyeOff, Lock
+Car as CarIcon, History as HistoryIcon, X, AlertCircle, Check, Loader2, Eye, EyeOff, Lock, User
 } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'

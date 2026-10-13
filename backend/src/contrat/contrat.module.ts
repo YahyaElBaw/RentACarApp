@@ -12,6 +12,7 @@ import { ReservationModule } from '../reservation/reservation.module';
 import { SettingModule } from '../setting/setting.module';
 import { DepenseModule } from '../depense/depense.module';
 import { GpsModule } from '../gps/gps.module';
+import { LotContratModule } from '../lot-contrat/lot-contrat.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { GpsModule } from '../gps/gps.module';
     ReservationModule,
     SettingModule,
     DepenseModule,
+    LotContratModule,
     forwardRef(() => GpsModule),
   ],
   controllers: [ContratController],

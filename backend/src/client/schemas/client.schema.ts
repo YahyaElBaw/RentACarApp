@@ -84,3 +84,4 @@ export const ClientSchema = SchemaFactory.createForClass(Client);
 
 ClientSchema.index({ lastName: 1 });
 ClientSchema.index({ totalRents: -1 });
+ClientSchema.index({ disabled: 1 });

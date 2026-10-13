@@ -1,6 +1,5 @@
 import { createRouter, createWebHashHistory } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
-import DashboardView from '../views/DashboardView.vue';
 
 const router = createRouter({
   history: createWebHashHistory(),
@@ -14,7 +13,7 @@ const router = createRouter({
     {
       path: '/',
       name: 'dashboard',
-      component: DashboardView,
+      component: () => import('../views/DashboardView.vue'),
       meta: { title: 'Tableau de Bord' }
     },
     {
@@ -107,6 +106,12 @@ const router = createRouter({
       name: 'agence-detail',
       component: () => import('../views/AgenceDetailView.vue'),
       meta: { admin: true, title: 'Profil Agence' }
+    },
+    {
+      path: '/carnets/:id',
+      name: 'carnet-detail',
+      component: () => import('../views/CarnetDetailView.vue'),
+      meta: { admin: true, title: 'Détails du Carnet' }
     },
     {
       path: '/logs',

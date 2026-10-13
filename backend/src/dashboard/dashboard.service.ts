@@ -32,16 +32,6 @@ export class DashboardService {
 
   async getStats(user: any, from?: string, to?: string): Promise<any> {
     const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
-    const totalCars = await this.carModel.countDocuments({
-      disabled: { $ne: true },
-    });
-    const availableCars = await this.carModel.countDocuments({
-      isAvailable: true,
-      disabled: { $ne: true },
-    });
-    const activeContrats = await this.contratModel.countDocuments({
-      status: 'active',
-    });
 
     const hasRange = Boolean(from && to);
     const revenueMatch: any = { status: { $ne: 'cancelled' } };
@@ -53,17 +43,42 @@ export class DashboardService {
       expenseMatch.date = { $gte: fromDate, $lte: toDate };
     }
 
-    // Financial calculations
-    const revenueResult = await this.contratModel.aggregate([
-      { $match: revenueMatch },
-      { $group: { _id: null, total: { $sum: '$totalAmount' } } },
+    const [
+      totalCars,
+      availableCars,
+      activeContrats,
+      revenueResult,
+      expenseResult,
+      recentContracts,
+      todayActions,
+      alerts,
+      history,
+    ] = await Promise.all([
+      this.carModel.countDocuments({ disabled: { $ne: true } }),
+      this.carModel.countDocuments({ isAvailable: true, disabled: { $ne: true } }),
+      this.contratModel.countDocuments({ status: 'active' }),
+      this.contratModel.aggregate([
+        { $match: revenueMatch },
+        { $group: { _id: null, total: { $sum: '$totalAmount' } } },
+      ]),
+      this.depenseModel.aggregate([
+        { $match: expenseMatch },
+        { $group: { _id: null, total: { $sum: '$amount' } } },
+      ]),
+      this.contratModel
+        .find()
+        .sort({ createdAt: -1 })
+        .limit(5)
+        .select('reference status totalAmount createdAt car')
+        .populate({ path: 'car', select: 'brand model matricule' })
+        .lean()
+        .exec(),
+      this.getTodayActions(),
+      this.getAlerts(),
+      isAdmin ? this.getWeeklyHistory() : Promise.resolve([]),
     ]);
-    const totalRevenue = revenueResult[0]?.total || 0;
 
-    const expenseResult = await this.depenseModel.aggregate([
-      { $match: expenseMatch },
-      { $group: { _id: null, total: { $sum: '$amount' } } },
-    ]);
+    const totalRevenue = revenueResult[0]?.total || 0;
     const totalExpenses = expenseResult[0]?.total || 0;
 
     return {
@@ -76,15 +91,10 @@ export class DashboardService {
         totalExpenses: isAdmin ? totalExpenses : 0,
         netProfit: isAdmin ? totalRevenue - totalExpenses : 0,
       },
-      recentContracts: await this.contratModel
-        .find()
-        .sort({ createdAt: -1 })
-        .limit(5)
-        .populate('car')
-        .exec(),
-      todayActions: await this.getTodayActions(),
-      alerts: await this.getAlerts(),
-      history: isAdmin ? await this.getWeeklyHistory() : [],
+      recentContracts,
+      todayActions,
+      alerts,
+      history,
     };
   }
 
@@ -102,22 +112,44 @@ export class DashboardService {
       status: { $ne: 'cancelled' },
     };
 
-    const contracts = await this.contratModel
-      .find(matchQuery)
-      .populate({ path: 'car', model: 'Car' })
-      .populate({ path: 'clients', model: 'Client' })
-      .lean()
-      .exec();
+    const [contracts, reservations] = await Promise.all([
+      this.contratModel
+        .find(matchQuery)
+        .select('reference startDate endDate status car clients client')
+        .populate({ path: 'car', model: 'Car', select: 'brand model matricule images disabled' })
+        .populate({ path: 'clients', model: 'Client', select: 'firstName lastName phone cin disabled' })
+        .lean()
+        .exec(),
+      this.reservationModel
+        .find({
+          ...matchQuery,
+          contrat: null,
+        })
+        .select('startDate endDate status car clients client')
+        .populate({ path: 'car', model: 'Car', select: 'brand model matricule images disabled' })
+        .populate({ path: 'clients', model: 'Client', select: 'firstName lastName phone cin disabled' })
+        .lean()
+        .exec(),
+    ]);
 
-    const reservations = await this.reservationModel
-      .find({
-        ...matchQuery,
-        contrat: null, // Only show reservations that aren't converted to contracts yet
-      })
-      .populate({ path: 'car', model: 'Car' })
-      .populate({ path: 'clients', model: 'Client' })
-      .lean()
-      .exec();
+    // Collect all un-populated client IDs from both collections in one pass,
+    // then resolve them with a single batch query instead of findById() per client.
+    const unresolvedClientIds = new Set<string>();
+    const allDocs = [...contracts, ...reservations];
+    for (const doc of allDocs) {
+      if (!doc.clients?.length && (doc as any).client) {
+        unresolvedClientIds.add((doc as any).client.toString());
+      }
+    }
+    const clientMap = new Map<string, any>();
+    if (unresolvedClientIds.size > 0) {
+      const batchClients = await this.clientModel
+        .find({ _id: { $in: [...unresolvedClientIds] } })
+        .select('firstName lastName phone cin disabled')
+        .lean()
+        .exec();
+      for (const c of batchClients) clientMap.set((c as any)._id.toString(), c);
+    }
 
     const actions = [];
 
@@ -126,33 +158,21 @@ export class DashboardService {
       // Skip if car is disabled
       if ((contrat.car as any)?.disabled) continue;
 
-      // Robust normalization of clients
-      const normalizedClients = [];
+      // Resolve clients: already populated or fall back to batch-loaded map
       const rawClients =
         contrat.clients && contrat.clients.length > 0
           ? contrat.clients
           : (contrat as any).client
-            ? [(contrat as any).client]
+            ? [clientMap.get((contrat as any).client.toString())].filter(Boolean)
             : [];
 
+      const normalizedClients = [];
       let hasDisabledClient = false;
       for (const c of rawClients) {
-        let clientObj: any = null;
-        if (c && typeof c === 'object' && c.lastName) {
-          clientObj = c;
-        } else if (c) {
-          clientObj = await this.clientModel.findById(c).lean().exec();
-        }
-
-        if (clientObj) {
-          if (clientObj.disabled) {
-            hasDisabledClient = true;
-            break;
-          }
-          normalizedClients.push(clientObj);
-        }
+        if (!c) continue;
+        if ((c as any).disabled) { hasDisabledClient = true; break; }
+        normalizedClients.push(c);
       }
-
       if (hasDisabledClient) continue;
 
       const firstClient = normalizedClients[0];
@@ -200,32 +220,21 @@ export class DashboardService {
       // Skip if car is disabled
       if ((res.car as any)?.disabled) continue;
 
-      const normalizedClients = [];
+      // Resolve clients: already populated or fall back to batch-loaded map
       const rawClients =
         res.clients && res.clients.length > 0
           ? res.clients
           : (res as any).client
-            ? [(res as any).client]
+            ? [clientMap.get((res as any).client.toString())].filter(Boolean)
             : [];
 
+      const normalizedClients = [];
       let hasDisabledClient = false;
       for (const c of rawClients) {
-        let clientObj: any = null;
-        if (c && typeof c === 'object' && c.lastName) {
-          clientObj = c;
-        } else if (c) {
-          clientObj = await this.clientModel.findById(c).lean().exec();
-        }
-
-        if (clientObj) {
-          if (clientObj.disabled) {
-            hasDisabledClient = true;
-            break;
-          }
-          normalizedClients.push(clientObj);
-        }
+        if (!c) continue;
+        if ((c as any).disabled) { hasDisabledClient = true; break; }
+        normalizedClients.push(c);
       }
-
       if (hasDisabledClient) continue;
 
       const firstClient = normalizedClients[0];
@@ -279,16 +288,10 @@ export class DashboardService {
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(today.getDate() - 7);
 
-    const revenueHistory = await this.aggregateDaily(
-      this.contratModel,
-      'totalAmount',
-      sevenDaysAgo,
-    );
-    const expenseHistory = await this.aggregateDaily(
-      this.depenseModel,
-      'amount',
-      sevenDaysAgo,
-    );
+    const [revenueHistory, expenseHistory] = await Promise.all([
+      this.aggregateDaily(this.contratModel, 'totalAmount', sevenDaysAgo),
+      this.aggregateDaily(this.depenseModel, 'amount', sevenDaysAgo),
+    ]);
 
     // Merge and calculate profit
     const history = [];
@@ -315,24 +318,20 @@ export class DashboardService {
     amountField: string,
     since: Date,
   ): Promise<any[]> {
+    const isContrat = model === this.contratModel;
+    const dateField = isContrat ? '$startDate' : '$date';
+    const matchFilter: any = isContrat
+      ? { status: { $ne: 'cancelled' }, startDate: { $gte: since } }
+      : { date: { $gte: since } };
+
     return model.aggregate([
-      {
-        $match: {
-          $or: [
-            { createdAt: { $gte: since } },
-            { date: { $gte: since } }, // For Depense
-            { startDate: { $gte: since } }, // For Contrat
-          ],
-        },
-      },
+      { $match: matchFilter },
       {
         $group: {
           _id: {
             $dateToString: {
               format: '%Y-%m-%d',
-              date: {
-                $ifNull: ['$date', { $ifNull: ['$startDate', '$createdAt'] }],
-              },
+              date: dateField,
             },
           },
           total: { $sum: `$${amountField}` },
@@ -342,13 +341,45 @@ export class DashboardService {
     ]);
   }
 
-  private async getAlerts(): Promise<any[]> {
+  async getAlerts(): Promise<any[]> {
     const alerts = [];
     const today = new Date();
     const thirtyDaysFromNow = new Date();
     thirtyDaysFromNow.setDate(today.getDate() + 30);
 
-    const cars = await this.carModel.find({ disabled: { $ne: true } }).exec();
+    const [cars, incompleteClients] = await Promise.all([
+      this.carModel
+        .find({ disabled: { $ne: true } })
+        .select(
+          'brand model matricule mileage nextOilChangeMileage nextTechnicalVisitDate insuranceDate disabled',
+        )
+        .lean()
+        .exec(),
+      this.clientModel
+        .find({
+          disabled: { $ne: true },
+          $or: [
+            { cin: { $in: [null, ''] } },
+            { drivingLicense: { $in: [null, ''] } },
+            { birthday: null },
+            { address: { $in: [null, ''] } },
+            { cinFront: { $in: [null, ''] } },
+            {
+              $and: [
+                { idCardType: { $ne: 'passport' } },
+                { cinBack: { $in: [null, ''] } },
+              ],
+            },
+            { licenseFront: { $in: [null, ''] } },
+            { licenseBack: { $in: [null, ''] } },
+          ],
+        })
+        .select('firstName lastName disabled')
+        .limit(10)
+        .lean()
+        .exec(),
+    ]);
+
     for (const car of cars) {
       // Vidange alert: before 3000km
       if (car.nextOilChangeMileage) {
@@ -427,29 +458,6 @@ export class DashboardService {
       }
     }
 
-    // Incomplete Client Info Basics
-    const incompleteClients = await this.clientModel
-      .find({
-        disabled: { $ne: true },
-        $or: [
-          { cin: { $in: [null, ''] } },
-          { drivingLicense: { $in: [null, ''] } },
-          { birthday: null },
-          { address: { $in: [null, ''] } },
-          { cinFront: { $in: [null, ''] } },
-          {
-            $and: [
-              { idCardType: { $ne: 'passport' } },
-              { cinBack: { $in: [null, ''] } },
-            ],
-          },
-          { licenseFront: { $in: [null, ''] } },
-          { licenseBack: { $in: [null, ''] } },
-        ],
-      })
-      .limit(10)
-      .exec();
-
     for (const client of incompleteClients) {
       alerts.push({
         key: `incomplete:${client._id}`,
@@ -463,6 +471,7 @@ export class DashboardService {
     const dismissed = await this.dismissedAlertModel
       .find({ key: { $in: alerts.map((a) => a.key) } })
       .select('key')
+      .lean()
       .exec();
     const dismissedKeys = new Set(dismissed.map((d) => d.key));
     return alerts.filter((a) => !dismissedKeys.has(a.key));

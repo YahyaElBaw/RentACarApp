@@ -148,23 +148,62 @@ export class GpsService {
     this.kmLimitCache.loadedAt = 0;
   }
 
-  /** True when the car currently has an active/soon contract spanning now */
-  private async isCarRented(carId: Types.ObjectId): Promise<boolean> {
-    try {
-      const now = new Date();
-      const count = await this.contratModel
-        .countDocuments({
-          status: { $in: ['active', 'soon'] },
-          startDate: { $lte: now },
-          endDate: { $gte: now },
-          car: { $in: [carId, String(carId)] },
-        })
-        .exec();
-      return count > 0;
-    } catch (err) {
-      this.logger.warn(`Rental check failed: ${String(err)}`);
-      return false;
+  private carsCache: { list: CarDocument[]; loadedAt: number } = {
+    list: [],
+    loadedAt: 0,
+  };
+  private rentedCarIdsCache: { set: Set<string>; loadedAt: number } = {
+    set: new Set(),
+    loadedAt: 0,
+  };
+
+  private async getCachedCars(): Promise<CarDocument[]> {
+    const now = Date.now();
+    if (now - this.carsCache.loadedAt < 30_000 && this.carsCache.list.length > 0) {
+      return this.carsCache.list;
     }
+    try {
+      const cars = await this.carModel.find().exec();
+      this.carsCache = { list: cars, loadedAt: now };
+      return cars;
+    } catch (err) {
+      this.logger.error(`Failed to refresh cars cache: ${err}`);
+      return this.carsCache.list;
+    }
+  }
+
+  private async getRentedCarIds(): Promise<Set<string>> {
+    const now = Date.now();
+    if (now - this.rentedCarIdsCache.loadedAt < 15_000) {
+      return this.rentedCarIdsCache.set;
+    }
+    try {
+      const nowDate = new Date();
+      const activeContrats = await this.contratModel
+        .find(
+          {
+            status: { $in: ['active', 'soon'] },
+            startDate: { $lte: nowDate },
+            endDate: { $gte: nowDate },
+          },
+          { car: 1 },
+        )
+        .lean()
+        .exec();
+      const set = new Set<string>(
+        activeContrats.map((c: any) => String(c.car)),
+      );
+      this.rentedCarIdsCache = { set, loadedAt: now };
+      return set;
+    } catch (err) {
+      return this.rentedCarIdsCache.set;
+    }
+  }
+
+  /** True when the car currently has an active/soon contract spanning now (cached) */
+  private async isCarRented(carId: Types.ObjectId): Promise<boolean> {
+    const set = await this.getRentedCarIds();
+    return set.has(String(carId));
   }
 
   /**
@@ -303,13 +342,14 @@ export class GpsService {
   }) {
     let car: CarDocument | null = null;
 
+    const cars = await this.getCachedCars();
     if (dto.imei) {
-      car = await this.carModel.findOne({ gpsImei: String(dto.imei).trim() });
+      const imei = String(dto.imei).trim();
+      car = cars.find((c) => c.gpsImei && String(c.gpsImei).trim() === imei) ?? null;
     }
     if (!car && dto.plate) {
       const wanted = normalizePlate(dto.plate);
-      const allCars = await this.carModel.find().exec();
-      car = allCars.find((c) => normalizePlate(c.matricule) === wanted) ?? null;
+      car = cars.find((c) => normalizePlate(c.matricule) === wanted) ?? null;
     }
     if (!car) {
       this.logger.warn(
